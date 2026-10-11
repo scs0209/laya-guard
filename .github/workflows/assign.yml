@@ -1,0 +1,60 @@
+name: assign
+
+# `/assign` or `/unassign` as the first word of an issue comment.
+# Comment text only reaches the script through env vars, never ${{ }} in run:.
+on:
+  issue_comment:
+    types: [created]
+
+permissions: {}
+
+jobs:
+  assign:
+    if: >-
+      !github.event.issue.pull_request &&
+      github.event.comment.user.type != 'Bot' &&
+      (startsWith(github.event.comment.body, '/assign') ||
+       startsWith(github.event.comment.body, '/unassign'))
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ISSUE: ${{ github.event.issue.number }}
+          STATE: ${{ github.event.issue.state }}
+          COMMENTER: ${{ github.event.comment.user.login }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+          BODY: ${{ github.event.comment.body }}
+        run: |
+          cmd=$(printf '%s\n' "$BODY" | head -n1 | awk '{print $1}')
+          react() {
+            gh api --silent -X POST "repos/$GH_REPO/issues/comments/$COMMENT_ID/reactions" -f content="$1"
+          }
+          assignees=$(gh issue view "$ISSUE" --json assignees -q '[.assignees[].login] | join(" ")')
+          mine=false
+          for a in $assignees; do [ "$a" = "$COMMENTER" ] && mine=true; done
+
+          case "$cmd" in
+            /assign)
+              if [ "$STATE" != open ]; then
+                gh issue comment "$ISSUE" --body "@$COMMENTER this issue is closed, so it can't be assigned."
+              elif [ "$mine" = true ]; then
+                react +1
+              elif [ -n "$assignees" ]; then
+                taken=$(printf '@%s ' $assignees)
+                gh issue comment "$ISSUE" --body "@$COMMENTER this issue is already assigned to ${taken% }. Feel free to pick another one, or ask here if it looks stalled."
+                react confused
+              else
+                gh issue edit "$ISSUE" --add-assignee "$COMMENTER"
+                react +1
+              fi
+              ;;
+            /unassign)
+              if [ "$mine" = true ]; then
+                gh issue edit "$ISSUE" --remove-assignee "$COMMENTER"
+                react +1
+              fi
+              ;;
+          esac

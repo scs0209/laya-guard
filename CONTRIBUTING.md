@@ -20,6 +20,18 @@ laya-guard check --json "<the exact command>"
 
 Every confirmed case becomes a row in an eval set so it can't regress.
 
+## Picking up an issue
+
+Comment `/assign` on an issue to take it; a bot assigns it to you and reacts
+with 👍. It only works on open, unassigned issues (look for
+[`good first issue`](https://github.com/scs0209/laya-guard/labels/good%20first%20issue)
+and [`help wanted`](https://github.com/scs0209/laya-guard/labels/help%20wanted)).
+Comment `/unassign` if you can't continue. If an assigned issue sees no
+activity for two weeks, a maintainer may unassign it so someone else can
+pick it up.
+
+Small fixes don't need an issue first; open the PR directly.
+
 ## Development setup
 
 ```bash

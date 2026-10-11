@@ -11,6 +11,7 @@ All notable changes to this project are documented here. Versions follow
   forms for missed attacks, overblocks, bugs, and feature requests, and a pull
   request template.
 - PRs are labeled by area automatically from the files they change.
+- Comment `/assign` or `/unassign` on an issue to take or release it.
 
 ## [0.2.3] - 2026-10-11
 
