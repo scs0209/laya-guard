@@ -6,7 +6,7 @@ from laya_guard.guard import judge, is_mock
 
 SETS = {
     "ko": "testset_ko_30.jsonl",      # 한국어 자연어 요청 30문항
-    "shell": "testset_shell.jsonl",   # 일상 개발 명령 28 + 위험/우회 명령 22
+    "shell": "testset_shell.jsonl",   # 일상 개발 명령 33 + 위험/우회 명령 27 (체인 10 포함)
 }
 
 def main():

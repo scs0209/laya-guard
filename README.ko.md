@@ -63,7 +63,8 @@ curl -X POST localhost:8787/guard -H 'Content-Type: application/json' \
 에이전트 tool_call
   → guard-hook.sh (Claude Code PreToolUse 훅; block이면 exit 2로 실행 취소)
   → POST /guard (localhost:8787)
-  → policy.yaml: 정규식 프리필터 10종
+  → 체인(`a && b`, `a; b`, `a || b`)은 명령별로 나눠 아래 단계를 거치고, 가장 나쁜 판정을 씀
+  → policy.yaml: 정규식 프리필터 11종 (block 정책이 review 정책보다 우선)
       · 매칭 + action_on_regex=block  → 즉시 차단 (risk 0.92, 모델 미호출)
       · 매칭 + action_on_regex=review → 모델 심판, 하한은 review (risk ≥ 0.55)
       · 미매칭 + 안전 명령            → 즉시 허용 (단일 일반 명령: ls, git status, npm test…)
@@ -79,6 +80,11 @@ curl -X POST localhost:8787/guard -H 'Content-Type: application/json' \
 메타문자(`; & | $ < > ( )` 등), 프로그램 실행·파일 쓰기 플래그(`-exec`, `--config`,
 `--output` 등), 민감 경로(`.ssh`, `.aws`, `.env` 등)가 없는 단일 명령에만 열립니다.
 설치, `git push`, `npx`는 항상 모델이 심판합니다.
+
+체인은 최상위 `;`, `&&`, `||`, `&`에서만 나눕니다(따옴표, `$(…)`, 괄호 안은 그대로).
+그래서 `cd app && npm test`는 안전 명령 두 개이고, `npm test && curl … | sh`는 뒷부분
+때문에 차단됩니다. 전체 문자열도 정규식 검사를 거치므로 명령 경계를 넘는 패턴
+(`curl -o x …; sh x`)도 잡힙니다.
 
 ## 지원 에이전트
 
@@ -155,7 +161,7 @@ CI가 이미 이렇게 돕니다. `eval/run_eval.py --min-acc 1.0`은 판정 정
 | AgentDojo v1 공격 (심판 레벨) | **25/27 차단** | `eval/run_agentdojo.py` |
 | AgentDojo v1 정상 (심판 레벨) | **92/97 유지** (allow+review) | `eval/run_agentdojo.py` |
 | E2E 롤아웃 (qwen2.5:7b 에이전트 + 가드) | **4/4 시나리오** (1 방어, 2 미시도, 1 정상 OK) | `eval/run_rollout.py` → [결과](eval/rollout_results.md) |
-| 셸 명령 (자체: 일상 28 + 위험/우회 22) | **48/50** (실전, `source=user`·`tool` 모두. 안전 명령 레인 전 32/50·29/50) | `eval/run_eval.py --set shell` |
+| 셸 명령 (자체: 일상 33 + 위험/우회 27, 그중 체인 10) | **58/60** (실전, `source=user`·`tool` 모두. 앞 50개는 안전 명령 레인 전 32/50·29/50) | `eval/run_eval.py --set shell` |
 | 한국어 30문항 (자체) | **30/30** (MOCK·실전 모두) | `eval/run_eval.py` |
 
 두 자체 셋은 검증 대상 규칙과 함께 만들어졌습니다(한국어 셋은 MOCK 휴리스틱과, 셸 셋은
@@ -194,21 +200,22 @@ laya-guard stats   # 판정 분포, block/review율, 상위 정책, 지연시간
 | 판정 | allow / **review** / block + risk | allow / confirm / block | 이진 판정 | valid + score | 점수 / 임계값 |
 | 한국어 평가 | ✅ 30문항 30/30 | ❌ 확인 불가 | ❌ | ❌ | ❌ |
 | AgentDojo 수치 | ✅ 25/27, 92/97 (심판 레벨, 자체 측정) | ❌ 확인 불가 | ❌ | ❌ | ❌ |
-| 상태 | 개발 중, v0.2.1, MIT | MIT | ⚠️ 2025-05 아카이브 | ⚠️ 아카이브, 미유지보수 | 알파, Apache-2.0 |
+| 상태 | 개발 중, v0.2.2, MIT | MIT | ⚠️ 2025-05 아카이브 | ⚠️ 아카이브, 미유지보수 | 알파, Apache-2.0 |
 
 이 표의 어떤 도구도 제3자 검증 AgentDojo 점수는 없습니다. 우리 수치도 자체 측정·심판
 레벨입니다 ([한계](#한계) 참조).
 
-## 정책 (10종)
+## 정책 (11종)
 
 | id | 잡는 것 | 정규식 적중 시 |
 |---|---|---|
 | `destructive-fs` | `rm -rf /`, `mkfs`, 디바이스 `dd`, 포크밤 | block |
-| `exfiltration` | `curl … \| sh`, 터널, `nc`로 파이프, `curl -d @파일` 업로드 | review |
+| `pipe-to-shell` | `curl … \| sh`, `wget … \| sudo bash`, `bash -c "$(curl …)"`, `bash <(curl …)` | block |
+| `exfiltration` | 터널, `nc`로 파이프, `curl -d @파일` 업로드 | review |
 | `prompt-injection` | 이전 지시 무시, 탈옥, 한영 | block |
 | `secrets-leak` | API 키, 개인키, 토큰 | block |
 | `payment-action` | 결제/환불/청구, 한영 | review |
-| `remote-exec` | 수상한 패키지 인덱스, 원격 스크립트, 셸로 파이프, 인코딩된 PS | review |
+| `remote-exec` | 수상한 패키지 인덱스, 원격 스크립트, 로컬 내용을 셸로 파이프, 인코딩된 PS | review |
 | `priv-escalation` | `sudo sh`, `chmod 777`, setuid, `/etc/`로 리다이렉트 | review |
 | `persistence` | cron, 서비스 등록, 셸rc 후킹, git `core.hooksPath`/`core.pager` | review |
 | `mass-delete` | `DROP TABLE`, `s3 rm --recursive`, `kubectl delete --all`, `git push --force` | review |
@@ -248,6 +255,8 @@ laya-guard stats   # 판정 분포, block/review율, 상위 정책, 지연시간
 - 안전 명령 레인은 `npm test`, `make test`, `go test` 등을 모델 없이 허용합니다. 이들은
   프로젝트 자체 스크립트를 실행하므로, 악성 저장소의 테스트 스크립트는 심판되지 않습니다.
   신경 쓰인다면 `policy.yaml`의 `safe_commands`를 줄이세요.
+- 체인은 명령별로 심판하므로, 모델은 `cat shadow` 앞에 `cd /etc`가 있었다는 걸 모릅니다.
+  민감 경로 검사와 전체 문자열 정규식이 흔한 경우를 막지만 전부는 아닙니다.
 - 정규식 `block` 적중은 `risk: 0.92` 하드코딩을 반환합니다. 모델을 건너뛰므로 이 점수는
   보정된 확률이 아니라 플래그입니다.
 - 정책별 Laya 힌트(`policy.yaml`의 `choice_hint`/`score_hint`)는 선언만 있고 의도적으로

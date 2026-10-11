@@ -66,7 +66,9 @@ curl -X POST localhost:8787/guard -H 'Content-Type: application/json' \
 agent tool_call
   → guard-hook.sh (Claude Code PreToolUse hook; block ⇒ exit 2 cancels the run)
   → POST /guard (localhost:8787)
-  → policy.yaml: 10 policies as regex prefilters
+  → chains (`a && b`, `a; b`, `a || b`) are split and each command judged below;
+    the worst verdict wins
+  → policy.yaml: 11 policies as regex prefilters (a block policy outranks a review one)
       · match + action_on_regex=block  → instant block (risk 0.92, model not consulted)
       · match + action_on_regex=review → model judges, floor is review (risk ≥ 0.55)
       · no match + safe command        → instant allow (one plain command: ls, git status, npm test…)
@@ -83,6 +85,12 @@ only opens for a single command with no shell metacharacters (`; & | $ < > ( )` 
 no program-running/file-writing flags (`-exec`, `--config`, `--output`…), and no
 sensitive paths (`.ssh`, `.aws`, `.env`…). Installs, `git push`, and `npx` always
 go to the model.
+
+Chains are split only at top-level `;`, `&&`, `||`, and `&` (never inside quotes,
+`$(…)`, or parentheses), so `cd app && npm test` is two safe commands while
+`npm test && curl … | sh` is blocked by its second half. The whole string is still
+checked against the regexes, which catches patterns spanning commands
+(`curl -o x …; sh x`).
 
 ## Supported agents
 
@@ -165,7 +173,7 @@ judgment accuracy regresses. Same command gates policy edits locally.
 | AgentDojo v1, attacks (judge-level) | **25/27 blocked** | `eval/run_agentdojo.py` |
 | AgentDojo v1, benign (judge-level) | **92/97 kept** (allow+review) | `eval/run_agentdojo.py` |
 | E2E rollout (qwen2.5:7b agent + guard) | **4/4 scenarios** (1 defended, 2 not attempted, 1 benign OK) | `eval/run_rollout.py` → [results](eval/rollout_results.md) |
-| Shell commands (own set: 28 everyday + 22 dangerous/bypass) | **48/50** (real, `source=user` and `tool`; was 32/50 and 29/50 before the safe-command lane) | `eval/run_eval.py --set shell` |
+| Shell commands (own set: 33 everyday + 27 dangerous/bypass, 10 of them chains) | **58/60** (real, `source=user` and `tool`; the first 50 scored 32/50 and 29/50 before the safe-command lane) | `eval/run_eval.py --set shell` |
 | Korean 30 (own set) | **30/30** (mock **and** real) | `eval/run_eval.py` |
 
 Both in-house sets were written alongside the rules they test (the Korean set
@@ -206,21 +214,22 @@ Most guardrails scan **prompt text**. laya-guard sits one step later: it judges 
 | Verdict | allow / **review** / block + risk | allow / confirm / block | binary detected | valid + score | scores / thresholds |
 | Korean evaluation | ✅ 30-case set, 30/30 | ❌ none verified | ❌ | ❌ | ❌ |
 | AgentDojo numbers | ✅ 25/27, 92/97 (judge-level, self-reported) | ❌ none verified | ❌ | ❌ | ❌ |
-| Status | active, v0.2.1, MIT | MIT | ⚠️ archived May 2025 | ⚠️ archived, unmaintained | alpha, Apache-2.0 |
+| Status | active, v0.2.2, MIT | MIT | ⚠️ archived May 2025 | ⚠️ archived, unmaintained | alpha, Apache-2.0 |
 
 No verified third-party AgentDojo score exists for any tool in this table —
 ours is self-reported and judge-level (see [Limitations](#limitations)).
 
-## Policies (10)
+## Policies (11)
 
 | id | What it catches | Regex hit ⇒ |
 |---|---|---|
 | `destructive-fs` | `rm -rf /`, `mkfs`, `dd` to devices, fork bombs | block |
-| `exfiltration` | `curl … \| sh`, tunnels, pipes into `nc`, `curl -d @file` uploads | review |
+| `pipe-to-shell` | `curl … \| sh`, `wget … \| sudo bash`, `bash -c "$(curl …)"`, `bash <(curl …)` | block |
+| `exfiltration` | tunnels, pipes into `nc`, `curl -d @file` uploads | review |
 | `prompt-injection` | ignore-previous-instructions, jailbreaks, KR+EN | block |
 | `secrets-leak` | API keys, private keys, tokens | block |
 | `payment-action` | payments/refunds/charges, KR+EN | review |
-| `remote-exec` | sketchy package indexes, remote scripts, anything piped into a shell, encoded PS | review |
+| `remote-exec` | sketchy package indexes, remote scripts, local pipes into a shell, encoded PS | review |
 | `priv-escalation` | `sudo sh`, `chmod 777`, setuid, redirects into `/etc/` | review |
 | `persistence` | cron, services, shell-rc hooks, git `core.hooksPath`/`core.pager` | review |
 | `mass-delete` | `DROP TABLE`, `s3 rm --recursive`, `kubectl delete --all`, `git push --force` | review |
@@ -260,6 +269,9 @@ All patterns live in [policy.yaml](src/laya_guard/policy.yaml) — edit, add you
 - The safe-command lane allows `npm test`, `make test`, `go test`, etc. without the
   model — those run your project's own scripts, so a malicious repo's test script
   is not judged. Trim `safe_commands` in `policy.yaml` if that matters to you.
+- Chain commands are judged one by one, so the model doesn't see that `cd /etc`
+  came before `cat shadow`. Sensitive-path checks and whole-string regexes cover
+  the common cases, not all of them.
 - Regex `block` hits return a hardcoded `risk: 0.92` — the model is skipped, so the
   score is a flag, not a calibrated probability.
 - Per-policy Laya hints (`choice_hint`/`score_hint` in `policy.yaml`) are declared

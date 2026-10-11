@@ -1,5 +1,6 @@
-# laya-guard 위험 정책 10개
+# laya-guard 위험 정책 11개
 # 각 정책: 정규식 프리필터(빠른 차단) + Laya 심판 질문 매핑
+# 여러 정책이 걸리면 block 정책이 review 정책보다 우선한다.
 # Laya는 choice(허용/검토/차단) + score(위험도) + noul(악의여부)만 뱉는다. 생성 없음.
 version: 1
 defaults:
@@ -9,15 +10,22 @@ defaults:
 
 # 안전 명령 레인: 모델을 건너뛰고 allow. 아래 조건은 코드(guard.py)가 강제한다.
 #   · 아래 위험 정책 정규식에 걸리지 않음 (걸리면 정책이 우선)
-#   · 셸 메타문자 없음: ; & | ` $ < > ( ) { } \ 줄바꿈 (체이닝/파이프/리다이렉트/치환)
+#   · 셸 메타문자 없음: ; & | ` $ < > ( ) { } \ 줄바꿈 (파이프/리다이렉트/치환)
 #   · 실행·쓰기 플래그 없음: -exec, -toolexec, --config, --output, --upload-pack, --receive-pack
 #   · 민감 경로 없음: .ssh, .aws, .gnupg, .kube, .netrc, .npmrc, .pypirc, .env, id_rsa 등
 #   · 공백 정규화 후 패턴 하나와 "전체" 일치 (대소문자 구분)
+# ; && || & 로 이은 체인은 명령마다 따로 이 목록과 대조한다 (cd·true 같은 조각이 많아 포함).
 # 설치(npm/pip install)·원격(git push, npx)은 의도적으로 제외 — 모델이 심판한다.
 # test/build는 프로젝트 자체 스크립트를 실행한다는 점에 유의.
 safe_commands:
   - 'ls( \S+)*'
   - 'pwd'
+  - 'cd( \S+)?'
+  - '(true|false|whoami|date|uptime|clear)'
+  - 'sleep [0-9.]+[smh]?'
+  - '(uname|df|free)( -\w+)*'
+  - 'du( \S+)+'
+  - 'which( \S+)+'
   - 'echo( \S+)*'
   - '(cat|head|tail|wc|grep|rg)( \S+)+'
   - '(mkdir|touch)( \S+)+'
@@ -49,11 +57,22 @@ policies:
     message: "파괴적 FS 명령 감지 — 승인 없이 실행 금지"
     message_en: "Destructive filesystem command — blocked without approval"
 
+  - id: pipe-to-shell
+    title: "내려받은 스크립트 즉시 실행"
+    patterns:
+      - '\b(curl|wget)\b.*\|\s*(sudo(\s+-\S+)*\s+)?(env\s+)?((ba|z|da|k)?sh\b|(python[0-9.]*|perl|ruby|node)(\s+-)?\s*($|[;&|)]))'
+      - '\b(ba|z|da|k)?sh\s+(-c\s+)?["'']?\$\(\s*(curl|wget)\b'
+      - '(^|[\s;&|(])(source|\.|(ba|z|da|k)?sh)\s+<\(\s*(curl|wget)\b'
+    laya:
+      choice: ["allow", "review", "block"]
+      score_hint: "검증 없이 원격 코드를 바로 실행할 위험도"
+    action_on_regex: block
+    message: "내려받은 스크립트를 바로 실행 — 내용 확인 후 실행"
+    message_en: "Downloaded script piped straight into an interpreter — inspect it first"
+
   - id: exfiltration
     title: "외부 유출 (비밀+외부전송 결합)"
     patterns:
-      - 'curl.*\|\s*(sh|bash)'
-      - 'wget.*\|\s*(sh|bash)'
       - 'ngrok|expose|serveo|chisel'
       - 'scp\s+.*@'
       - '\|\s*(nc|ncat|netcat)\s'

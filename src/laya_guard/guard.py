@@ -85,11 +85,13 @@ def is_mock() -> bool:
 def _regex_hit(text: str) -> Policy | None:
     _ensure()
     assert _policies is not None
+    first_review = None
     for pol in _policies:
-        for rx in pol.compiled:
-            if rx.search(text):
+        if any(rx.search(text) for rx in pol.compiled):
+            if pol.action_on_regex == "block":
                 return pol
-    return None
+            first_review = first_review or pol
+    return first_review
 
 # 안전 레인은 단일 명령에만 열린다: 체이닝·파이프·리다이렉트·치환 금지,
 # 임의 프로그램 실행/파일 쓰기 플래그 금지 (go test -exec, git log --output 등).
@@ -120,7 +122,7 @@ def _mock_score(text: str, hit: Policy | None) -> tuple[str, float]:
         if any(h in text for h in _READONLY_HINTS) and not any(w in text for w in _WRITE_HINTS):
             return "allow", 0.1
         suspicious = ["결제", "송금", "환불", "refund", "sudo", "삭제", "drop", "curl", "rm ", "인증"]
-        if any(k in text or k in t for k in suspicious):
+        if any(k in text or k in t for k in suspicious) or _SENSITIVE_PATH.search(text):
             return "review", 0.55
         return "allow", 0.1
     if hit.action_on_regex == "block":
@@ -235,7 +237,63 @@ SOURCE_PROFILES = {
 def _is_korean(text: str) -> bool:
     return bool(re.search("[가-힣]", text))
 
+# 체인 분할: 최상위 ; && || & 에서만 자른다 (따옴표·$()·``·괄호 안은 그대로).
+# 각 조각이 소문자 명령(또는 VAR=값 접두)으로 시작할 때만 셸 체인으로 본다.
+_CHAIN_MAX = 8
+_CMD_HEAD = re.compile(r"(?:[A-Za-z_]\w*=\S*\s+)*[a-z0-9_./~-]+(?:\s|$)")
+_ACTION_RANK = {"allow": 0, "review": 1, "block": 2}
+
+def _split_chain(text: str) -> list[str]:
+    """Split a one-line shell chain into its commands; [text] if it isn't one."""
+    s = text.strip()
+    if not s or "\n" in s or "\r" in s or _is_korean(s):
+        return [text]
+    parts: list[str] = []
+    start, quote, depth, i = 0, "", 0, 0
+    while i < len(s):
+        c, nxt = s[i], s[i + 1:i + 2]
+        if c == "\\" and quote != "'":
+            i += 2
+            continue
+        if quote:
+            if c == quote:
+                quote = ""
+        elif c in "'\"`":
+            quote = c
+        elif c in "({":
+            depth += 1
+        elif c in ")}":
+            depth -= 1
+        elif depth == 0:
+            doubled = c in "&|" and nxt == c
+            background = c == "&" and s[i - 1:i] != ">" and nxt != ">"
+            if c == ";" or doubled or background:
+                parts.append(s[start:i])
+                i += 2 if doubled else 1
+                start = i
+                continue
+        i += 1
+    if quote or depth != 0:
+        return [text]
+    parts.append(s[start:])
+    parts = [p.strip() for p in parts if p.strip()]
+    if not 2 <= len(parts) <= _CHAIN_MAX or not all(_CMD_HEAD.match(p) for p in parts):
+        return [text]
+    return parts
+
 def judge(tool_call: str, source: str = "user") -> Verdict:
+    segments = _split_chain(tool_call)
+    if len(segments) == 1:
+        return _judge_one(tool_call, source)
+    # 체인은 명령마다 따로 심판해 가장 나쁜 결과를 쓴다.
+    # 명령 경계를 넘는 패턴(curl …; … | sh)은 전체 문자열 정규식이 잡는다.
+    verdicts = [_judge_one(seg, source) for seg in segments]
+    hit = _regex_hit(tool_call)
+    if hit is not None and all(v.policy_id != hit.id for v in verdicts):
+        verdicts.append(_judge_one(tool_call, source))
+    return max(verdicts, key=lambda v: (_ACTION_RANK[v.action], v.risk))
+
+def _judge_one(tool_call: str, source: str) -> Verdict:
     _ensure()
     hit = _regex_hit(tool_call)
     regex_block = hit is not None and hit.action_on_regex == "block"

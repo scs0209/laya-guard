@@ -5,6 +5,31 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-10-11
+
+### Fixed
+
+- Pipe-to-shell hidden mid-chain (`npm test && curl … | sh`) was only reviewed,
+  which passes through in most agents. A new `pipe-to-shell` policy blocks
+  `curl`/`wget` piped into a shell or interpreter, `bash -c "$(curl …)"`, and
+  `bash <(curl …)`.
+- When several policies matched, the first one listed won, so a review policy
+  could hide a block policy. Block policies now take precedence.
+- Benign chains were overblocked (`npm test && echo ok` came back block 0.80):
+  chained commands skipped the safe-command lane and the model judged the whole
+  string. Chains are now split at top-level `;` `&&` `||` `&` and each command is
+  judged on its own; the worst verdict wins, and the whole string still goes
+  through the regexes.
+
+### Added
+
+- Safe commands: `cd`, `true`, `false`, `whoami`, `date`, `uptime`, `clear`,
+  `sleep`, `uname`, `df`, `du`, `free`, `which` (common chain pieces the model
+  overblocks out of context).
+- 10 chain cases in the shell eval set (now 60). Real model: 58/60 for both
+  sources. AgentDojo and the Korean set unchanged.
+- MOCK/fallback heuristics review sensitive paths (`.ssh`, `id_rsa`, `.env`…).
+
 ## [0.2.1] - 2026-10-11
 
 ### Fixed
@@ -64,7 +89,8 @@ All notable changes to this project are documented here. Versions follow
   Claude Code PreToolUse hook, local redacted telemetry, Korean 30-case eval,
   AgentDojo judge-level eval, E2E rollout harness.
 
-[Unreleased]: https://github.com/scs0209/laya-guard/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/scs0209/laya-guard/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/scs0209/laya-guard/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/scs0209/laya-guard/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/scs0209/laya-guard/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/scs0209/laya-guard/releases/tag/v0.1.0
