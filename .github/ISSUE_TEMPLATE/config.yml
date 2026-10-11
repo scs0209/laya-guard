@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a vulnerability
+    url: https://github.com/scs0209/laya-guard/security/advisories/new
+    about: Bypasses of the guard itself (crash, hang, adapter mishandling). Please report privately.
+  - name: Documentation
+    url: https://github.com/scs0209/laya-guard#readme
+    about: Setup, configuration, and known limitations.

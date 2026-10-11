@@ -1,0 +1,64 @@
+name: Overblock
+description: A harmless tool call came back as block (or review)
+labels: ["false-positive"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks! Confirmed cases become eval rows so they can't regress.
+
+  - type: textarea
+    attributes:
+      label: Tool call
+      description: The exact string that was judged. For Bash, just the command.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Verdict
+      description: Output of `laya-guard check --json "<tool call>"` (or the `/guard` response).
+      render: json
+    validations:
+      required: true
+
+  - type: dropdown
+    attributes:
+      label: Expected
+      options:
+        - allow
+        - review
+    validations:
+      required: true
+
+  - type: dropdown
+    attributes:
+      label: Mode
+      options:
+        - Real model
+        - MOCK (LAYA_GUARD_MOCK=1)
+        - Offline fallback (server down)
+    validations:
+      required: true
+
+  - type: dropdown
+    attributes:
+      label: Source
+      description: The `source` sent with the call. Adapters other than Claude Code send `tool`.
+      options:
+        - user
+        - tool
+        - email
+        - web
+        - not sure
+    validations:
+      required: true
+
+  - type: input
+    attributes:
+      label: Version
+      description: "`pip show laya-guardrail`"
+      placeholder: e.g., 0.2.3
+    validations:
+      required: true

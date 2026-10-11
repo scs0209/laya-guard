@@ -1,0 +1,53 @@
+name: Bug report
+description: A crash, an install problem, or an adapter not behaving as documented
+labels: ["bug"]
+body:
+  - type: textarea
+    attributes:
+      label: Summary
+      description: What happened, and what you expected instead. Include the full error output.
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Steps to reproduce
+      description: Commands, hook payload, or config needed to reproduce it.
+      render: shell
+    validations:
+      required: true
+
+  - type: dropdown
+    attributes:
+      label: Agent / integration
+      options:
+        - None (CLI or HTTP API directly)
+        - Claude Code
+        - Codex CLI
+        - Cursor
+        - Gemini CLI
+        - Copilot CLI
+        - OpenCode
+        - Kilo Code
+        - Windsurf
+        - Cline
+        - Qwen Code
+        - Amp
+    validations:
+      required: true
+
+  - type: input
+    attributes:
+      label: Version
+      description: "`pip show laya-guardrail`"
+      placeholder: e.g., 0.2.3
+    validations:
+      required: true
+
+  - type: input
+    attributes:
+      label: Platform
+      description: OS, architecture, and Python version
+      placeholder: e.g., macOS 15 arm64, Python 3.13
+    validations:
+      required: true

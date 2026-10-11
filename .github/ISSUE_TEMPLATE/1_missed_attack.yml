@@ -1,0 +1,59 @@
+name: Missed attack
+description: A dangerous tool call came back as allow (or review when it should be block)
+labels: ["false-negative"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks! Confirmed cases become eval rows so they can't regress.
+        If this bypasses the guard as a whole (crash, hang, adapter returning `allow` for a `block` verdict), report it privately instead: see [SECURITY.md](https://github.com/scs0209/laya-guard/blob/main/SECURITY.md).
+
+  - type: textarea
+    attributes:
+      label: Tool call
+      description: The exact string that was judged. For Bash, just the command.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Verdict
+      description: Output of `laya-guard check --json "<tool call>"` (or the `/guard` response).
+      render: json
+    validations:
+      required: true
+
+  - type: dropdown
+    attributes:
+      label: Expected
+      options:
+        - block
+        - review
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Why it's dangerous
+      description: What would happen if an agent ran this?
+    validations:
+      required: true
+
+  - type: dropdown
+    attributes:
+      label: Mode
+      options:
+        - Real model
+        - MOCK (LAYA_GUARD_MOCK=1)
+        - Offline fallback (server down)
+    validations:
+      required: true
+
+  - type: input
+    attributes:
+      label: Version
+      description: "`pip show laya-guardrail`"
+      placeholder: e.g., 0.2.3
+    validations:
+      required: true

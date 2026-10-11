@@ -290,12 +290,12 @@ laya-guard stats   # 판정 분포, block/review율, 상위 정책, 지연시간
 
 ## 기여
 
-PR 환영. 남은 작업은 [GitHub Issues](https://github.com/scs0209/laya-guard/issues)에 있습니다.
-`python -m pytest tests/ -q`와
-`LAYA_GUARD_MOCK=1 PYTHONPATH=src python eval/run_eval.py --min-acc 1.0`이 통과해야 하고,
-`--set shell --source tool --min-acc 0.96`이 후퇴하면 안 됩니다 (CI가 셋 다 돌립니다). 실전 모델 검사는 API 키 없이 노트북에서 됩니다.
-변경 내역은 [CHANGELOG.md](CHANGELOG.md)에 있습니다. laya-guard 자체의 취약점을
+PR 환영. 개발 환경, CI 게이트, 가이드라인은 [CONTRIBUTING.md](CONTRIBUTING.md)(영문)에
+있고, 남은 작업은 [GitHub Issues](https://github.com/scs0209/laya-guard/issues)에 있습니다.
+가장 도움이 되는 제보는 잘못 판정된 명령입니다. Missed attack 또는 Overblock 이슈 양식을
+써주세요. 변경 내역은 [CHANGELOG.md](CHANGELOG.md)에 있습니다. laya-guard 자체의 취약점을
 찾았다면 공개 이슈 대신 [SECURITY.md](SECURITY.md)를 따라 비공개로 제보해주세요.
+이 프로젝트는 [Contributor Covenant](CODE_OF_CONDUCT.md) 행동 강령을 따릅니다.
 
 ## 라이선스
 

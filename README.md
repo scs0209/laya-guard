@@ -309,12 +309,13 @@ read: some regexes are quadratic in line length, and a 200KB line used to take
 
 ## Contributing
 
-PRs welcome. Open work is tracked in [GitHub Issues](https://github.com/scs0209/laya-guard/issues).
-`python -m pytest tests/ -q` and
-`LAYA_GUARD_MOCK=1 PYTHONPATH=src python eval/run_eval.py --min-acc 1.0` must pass,
-and `--set shell --source tool --min-acc 0.96` must not regress (CI runs all three). Real-model checks need no API key — just a laptop.
-Changes are logged in [CHANGELOG.md](CHANGELOG.md). Found a vulnerability in
-laya-guard itself? See [SECURITY.md](SECURITY.md) — please don't file it publicly.
+PRs welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, the CI gates, and
+guidelines; open work is tracked in [GitHub Issues](https://github.com/scs0209/laya-guard/issues).
+The most useful report is a command that was judged wrong: use the Missed attack
+or Overblock issue form. Changes are logged in [CHANGELOG.md](CHANGELOG.md).
+Found a vulnerability in laya-guard itself? See [SECURITY.md](SECURITY.md) —
+please don't file it publicly. This project follows the
+[Contributor Covenant](CODE_OF_CONDUCT.md).
 
 ## License
 

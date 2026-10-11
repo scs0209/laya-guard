@@ -1,0 +1,17 @@
+name: Feature request
+description: A new policy, agent adapter, or improvement
+labels: ["enhancement"]
+body:
+  - type: textarea
+    attributes:
+      label: Summary
+      description: What you'd like to see, and the problem it solves.
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Example
+      description: A command, config, or workflow showing how it would be used.
+    validations:
+      required: false
