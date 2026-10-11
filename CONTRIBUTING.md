@@ -49,6 +49,9 @@ export LAYA_GUARD_MOCK=1 PYTHONPATH=src
 
 ## Gates (CI runs these on Python 3.10 to 3.13)
 
+CI on PRs from outside contributors starts after a maintainer approves the run.
+CodeRabbit also posts an automated review; a maintainer still reviews every PR.
+
 ```bash
 python -m pytest tests/ -q
 LAYA_GUARD_MOCK=1 PYTHONPATH=src python eval/run_eval.py --min-acc 1.0

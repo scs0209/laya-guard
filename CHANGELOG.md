@@ -13,6 +13,7 @@ All notable changes to this project are documented here. Versions follow
 - PRs are labeled by area automatically from the files they change.
 - Comment `/assign` or `/unassign` on an issue to take or release it.
 - Commit and PR title convention (Conventional Commits), checked on every PR.
+- CodeRabbit review config (`.coderabbit.yaml`) with repo-specific review rules.
 
 ## [0.2.3] - 2026-10-11
 

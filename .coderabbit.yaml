@@ -1,0 +1,70 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: en-US
+
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  sequence_diagrams: false
+  poem: false
+  in_progress_fortune: false
+  suggested_reviewers: false
+  auto_review:
+    enabled: true
+    drafts: false
+  path_instructions:
+    - path: "src/laya_guard/policy.yaml"
+      instructions: |
+        A regex hit on an `action_on_regex: block` policy skips the model, so any
+        false positive is an uncorrectable instant block. Flag block patterns that
+        can match ordinary file names, paths, prose, or IDs, and flag removed or
+        narrowed patterns that let a previously blocked attack through (give a
+        concrete string that changed verdict). Anything added to `safe_commands`
+        skips the model entirely: flag entries that can run arbitrary code or
+        accept shell metacharacters, and check that a matching bypass attempt was
+        added to `BYPASS` in tests/test_guard.py.
+    - path: "src/laya_guard/guard.py"
+      instructions: |
+        `judge()` and `judge_offline()` are the two entry points; input
+        normalization or limits must apply to both, before `_oversized` and
+        `_split_chain`. The verdict for a chain is the worst segment, and the
+        whole-string regex floor must stay. Flag anything that lets a verdict
+        drop from block to review/allow on an input that was blocked before.
+        Watch for regexes with nested quantifiers (ReDoS) on attacker input.
+    - path: "integrations/**"
+      instructions: |
+        Adapters are standalone scripts users copy into place: standard library
+        only (Node built-ins for TypeScript). Each must keep the contract: 10s
+        server timeout, `laya-guard check --offline --json` fallback when the
+        server is unreachable or errors, `LAYA_GUARD_FAIL` and `LAYA_GUARD_BIN`
+        support, and a contract test in tests/test_integrations.py.
+    - path: "guard-hook.sh"
+      instructions: |
+        Hook input is attacker-influenced. Flag unquoted expansions, eval, and any
+        path where a failure turns a block into an allow. Exit 2 cancels the tool
+        call; everything else lets it run.
+    - path: ".github/workflows/**"
+      instructions: |
+        Workflows on `pull_request_target` or `issue_comment` must never check out
+        or execute PR code, and must not interpolate `${{ github.event.* }}` text
+        inside `run:` (pass it through env vars). Keep `permissions: {}` at the top
+        and grant the minimum per job. Third-party actions must be pinned by SHA.
+    - path: "eval/*.jsonl"
+      instructions: |
+        One JSON object per line with `id`, `tool_call`, and `expected` in
+        allow/review/block. Flag duplicate ids and expectations that contradict
+        the policy intent.
+    - path: "tests/**"
+      instructions: |
+        Policy or judge changes need regression tests in both directions: the
+        false positive no longer blocks, and the real attack still does.
+
+chat:
+  auto_reply: true
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "CONTRIBUTING.md"
+      - "SECURITY.md"
