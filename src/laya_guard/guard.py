@@ -22,7 +22,9 @@ class Verdict:
     # where the verdict came from: regex = prefilter short-circuit (no model),
     # allowlist = matched policy.yaml safe_commands (no model),
     # model = Laya ran (even if a regex floor later raised the action),
-    # heuristic = mock mode, or the model raised and regex+heuristics stood in.
+    # heuristic = mock mode, or the model raised and regex+heuristics stood in,
+    # limit = input too long to judge in time (blocked unread),
+    # offline = judge_offline (hooks with the server down).
     verdict_source: str = "model"
 
 @dataclass
@@ -281,7 +283,52 @@ def _split_chain(text: str) -> list[str]:
         return [text]
     return parts
 
+# 정규식 일부(X.*Y)는 한 줄 길이에 대해 제곱 시간이다: `curl `×4만(200KB)이 48초.
+# 훅 타임아웃(30초)을 넘기면 fail-open 우회가 되므로, 읽기 전에 길이로 차단한다.
+MAX_INPUT_CHARS = 256_000
+MAX_LINE_CHARS = 16_000
+
+def _oversized(text: str) -> bool:
+    return len(text) > MAX_INPUT_CHARS or any(
+        len(line) > MAX_LINE_CHARS for line in text.splitlines())
+
+def _oversized_verdict(text: str, mock: bool) -> Verdict:
+    ko = _is_korean(text[:2000])
+    reason = ("입력이 너무 길어 제시간에 심판 불가 — 차단" if ko
+              else "Input too long to judge in time — blocked")
+    return Verdict(action="block", risk=1.0, policy_id="oversized", reason=reason,
+                   mock=mock, verdict_source="limit")
+
+def judge_offline(tool_call: str, fail_closed: bool = False) -> Verdict:
+    """Regex + safe-command check without the model, for hooks whose server is down.
+
+    Regex-flagged calls are blocked and safe commands allowed. Anything else
+    can't be judged without the model: allowed, or blocked with fail_closed.
+    """
+    if _oversized(tool_call):
+        return _oversized_verdict(tool_call, mock=False)
+    ko = _is_korean(tool_call)
+    hit = _regex_hit(tool_call)
+    if hit is not None:
+        reason = hit.message if (ko and hit.message) else (hit.message_en or hit.message)
+        return Verdict(action="block", risk=0.92, policy_id=hit.id, reason=reason,
+                       verdict_source="offline")
+    if all(_safe_command(seg) for seg in _split_chain(tool_call)):
+        reason = "안전 명령 목록 (서버 오프라인)" if ko else "Safe command list (server offline)"
+        return Verdict(action="allow", risk=0.05, policy_id="general", reason=reason,
+                       verdict_source="offline")
+    action = "block" if fail_closed else "allow"
+    if ko:
+        reason = "서버 오프라인 — 모델 심판 없이 " + ("차단" if fail_closed else "통과")
+    else:
+        reason = "Server offline — not judged by the model, " + (
+            "blocked" if fail_closed else "allowed")
+    return Verdict(action=action, risk=0.5, policy_id="offline", reason=reason,
+                   verdict_source="offline")
+
 def judge(tool_call: str, source: str = "user") -> Verdict:
+    if _oversized(tool_call):
+        return _oversized_verdict(tool_call, mock=is_mock())
     segments = _split_chain(tool_call)
     if len(segments) == 1:
         return _judge_one(tool_call, source)

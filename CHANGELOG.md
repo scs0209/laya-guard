@@ -5,6 +5,31 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-10-11
+
+### Security
+
+- A long single-line command could make judging slow enough to bypass the
+  guard: some regexes are quadratic in line length, `curl ` repeated 40,000
+  times plus `; rm -rf ~/` (200KB) took 48s, and adapters fail open on timeout.
+  Inputs over 256K characters or with a line over 16K are now blocked without
+  being read (`policy_id: "oversized"`, `verdict_source: "limit"`).
+- Adapters no longer fail open blindly when the server is down, errors, or
+  takes longer than 10s (was 30 to 60s). They fall back to
+  `laya-guard check --offline`: regex-flagged calls are blocked, safe commands
+  pass, and the rest pass with a warning, or are blocked with
+  `LAYA_GUARD_FAIL=closed`. Suggested in a Reddit comment.
+
+### Added
+
+- `laya-guard check --offline` and `--json`.
+- `LAYA_GUARD_FAIL` and `LAYA_GUARD_BIN` for all 11 adapters.
+
+### Fixed
+
+- `guard-hook.sh` treated HTTP errors from the server as allow; it now falls
+  back like the other adapters, and sends the payload on stdin instead of argv.
+
 ## [0.2.2] - 2026-10-11
 
 ### Fixed
@@ -89,7 +114,8 @@ All notable changes to this project are documented here. Versions follow
   Claude Code PreToolUse hook, local redacted telemetry, Korean 30-case eval,
   AgentDojo judge-level eval, E2E rollout harness.
 
-[Unreleased]: https://github.com/scs0209/laya-guard/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/scs0209/laya-guard/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/scs0209/laya-guard/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/scs0209/laya-guard/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/scs0209/laya-guard/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/scs0209/laya-guard/compare/v0.1.0...v0.2.0

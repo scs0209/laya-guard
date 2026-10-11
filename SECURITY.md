@@ -19,8 +19,8 @@ Expect an acknowledgement within 7 days. Please include a minimal reproduction
   truncated SHA-256, written to the telemetry log
 - The server or a hook adapter executing, or enabling execution of, the
   content it is judging
-- A crafted `tool_call` that crashes or hangs the server (denial of service
-  turns into fail-open for every adapter)
+- A crafted `tool_call` that crashes or hangs the server, or that takes the
+  offline fallback longer than its timeout
 - An adapter returning `allow` for a `block` verdict, or mishandling its
   agent's hook contract
 - Malicious `policy.yaml` handling beyond the documented trust model
@@ -31,6 +31,7 @@ Expect an acknowledgement within 7 days. Please include a minimal reproduction
 - A single input judged wrongly (missed attack or false positive). These are
   quality bugs — please open an issue with the input and the verdict so it
   can become an eval case.
-- Fail-open when the server is unreachable — documented and intentional.
+- With the server unreachable, calls that are neither regex-flagged nor safe
+  commands pass unless `LAYA_GUARD_FAIL=closed` — documented and intentional.
 - Exposing the server beyond localhost with `--host 0.0.0.0` — it has no
   authentication by design.

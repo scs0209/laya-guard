@@ -30,7 +30,7 @@ class GuardRes(BaseModel):
     policy_id: str
     reason: str
     mock: bool
-    verdict_source: str  # regex | allowlist | model | heuristic
+    verdict_source: str  # regex | allowlist | model | heuristic | limit
 
 @app.get("/health")
 def health():
