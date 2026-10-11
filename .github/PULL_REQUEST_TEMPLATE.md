@@ -1,5 +1,6 @@
 <!--
 Thanks for contributing! See CONTRIBUTING.md for the gates and guidelines.
+PR title must follow Conventional Commits, e.g. "fix(policy): stop flagging timestamps as RRNs".
 -->
 
 ## Summary

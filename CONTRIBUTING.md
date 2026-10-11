@@ -82,4 +82,40 @@ PYTHONPATH=src .venv/bin/python eval/run_agentdojo.py     # needs: pip install a
   `LAYA_GUARD_BIN` support, and a contract test in `tests/test_integrations.py`.
 - Keep PRs small and focused. Add a line under `## [Unreleased]` in
   [CHANGELOG.md](CHANGELOG.md).
-- Commit messages and PR descriptions in English.
+- Commit messages, PR titles, and PR descriptions in English.
+
+## Commit messages and PR titles
+
+PRs are squash-merged, and the **PR title becomes the commit message on
+`main`**. PR titles must follow
+[Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/); a CI
+check (`pr-title`) enforces it. Commits inside your branch are squashed away,
+but following the same format there is appreciated.
+
+```
+<type>(<optional scope>): <subject>
+```
+
+| Type | Use for |
+| --- | --- |
+| `feat` | New behavior: a policy, an adapter, a CLI flag |
+| `fix` | Bug fixes, including wrong verdicts (missed attacks, overblocks) |
+| `docs` | Documentation only |
+| `test` | Tests or eval rows only |
+| `refactor` | Code change with no behavior change |
+| `perf` | Faster or lighter, same behavior |
+| `ci` | GitHub Actions workflows, labels, repo automation |
+| `build` | Packaging, dependencies, `pyproject.toml` |
+| `chore` | Release bumps and other maintenance |
+| `revert` | Reverting an earlier commit |
+
+Scopes are optional; use the area you touched: `policy`, `guard`, `adapter`,
+`server`, `cli`, `eval`, `deps`.
+
+- Subject in the imperative mood, starting lowercase, no trailing period,
+  ideally under 72 characters: `fix(policy): stop flagging timestamps as RRNs`,
+  not `Fixed RRN bug.`
+- Breaking changes (a verdict contract, CLI output, or config that users rely
+  on) get a `!` after the type or scope, e.g. `feat(server)!: return 403 on block`,
+  and a `BREAKING CHANGE:` line in the PR description.
+- Reference issues in the PR description (`Fixes #4`), not in the title.
