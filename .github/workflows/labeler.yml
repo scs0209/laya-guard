@@ -1,0 +1,25 @@
+name: labeler
+
+# pull_request_target runs the base branch's workflow with a write token so
+# fork PRs can be labeled. The labeler only reads changed paths and never
+# checks out or runs PR code; keep it that way.
+on:
+  pull_request_target:
+  workflow_dispatch:
+    inputs:
+      pr-number:
+        description: PR number(s) to label, one per line
+        required: true
+
+permissions: {}
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/labeler@bf12e9b00b37c5c0ca2b87b79b2daf7891dbda13 # v7.0.0
+        with:
+          pr-number: ${{ inputs.pr-number }}

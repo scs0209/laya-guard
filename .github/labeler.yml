@@ -1,0 +1,33 @@
+"area: policy":
+  - changed-files:
+      - any-glob-to-any-file: src/laya_guard/policy.yaml
+
+"area: model":
+  - changed-files:
+      - any-glob-to-any-file: src/laya_guard/guard.py
+
+"area: server":
+  - changed-files:
+      - any-glob-to-any-file:
+          - src/laya_guard/server.py
+          - src/laya_guard/cli.py
+          - src/laya_guard/log.py
+
+"area: adapter":
+  - changed-files:
+      - any-glob-to-any-file:
+          - integrations/**
+          - guard-hook.sh
+
+"area: eval":
+  - changed-files:
+      - any-glob-to-any-file: eval/**
+
+"area: ci":
+  - changed-files:
+      - any-glob-to-any-file: .github/**
+
+# Every PR touches CHANGELOG.md, so it alone doesn't count as documentation.
+documentation:
+  - changed-files:
+      - all-globs-to-any-file: ["**/*.md", "!CHANGELOG.md"]

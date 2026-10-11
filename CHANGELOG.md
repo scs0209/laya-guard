@@ -10,6 +10,7 @@ All notable changes to this project are documented here. Versions follow
 - `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1), issue
   forms for missed attacks, overblocks, bugs, and feature requests, and a pull
   request template.
+- PRs are labeled by area automatically from the files they change.
 
 ## [0.2.3] - 2026-10-11
 
