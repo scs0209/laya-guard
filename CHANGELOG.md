@@ -5,6 +5,8 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-10-12
+
 ### Security
 
 - `npm test` and other safe commands were allowed on the command string alone,
@@ -22,7 +24,6 @@ All notable changes to this project are documented here. Versions follow
 
 - `cwd` on `POST /guard` and `laya-guard check --cwd` (defaults to the current
   directory). All 11 adapters send the directory the command runs in.
-
 - `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1), issue
   forms for missed attacks, overblocks, bugs, and feature requests, and a pull
   request template.
@@ -140,7 +141,8 @@ All notable changes to this project are documented here. Versions follow
   Claude Code PreToolUse hook, local redacted telemetry, Korean 30-case eval,
   AgentDojo judge-level eval, E2E rollout harness.
 
-[Unreleased]: https://github.com/scs0209/laya-guard/compare/v0.2.3...HEAD
+[Unreleased]: https://github.com/scs0209/laya-guard/compare/v0.2.4...HEAD
+[0.2.4]: https://github.com/scs0209/laya-guard/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/scs0209/laya-guard/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/scs0209/laya-guard/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/scs0209/laya-guard/compare/v0.2.0...v0.2.1
