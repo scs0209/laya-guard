@@ -5,6 +5,8 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-10-13
+
 ### Security
 
 - `destructive-fs` only matched `rm -rf /` / `rm -r /` in that exact flag order, so
@@ -196,7 +198,8 @@ All notable changes to this project are documented here. Versions follow
   Claude Code PreToolUse hook, local redacted telemetry, Korean 30-case eval,
   AgentDojo judge-level eval, E2E rollout harness.
 
-[Unreleased]: https://github.com/scs0209/laya-guard/compare/v0.2.4...HEAD
+[Unreleased]: https://github.com/scs0209/laya-guard/compare/v0.2.5...HEAD
+[0.2.5]: https://github.com/scs0209/laya-guard/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/scs0209/laya-guard/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/scs0209/laya-guard/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/scs0209/laya-guard/compare/v0.2.1...v0.2.2
