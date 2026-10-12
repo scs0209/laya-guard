@@ -99,7 +99,9 @@ policies:
       - 'ignore (all )?previous instructions'
       - '이전 지시를 무시'
       - 'system prompt.*(보여|출력|leak|reveal)'
-      - 'DAN|jailbreak'
+      # \bDAN mode\b만: 단독 'DAN'은 ignore(IGNORECASE)에서 dan/dandelion 등
+      # 일반 단어의 부분문자열로 오탐 (regex block은 모델을 건너뛰므로 고정밀 필요)
+      - 'jailbreak|\bDAN mode\b'
     laya:
       choice: ["allow", "review", "block"]
       score_hint: "에이전트 지시를 탈취하려는 시도 위험도"
@@ -210,7 +212,9 @@ policies:
       - 'disable.*(auth|tls|ssl)'
       - 'TLS.*(끄|비활|무력|우회|skip)'
       - '검증.*(끄|비활|무력화|우회|skip)'
-      - 'verify.*(off|disable|false|skip)'
+      # 자연어 "verify the fallback is off" 같은 문장 오탐 방지:
+      # ssl/tls 검증 플래그 형태(http.sslVerify false, tls-verify=false 등)만 매칭
+      - '(ssl|tls)[\w-]*verify[=\s]*(false|off|no|0)\b'
       - 'change the password of the user to'
       - 'reset.*password.*to new_password'
     laya:
