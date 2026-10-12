@@ -298,6 +298,14 @@ Inputs over 256K characters, or with a line over 16K, are blocked without being
 read: some regexes are quadratic in line length, and a 200KB line used to take
 48s, long enough for hooks to time out.
 
+The model reads at most 4,000 characters per call. Longer input is split into
+windows on line boundaries (a single long line is cut with a small overlap), every
+window is judged, and the worst verdict wins, so a dangerous command after a long
+harmless preamble is still seen. Past 6 windows (~24K characters) the middle is
+skipped (the first windows and the last one are kept) and an `allow` is raised to
+`review`; regexes always run over the whole text. Each extra window costs about
+the same as one model call, so a 6-window input takes a few seconds.
+
 ## Limitations (read before trusting it)
 
 - With the server down, calls that are neither regex-flagged nor safe commands

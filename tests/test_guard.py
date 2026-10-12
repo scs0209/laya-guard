@@ -320,3 +320,70 @@ def test_git_work_loss_commands_flagged():
     for cmd in ["git reset --soft HEAD~1", "git reset HEAD file.txt", "git clean -n", "git checkout main",
                 "git checkout -- src/a.ts"]:
         assert judge(cmd).policy_id != "mass-delete", cmd
+
+# --- 모델 창(window): 4000자 뒤의 내용도 모델이 판정한다 ---
+PAD_LINE = "# routine build notes: compiling modules, updating the changelog and formatting sources"
+
+def _pad(chars: int) -> str:
+    out, total = [], 0
+    while total < chars:
+        out.append(PAD_LINE)
+        total += len(PAD_LINE) + 1
+    return "\n".join(out)
+
+def _fake_model(monkeypatch, marker: str = "DANGER"):
+    """창에 marker가 있으면 block, 없으면 allow 를 돌려주는 가짜 모델. 본 창 목록을 기록한다."""
+    seen: list[str] = []
+    def predict(window: str):
+        seen.append(window)
+        return ("block", 0.9) if marker in window else ("allow", 0.1)
+    monkeypatch.setattr(guard, "_laya_predict", predict)
+    return seen
+
+def test_model_windows_short_text_is_one_window():
+    assert guard._model_windows("ls -la") == (["ls -la"], False)
+
+def test_model_windows_cover_everything_within_the_limit():
+    text = _pad(guard.MODEL_WINDOW_CHARS * 3) + "\nTAIL-MARKER"
+    windows, truncated = guard._model_windows(text)
+    assert not truncated
+    assert all(len(w) <= guard.MODEL_WINDOW_CHARS for w in windows)
+    assert "TAIL-MARKER" in windows[-1]
+    assert "\n".join(windows) == text          # 줄 경계로 잘랐으므로 이어 붙이면 원문
+
+def test_model_windows_long_single_line_overlaps():
+    line = "a" * 3000 + "MIDDLE-MARKER" + "b" * 3000       # 한 줄 6013자, 창(4000)보다 길다
+    windows, truncated = guard._model_windows(line)
+    assert not truncated and len(windows) == 2
+    assert any("MIDDLE-MARKER" in w for w in windows)
+
+def test_model_windows_over_limit_keeps_head_and_tail():
+    text = _pad(guard.MODEL_WINDOW_CHARS * (guard.MAX_MODEL_WINDOWS + 4)) + "\nTAIL-MARKER"
+    windows, truncated = guard._model_windows(text)
+    assert truncated and len(windows) == guard.MAX_MODEL_WINDOWS
+    assert windows[0].startswith(PAD_LINE) and "TAIL-MARKER" in windows[-1]
+
+def test_danger_after_4000_chars_is_judged(monkeypatch):
+    seen = _fake_model(monkeypatch)
+    action, _ = guard._laya_judge(_pad(4500) + "\nDANGER")
+    assert action == "block" and len(seen) >= 2     # 예전에는 text[:4000]만 봐서 allow 였다
+
+def test_danger_in_the_first_window_still_blocks(monkeypatch):
+    _fake_model(monkeypatch)
+    assert guard._laya_judge("DANGER\n" + _pad(10_000))[0] == "block"
+
+def test_input_too_long_for_all_windows_is_raised_to_review(monkeypatch):
+    seen = _fake_model(monkeypatch)
+    text = _pad(guard.MODEL_WINDOW_CHARS * (guard.MAX_MODEL_WINDOWS + 4))   # 위험 내용 없음, 가운데는 못 본다
+    action, risk = guard._laya_judge(text)
+    assert action == "review" and risk >= 0.45
+    assert len(seen) == guard.MAX_MODEL_WINDOWS
+
+def test_short_benign_input_stays_allow(monkeypatch):
+    _fake_model(monkeypatch)
+    assert guard._laya_judge("ls -la")[0] == "allow"
+
+def test_oversized_limit_is_unchanged():
+    # 전체 256K자 / 한 줄 16K자 초과는 모델에 넣지 않고 차단
+    assert judge("x" * (guard.MAX_INPUT_CHARS + 1)).verdict_source == "limit"
+    assert judge("echo " + "a" * (guard.MAX_LINE_CHARS + 1)).verdict_source == "limit"

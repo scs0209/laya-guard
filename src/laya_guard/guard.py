@@ -138,8 +138,57 @@ def _mock_score(text: str, hit: Policy | None) -> tuple[str, float]:
 # LAYA_GUARD_DEVICE=mps 등으로 덮어쓸 수 있음(속도 우선 시), 단 재현성 포기.
 GUARD_DEVICE = os.environ.get("LAYA_GUARD_DEVICE", "cpu")
 
+# 모델 한 번 호출이 읽는 최대 길이. 예전에는 text[:4000]만 넘겨 4000자 뒤는 모델이 못 봤다
+# (위험 명령 앞에 무해한 긴 앞부분을 붙이면 block이 review로 내려갔다).
+MODEL_WINDOW_CHARS = 4_000
+MODEL_WINDOW_OVERLAP = 200       # 한 줄이 창보다 길 때 자른 경계에 걸친 명령을 놓치지 않도록
+MAX_MODEL_WINDOWS = 6            # 창당 ~0.1~0.8초: 훅 타임아웃 안에서 끝나도록 상한을 둔다
+
+def _model_windows(text: str) -> tuple[list[str], bool]:
+    """Split text into windows the model can read: (windows, truncated).
+
+    Windows end on line boundaries where possible; a single line longer than a
+    window is cut with a small overlap. Beyond MAX_MODEL_WINDOWS the middle is
+    skipped (first windows + the last one are kept) and truncated is True.
+    """
+    if len(text) <= MODEL_WINDOW_CHARS:
+        return [text], False
+    windows: list[str] = []
+    cur = ""
+    for line in text.split("\n"):
+        while len(line) > MODEL_WINDOW_CHARS:           # 긴 한 줄: 겹치게 자른다
+            if cur:
+                windows.append(cur); cur = ""
+            windows.append(line[:MODEL_WINDOW_CHARS])
+            line = line[MODEL_WINDOW_CHARS - MODEL_WINDOW_OVERLAP:]
+        if cur and len(cur) + 1 + len(line) > MODEL_WINDOW_CHARS:
+            windows.append(cur); cur = line
+        else:
+            cur = f"{cur}\n{line}" if cur else line
+    if cur:
+        windows.append(cur)
+    if len(windows) <= MAX_MODEL_WINDOWS:
+        return windows, False
+    return windows[:MAX_MODEL_WINDOWS - 1] + windows[-1:], True
+
+_ACTION_RANK = {"allow": 0, "review": 1, "block": 2}
+
 def _laya_judge(text: str) -> tuple[str, float]:
-    """Run the Laya model. Raises if the model can't load or predict."""
+    """Judge text with the model: every window is judged and the worst verdict wins.
+
+    If part of the input could not be shown to the model (more than
+    MAX_MODEL_WINDOWS windows), an allow is raised to review.
+    """
+    windows, truncated = _model_windows(text)
+    results = [_laya_predict(w) for w in windows]
+    action, risk = max(results, key=lambda r: (_ACTION_RANK[r[0]], r[1]))
+    if truncated and action == "allow":
+        floor = float((_defaults or {}).get("review_threshold", 0.45))
+        action, risk = "review", round(max(risk, floor), 3)
+    return action, risk
+
+def _laya_predict(text: str) -> tuple[str, float]:
+    """Run the Laya model on one window. Raises if the model can't load or predict."""
     global _router
     _ensure()
     from laya import Router
@@ -165,7 +214,7 @@ def _laya_judge(text: str) -> tuple[str, float]:
             "instructions": "악의적이거나 지시 탈취 시도인가?",
         },
     }
-    r = _router.predict(text[:4000], questions, model="multilingual")
+    r = _router.predict(text, questions, model="multilingual")
     ans = r.get("answers", {})
     act = ans.get("action", {})
     action = act.get("choice", "review")
