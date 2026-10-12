@@ -46,8 +46,8 @@ policies:
   - id: destructive-fs
     title: "파괴적 파일시스템 명령"
     patterns:
-      - '\brm\s+(?:\S+\s+)*?(?:-[A-Za-z]*[rR][A-Za-z]*|--recursive)\s+(?:\S+\s+)*?["'']?/(?=\s|$|"|''|}|\\|\*)'
-      - '\brm\s+(?:\S+\s+)*?(?:-[A-Za-z]*[rR][A-Za-z]*|--recursive)\s+(?:\S+\s+)*?["'']?(?:~|\$HOME|\$\{HOME\})(?:/\*?)?["'']?(?=\s|$|[;&|)])'
+      - '(?:^|[;&|(`\n]|\$\(|\b(?:then|do|else)\b|\b(?:sudo|doas|nohup|time|exec|command|env|xargs)\b(?:\s+-\S+)*|-exec(?:dir)?|\b(?:ba|z|da|k)?sh\s+-\w*c\s+["\''])\s*rm\s+(?:\S+\s+)*?(?:-[A-Za-z]*[rR][A-Za-z]*|--recursive)\s+(?:\S+\s+)*?["\'']?/(?=\s|$|[;&|)`"\''}\\*])'
+      - '(?:^|[;&|(`\n]|\$\(|\b(?:then|do|else)\b|\b(?:sudo|doas|nohup|time|exec|command|env|xargs)\b(?:\s+-\S+)*|-exec(?:dir)?|\b(?:ba|z|da|k)?sh\s+-\w*c\s+["\''])\s*rm\s+(?:\S+\s+)*?(?:-[A-Za-z]*[rR][A-Za-z]*|--recursive)\s+(?:\S+\s+)*?["\'']?(?:~|\$HOME|\$\{HOME\})(?:/\*?)?["\'']?(?=\s|$|[;&|)`])'
       - 'mkfs(\.| )'
       - '\bdd\s+if=.*of=/dev/'
       - ': ?\{\s*:.*\}\s*;'
@@ -115,7 +115,7 @@ policies:
       - '-----BEGIN (RSA |OPENSSH )?PRIVATE KEY-----'
       - '[0-9]{6}-[0-9]{7}'
       - 'ghp_[a-zA-Z0-9]{20,}'
-      - '(?:\.ssh|\.aws|\.gnupg|\.kube|\.netrc|\.git-credentials|id_rsa|id_ed25519)[^|;&]*\|\s*(?:curl|wget|nc|ncat|netcat|socat)\b'
+      - '\b(?:cat|tar|zip|7z|gzip|base64|xxd|openssl|cp|dd|head|tail|less|rsync)\b[^|;&]*(?:\.ssh|\.aws|\.gnupg|\.kube|\.netrc|\.git-credentials|id_rsa|id_ed25519)[^|;&]*\|\s*(?:curl|wget|nc|ncat|netcat|socat)\b'
     laya:
       choice: ["allow", "review", "block"]
       score_hint: "시크릿이 평문으로 노출/전송될 위험도"
