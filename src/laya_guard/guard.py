@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 import yaml
@@ -496,6 +497,8 @@ def judge_offline(tool_call: str, fail_closed: bool = False, cwd: str | None = N
     """
     if _oversized(tool_call):
         return _oversized_verdict(tool_call, mock=False)
+    # 오프라인 경로도 judge()와 같은 NFKC 정규화를 쓴다 (전각 우회가 오프라인에만 뚫리지 않게)
+    tool_call = unicodedata.normalize("NFKC", tool_call)
     ko = _is_korean(tool_call)
     hit = _regex_hit(tool_call)
     if hit is not None:
@@ -550,6 +553,9 @@ def judge(tool_call: str, source: str = "user", cwd: str | None = None) -> Verdi
 
 def _judge_one(tool_call: str, source: str, cwd: str | None = None) -> Verdict:
     _ensure()
+    # 유니코드 정규화(NFKC): 전각(ｒｍ)·호모글리프 우회를 정규식과 모델 모두에서 차단.
+    # 들어오는 문자열 전체에 한 번만 적용하고 이후 로직은 정규화된 텍스트를 쓴다.
+    tool_call = unicodedata.normalize("NFKC", tool_call)
     hit = _regex_hit(tool_call)
     regex_block = hit is not None and hit.action_on_regex == "block"
     safe = hit is None and _safe_command(tool_call)

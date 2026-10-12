@@ -24,6 +24,10 @@ All notable changes to this project are documented here. Versions follow
   `review`. Regexes were already applied to the whole text; inputs over 256K
   characters or with a line over 16K are still blocked unread.
 
+- Unicode homoglyph evasion: input is NFKC-normalized once in `judge()`, so
+  full-width variants (`ｒｍ -rf /`) now hit the regex layer instead of
+  reaching only the model.
+
 ### Added
 
 - `credential-read` policy (review): reading private keys or cloud credentials
@@ -33,6 +37,10 @@ All notable changes to this project are documented here. Versions follow
 
 ### Changed
 
+- Limitations now list `git commit` among the unjudged project code the
+  safe-command lane runs: it executes the repo's own `.git/hooks`, the same
+  class as `npm test` running project scripts (`build.rs` was already listed).
+
 - **Behavior change.** The Claude Code hook (`guard-hook.sh`) now asks you on `review`:
   it prints a `permissionDecision: "ask"` JSON (with the policy id and reason) and
   exits 0, so Claude Code shows a permission prompt. Before, `review` passed through
@@ -40,6 +48,14 @@ All notable changes to this project are documented here. Versions follow
   `allow` still passes silently. Set `LAYA_GUARD_REVIEW=pass` to restore the old
   behavior. Non-interactive runs (`claude -p`) have nobody to answer, so Claude Code
   denies the `ask` there; use `LAYA_GUARD_REVIEW=pass` for unattended runs.
+
+### Fixed
+
+- Regex `block` false positives (model never consulted, so they were instant
+  blocks): `DAN` in prompt-injection matched `dan`/`dandelion` substrings
+  (now `jailbreak|\bDAN mode\b`), and auth-bypass's `verify.*(off|disable|
+  false|skip)` matched benign prose like "verify the fallback is off"
+  (now only ssl/tls verify flags such as `http.sslVerify false`).
 
 ## [0.2.4] - 2026-10-12
 

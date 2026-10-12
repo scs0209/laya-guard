@@ -323,7 +323,8 @@ the same as one model call, so a 6-window input takes a few seconds.
   secret upload in `scripts.test` is caught, but a quieter script (`node -e …`,
   `node scripts/x.js`) passes. Code those commands run is not checked at all:
   test files, `conftest.py`, `build.rs`, `node_modules/.bin`, Makefile recipes
-  (expanding them with `make -n` would run `$(shell …)`), and `.npmrc`
+  (expanding them with `make -n` would run `$(shell …)`), `git commit` (it runs
+  the repo's own `.git/hooks`), and `.npmrc`
   `script-shell`. An edit to them is judged only when the agent writes it, and only
   by adapters that hook file edits. Trim `safe_commands` in `policy.yaml` if that
   matters to you.

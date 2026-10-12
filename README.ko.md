@@ -295,7 +295,8 @@ laya-guard stats   # 판정 분포, block/review율, 상위 정책, 지연시간
   시크릿 업로드는 잡히지만, 더 조용한 스크립트(`node -e …`, `node scripts/x.js`)는
   통과합니다. 이 명령들이 실행하는 코드는 전혀 검사하지 않습니다: 테스트 파일,
   `conftest.py`, `build.rs`, `node_modules/.bin`, Makefile 레시피(`make -n`으로 펼치면
-  `$(shell …)`이 실행됨), `.npmrc`의 `script-shell`. 이 파일들의 수정은 에이전트가 쓰는
+  `$(shell …)`이 실행됨), `git commit`(저장소 자체의 `.git/hooks` 실행), `.npmrc`의
+  `script-shell`. 이 파일들의 수정은 에이전트가 쓰는
   시점에만, 파일 수정을 훅으로 받는 어댑터에서만 심판됩니다. 신경 쓰인다면
   `policy.yaml`의 `safe_commands`를 줄이세요.
 - 스크립트 검사는 에이전트가 알려주는 `cwd`를 믿습니다. 에이전트의 셸이 이전 호출의
