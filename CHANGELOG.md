@@ -5,7 +5,23 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+### Security
+
+- `npm test` and other safe commands were allowed on the command string alone,
+  so an agent that first edited `scripts.test` in package.json (or a repo that
+  shipped with a bad one) could run anything. The package.json scripts that
+  `npm`/`pnpm`/`yarn`/`bun` script commands run (`pre`/`post` hooks, nested
+  `npm run`, `cd` in chains) are now checked against the regex policies; hits
+  block or review per policy. When it can't tell which scripts run (`--prefix`,
+  `--filter`, `-w`, `cd -`, deep nesting), the call goes to review. Not the
+  model: it blocks ordinary scripts (`next build`, `vite build`, `jest`).
+- `--script-shell`, `--node-options`, `--userconfig`, and `--globalconfig` no
+  longer qualify as safe-command flags.
+
 ### Added
+
+- `cwd` on `POST /guard` and `laya-guard check --cwd` (defaults to the current
+  directory). All 11 adapters send the directory the command runs in.
 
 - `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1), issue
   forms for missed attacks, overblocks, bugs, and feature requests, and a pull

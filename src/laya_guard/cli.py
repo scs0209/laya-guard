@@ -5,10 +5,12 @@ from .guard import judge, judge_offline, is_mock, warmup
 
 def cmd_check(args):
     text = " ".join(args.text) if args.text else sys.stdin.read()
+    cwd = os.path.abspath(args.cwd)
     if args.offline:
-        v = judge_offline(text, fail_closed=os.environ.get("LAYA_GUARD_FAIL") == "closed")
+        v = judge_offline(text, fail_closed=os.environ.get("LAYA_GUARD_FAIL") == "closed",
+                          cwd=cwd)
     else:
-        v = judge(text)
+        v = judge(text, cwd=cwd)
     if args.json:
         print(json.dumps(dataclasses.asdict(v), ensure_ascii=False))
         return 0 if v.action != "block" else 2
@@ -53,6 +55,9 @@ def main(argv=None):
                    help="regex + safe-command check only, no model (what hooks fall back to "
                         "when the server is down; LAYA_GUARD_FAIL=closed blocks unjudged calls)")
     c.add_argument("--json", action="store_true", help="print the verdict as JSON")
+    c.add_argument("--cwd", default=".",
+                   help="directory the command runs in; package.json scripts that `npm test` "
+                        "and the like run are checked from here (default: current directory)")
     c.set_defaults(fn=cmd_check)
     s = sub.add_parser("serve"); s.add_argument("--host", default="127.0.0.1"); s.add_argument("--port", type=int, default=8787)
     s.add_argument("--no-warmup", action="store_true", help="skip loading the model before listening"); s.set_defaults(fn=cmd_serve)

@@ -17,6 +17,7 @@ defaults:
 # ; && || & 로 이은 체인은 명령마다 따로 이 목록과 대조한다 (cd·true 같은 조각이 많아 포함).
 # 설치(npm/pip install)·원격(git push, npx)은 의도적으로 제외 — 모델이 심판한다.
 # test/build는 프로젝트 자체 스크립트를 실행한다는 점에 유의.
+# cwd가 주어지면 npm/pnpm/yarn/bun이 실행할 package.json 스크립트는 정규식 정책으로 검사한다.
 safe_commands:
   - 'ls( \S+)*'
   - 'pwd'

@@ -40,11 +40,30 @@ def extract_command(event: object) -> str:
     return str(event)
 
 
-def judge(text: str) -> dict | None:
+def extract_cwd(event: object) -> str:
+    # Where the command runs: the tool's own directory if given, else the event's cwd.
+    base = os.getcwd()
+    if not isinstance(event, dict):
+        return base
+    roots = event.get("workspace_roots") or event.get("workspaceRoots")
+    for val in (event.get("cwd"), roots[0] if isinstance(roots, list) and roots else None):
+        if isinstance(val, str) and os.path.isabs(val):
+            base = val
+            break
+    for args in (event.get("tool_input"), event.get("tool_info")):
+        if isinstance(args, dict):
+            for key in ("cwd", "workdir", "directory"):
+                val = args.get(key)
+                if isinstance(val, str) and val:
+                    return os.path.normpath(os.path.join(base, os.path.expanduser(val)))
+    return base
+
+
+def judge(text: str, cwd: str) -> dict | None:
     try:
         req = urllib.request.Request(
             GUARD_URL,
-            data=json.dumps({"tool_call": text, "source": "tool"}).encode(),
+            data=json.dumps({"tool_call": text, "source": "tool", "cwd": cwd}).encode(),
             headers={"Content-Type": "application/json"},
         )
         with urllib.request.urlopen(req, timeout=10) as r:
@@ -53,10 +72,10 @@ def judge(text: str) -> dict | None:
         return None
 
 
-def judge_offline(text: str) -> dict:
+def judge_offline(text: str, cwd: str) -> dict:
     # Server down or too slow: regex + safe-command check without the model.
     try:
-        r = subprocess.run([GUARD_BIN, "check", "--offline", "--json"], input=text,
+        r = subprocess.run([GUARD_BIN, "check", "--offline", "--json", "--cwd", cwd], input=text,
                            capture_output=True, text=True, timeout=10)
         verdict = json.loads(r.stdout)
     except Exception:
@@ -73,9 +92,10 @@ def main() -> int:
     except Exception:
         return 0  # unreadable input -> fail open
     text = extract_command(event)
-    verdict = judge(text)
+    cwd = extract_cwd(event)
+    verdict = judge(text, cwd)
     if verdict is None:
-        verdict = judge_offline(text)
+        verdict = judge_offline(text, cwd)
     if verdict.get("action") == "block":
         print(json.dumps({
             "hookSpecificOutput": {

@@ -1,5 +1,6 @@
 """laya-guard core: regex prefilter + Laya judge (local, free)."""
 from __future__ import annotations
+import json
 import logging
 import os
 import re
@@ -99,7 +100,8 @@ def _regex_hit(text: str) -> Policy | None:
 # 임의 프로그램 실행/파일 쓰기 플래그 금지 (go test -exec, git log --output 등).
 _SHELL_META = re.compile(r"[;&|`$<>(){}\\\n\r]")
 _RISKY_FLAG = re.compile(
-    r"(?:^|\s)--?(?:exec|toolexec|config|output|upload-pack|receive-pack)(?:[=\s]|$)")
+    r"(?:^|\s)--?(?:exec|toolexec|config|output|upload-pack|receive-pack"
+    r"|script-shell|node-options|userconfig|globalconfig)(?:[=\s]|$)")
 _SENSITIVE_PATH = re.compile(
     r"\.ssh|\.aws|\.gnupg|\.kube|\.netrc|\.npmrc|\.pypirc|\.env\b|\.git-credentials"
     r"|id_rsa|id_ed25519|credentials|/etc/(shadow|sudoers)", re.IGNORECASE)
@@ -299,11 +301,149 @@ def _oversized_verdict(text: str, mock: bool) -> Verdict:
     return Verdict(action="block", risk=1.0, policy_id="oversized", reason=reason,
                    mock=mock, verdict_source="limit")
 
-def judge_offline(tool_call: str, fail_closed: bool = False) -> Verdict:
+# 패키지 스크립트 검사: `npm test`는 안전 명령이지만 실제로는 package.json의
+# scripts.test를 실행한다. 그 스크립트를 정규식 정책으로 검사한다.
+# 모델은 쓰지 않는다: next build, vite build, jest 같은 평범한 스크립트를 block한다.
+_RUNNER = re.compile(r"(npm|pnpm|yarn|bun) (?:run (\S+)|(test|build|lint))((?: \S+)*)")
+# 다른 디렉터리의 package.json을 쓰게 하는 플래그: 어떤 스크립트가 도는지 알 수 없다.
+_LOCATION_FLAG = re.compile(
+    r"--(?:prefix|dir|cwd|workspaces?|filter|recursive|global)(?:=.*)?|-(?:C|w|F)\S*|-(?:r|g|ws)")
+_LOST_CWD = "<unknown cwd>"  # 체인 중간에 cd -, pushd 등으로 위치를 놓친 경우
+# 악성 package.json이 검사 시간을 늘려 훅 타임아웃(→ fail open)을 노리지 못하게
+# 스크립트는 한 번씩만, 길이·크기 상한 안에서만 검사한다.
+MAX_SCRIPT_DEPTH = 3
+MAX_SCRIPT_CHARS = 4_000
+MAX_PACKAGE_JSON_BYTES = 256_000
+
+@dataclass
+class _ScriptFinding:
+    key: str                        # 문제가 된 스크립트 (test, pretest …)
+    hit: Policy | None = None       # 스크립트 본문이 걸린 정규식 정책
+    unresolved: str | None = None   # 무엇이 실행될지 알 수 없는 이유 (en)
+
+    def rank(self) -> int:
+        if self.hit is not None and self.hit.action_on_regex == "block":
+            return 2
+        return 1
+
+def _runner_script(cmd: str) -> tuple[str, list[str]] | None:
+    """(script name, args) for a package-manager script command, else None."""
+    m = _RUNNER.fullmatch(cmd)
+    if m is None:
+        return None
+    tool, name = m[1], m[2] or m[3]
+    if tool == "bun" and m[3] in ("test", "build"):
+        return None  # bun 자체 테스트 러너·번들러: package.json 스크립트가 아니다
+    return name, m[4].split()
+
+def _next_cwd(segment: str, cwd: str | None) -> str | None:
+    """Directory the next command in a chain runs in, after `segment` ran in `cwd`."""
+    if cwd is None or cwd == _LOST_CWD:
+        return cwd
+    words = segment.split()
+    while words and re.match(r"[A-Za-z_]\w*=", words[0]):
+        words.pop(0)
+    if not words:
+        return cwd
+    if words[0] == "cd":
+        if len(words) == 1:
+            return str(Path.home())
+        if len(words) == 2 and not words[1].startswith("-"):
+            return os.path.normpath(os.path.join(cwd, os.path.expanduser(words[1])))
+        return _LOST_CWD
+    if words[0] in ("pushd", "popd", "source", ".", "eval", "exec", "builtin", "command"):
+        return _LOST_CWD
+    return cwd
+
+def _package_scripts(cwd: str) -> tuple[str, dict[str, str]] | None:
+    """(package dir, scripts) of the nearest package.json at or above cwd.
+
+    None if it can't be read safely; an empty dict if there is no package.json
+    (the package manager fails, nothing runs).
+    """
+    start = Path(cwd).expanduser()
+    for d in (start, *start.parents):
+        f = d / "package.json"
+        if not f.is_file():
+            continue
+        try:
+            if f.stat().st_size > MAX_PACKAGE_JSON_BYTES:
+                return None
+            data = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError):
+            return None
+        except ValueError:
+            return str(d), {}  # 깨진 JSON이면 패키지 매니저가 실패한다
+        scripts = data.get("scripts") if isinstance(data, dict) else None
+        if not isinstance(scripts, dict):
+            return str(d), {}
+        return str(d), {k: v for k, v in scripts.items()
+                        if isinstance(k, str) and isinstance(v, str)}
+    return str(start), {}
+
+def _check_scripts(cmd: str, cwd: str, depth: int = 0,
+                   seen: set[tuple[str, str]] | None = None) -> _ScriptFinding | None:
+    """Regex-check the package.json scripts a safe command runs.
+
+    None if cmd isn't a script runner or its scripts are clean.
+    """
+    seen = set() if seen is None else seen
+    runner = _runner_script(cmd)
+    if runner is None:
+        return None
+    name, args = runner
+    flags = args[:args.index("--")] if "--" in args else args
+    if cwd == _LOST_CWD:
+        return _ScriptFinding(name, unresolved="can't tell which directory it runs in")
+    if name.startswith("-") or any(_LOCATION_FLAG.fullmatch(a) for a in flags):
+        return _ScriptFinding(name, unresolved="runs scripts from another package")
+    if depth >= MAX_SCRIPT_DEPTH:
+        return _ScriptFinding(name, unresolved="scripts nest too deep")
+    found = _package_scripts(cwd)
+    if found is None:
+        return _ScriptFinding(name, unresolved="package.json can't be read")
+    pkg_dir, scripts = found
+    worst = None
+    for key in (f"pre{name}", name, f"post{name}"):
+        body = scripts.get(key)
+        if not body or (pkg_dir, key) in seen:
+            continue
+        seen.add((pkg_dir, key))
+        finding = _scan_script(key, body, pkg_dir, depth, seen)
+        if finding is not None and (worst is None or finding.rank() > worst.rank()):
+            worst = finding
+    return worst
+
+def _scan_script(key: str, body: str, pkg_dir: str, depth: int,
+                 seen: set[tuple[str, str]]) -> _ScriptFinding | None:
+    if len(body) > MAX_SCRIPT_CHARS:
+        return _ScriptFinding(key, unresolved="script too long to check")
+    hit = _regex_hit(body)
+    worst = _ScriptFinding(key, hit=hit) if hit is not None else None
+    if worst is not None and worst.rank() == 2:
+        return worst
+    # 스크립트 안의 `npm run build` 같은 중첩 실행도 따라간다
+    seg_cwd: str | None = pkg_dir
+    for seg in _split_chain(body):
+        nested = _check_scripts(" ".join(seg.split()), seg_cwd, depth + 1, seen)
+        if nested is not None and (worst is None or nested.rank() > worst.rank()):
+            worst = _ScriptFinding(f"{key} → {nested.key}", nested.hit, nested.unresolved)
+        seg_cwd = _next_cwd(seg, seg_cwd)
+    return worst
+
+def _script_reason(f: _ScriptFinding, ko: bool) -> str:
+    if f.hit is not None:
+        msg = f.hit.message if (ko and f.hit.message) else (f.hit.message_en or f.hit.message)
+    else:
+        msg = f.unresolved or ""
+    return f"package.json scripts.{f.key}: {msg}"
+
+def judge_offline(tool_call: str, fail_closed: bool = False, cwd: str | None = None) -> Verdict:
     """Regex + safe-command check without the model, for hooks whose server is down.
 
     Regex-flagged calls are blocked and safe commands allowed. Anything else
     can't be judged without the model: allowed, or blocked with fail_closed.
+    With cwd, the package.json scripts a safe command runs are checked too.
     """
     if _oversized(tool_call):
         return _oversized_verdict(tool_call, mock=False)
@@ -313,7 +453,20 @@ def judge_offline(tool_call: str, fail_closed: bool = False) -> Verdict:
         reason = hit.message if (ko and hit.message) else (hit.message_en or hit.message)
         return Verdict(action="block", risk=0.92, policy_id=hit.id, reason=reason,
                        verdict_source="offline")
-    if all(_safe_command(seg) for seg in _split_chain(tool_call)):
+    judged = True
+    seg_cwd = cwd
+    for seg in _split_chain(tool_call):
+        if not _safe_command(seg):
+            judged = False
+        elif seg_cwd is not None:
+            finding = _check_scripts(" ".join(seg.split()), seg_cwd)
+            if finding is not None and finding.hit is not None:
+                return Verdict(action="block", risk=0.92, policy_id=finding.hit.id,
+                               reason=_script_reason(finding, ko), verdict_source="offline")
+            if finding is not None:
+                judged = False
+        seg_cwd = _next_cwd(seg, seg_cwd)
+    if judged:
         reason = "안전 명령 목록 (서버 오프라인)" if ko else "Safe command list (server offline)"
         return Verdict(action="allow", risk=0.05, policy_id="general", reason=reason,
                        verdict_source="offline")
@@ -326,26 +479,42 @@ def judge_offline(tool_call: str, fail_closed: bool = False) -> Verdict:
     return Verdict(action=action, risk=0.5, policy_id="offline", reason=reason,
                    verdict_source="offline")
 
-def judge(tool_call: str, source: str = "user") -> Verdict:
+def judge(tool_call: str, source: str = "user", cwd: str | None = None) -> Verdict:
+    """Judge one tool call. With cwd (the directory it runs in), safe commands
+    that run package.json scripts have those scripts checked too."""
     if _oversized(tool_call):
         return _oversized_verdict(tool_call, mock=is_mock())
     segments = _split_chain(tool_call)
     if len(segments) == 1:
-        return _judge_one(tool_call, source)
+        return _judge_one(tool_call, source, cwd)
     # 체인은 명령마다 따로 심판해 가장 나쁜 결과를 쓴다.
     # 명령 경계를 넘는 패턴(curl …; … | sh)은 전체 문자열 정규식이 잡는다.
-    verdicts = [_judge_one(seg, source) for seg in segments]
+    verdicts = []
+    seg_cwd = cwd
+    for seg in segments:
+        verdicts.append(_judge_one(seg, source, seg_cwd))
+        seg_cwd = _next_cwd(seg, seg_cwd)
     hit = _regex_hit(tool_call)
     if hit is not None and all(v.policy_id != hit.id for v in verdicts):
         verdicts.append(_judge_one(tool_call, source))
     return max(verdicts, key=lambda v: (_ACTION_RANK[v.action], v.risk))
 
-def _judge_one(tool_call: str, source: str) -> Verdict:
+def _judge_one(tool_call: str, source: str, cwd: str | None = None) -> Verdict:
     _ensure()
     hit = _regex_hit(tool_call)
     regex_block = hit is not None and hit.action_on_regex == "block"
     safe = hit is None and _safe_command(tool_call)
     mock = is_mock()
+    if safe and cwd is not None:
+        finding = _check_scripts(" ".join(tool_call.split()), cwd)
+        if finding is not None:
+            # 정규식 결과만 쓰므로 위험도는 정책 단락과 같은 고정값 (review는 출처 보정에도 review 유지)
+            blocked = finding.rank() == 2
+            return Verdict(
+                action="block" if blocked else "review", risk=0.92 if blocked else 0.55,
+                policy_id=finding.hit.id if finding.hit is not None else "package-scripts",
+                reason=_script_reason(finding, _is_korean(tool_call)), mock=mock,
+                verdict_source="regex" if finding.hit is not None else "allowlist")
     model_ok = True
     if safe:
         action, risk = "allow", 0.05

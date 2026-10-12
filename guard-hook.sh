@@ -7,11 +7,13 @@ url="${LAYA_GUARD_URL:-http://localhost:8787/guard}"
 input=$(cat)
 # Bash는 실제 실행될 command만 심판 (description은 실행되지 않음). 그 외 도구는 이름+입력값 평탄화.
 tool=$(echo "$input" | python3 -c "import json,sys; d=json.load(sys.stdin); a=d.get('tool_input',{}); c=a.get('command') if isinstance(a,dict) else None; flat=' '.join([str(v) for v in (a.values() if isinstance(a,dict) else [a])]); print(c if isinstance(c,str) and c else d.get('tool_name','')+': '+flat)")
-payload=$(python3 -c 'import json,sys; print(json.dumps({"tool_call": sys.stdin.read().strip()}))' <<< "$tool")
+# 명령이 실행될 디렉터리: npm test 등이 돌릴 package.json 스크립트를 여기서 찾는다.
+cwd=$(echo "$input" | python3 -c "import json,os,sys; c=json.load(sys.stdin).get('cwd'); print(c if isinstance(c,str) and os.path.isabs(c) else os.getcwd())" 2>/dev/null || pwd)
+payload=$(CWD="$cwd" python3 -c 'import json,os,sys; print(json.dumps({"tool_call": sys.stdin.read().strip(), "cwd": os.environ["CWD"]}))' <<< "$tool")
 offline=0
 if ! res=$(printf '%s' "$payload" | curl -sf -m 10 -X POST "$url" -H 'Content-Type: application/json' --data-binary @-); then
   offline=1
-  res=$(printf '%s' "$tool" | "${LAYA_GUARD_BIN:-laya-guard}" check --offline --json 2>/dev/null)
+  res=$(printf '%s' "$tool" | "${LAYA_GUARD_BIN:-laya-guard}" check --offline --json --cwd "$cwd" 2>/dev/null)
 fi
 action=$(printf '%s' "$res" | python3 -c "import json,sys; print(json.load(sys.stdin).get('action','allow'))" 2>/dev/null)
 if [ -z "$action" ]; then

@@ -13,6 +13,7 @@
 // LAYA_GUARD_FAIL=closed). Override the CLI path with LAYA_GUARD_BIN.
 
 import { spawnSync } from "node:child_process";
+import { resolve } from "node:path";
 
 type Verdict = { action: string; risk: number; policy_id: string; reason: string };
 
@@ -20,14 +21,14 @@ const GUARD_URL = process.env.LAYA_GUARD_URL ?? "http://localhost:8787/guard";
 const GUARD_BIN = process.env.LAYA_GUARD_BIN ?? "laya-guard";
 const FAIL_CLOSED = process.env.LAYA_GUARD_FAIL === "closed";
 
-async function judge(text: string): Promise<Verdict | null> {
+async function judge(text: string, cwd: string): Promise<Verdict | null> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 10000);
   try {
     const res = await fetch(GUARD_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tool_call: text, source: "tool" }),
+      body: JSON.stringify({ tool_call: text, source: "tool", cwd }),
       signal: ctrl.signal,
     });
     if (!res.ok) return null;
@@ -40,10 +41,10 @@ async function judge(text: string): Promise<Verdict | null> {
 }
 
 // Server down or too slow: regex + safe-command check without the model.
-function judgeOffline(text: string): Verdict {
+function judgeOffline(text: string, cwd: string): Verdict {
   let v: Verdict | null = null;
   try {
-    const r = spawnSync(GUARD_BIN, ["check", "--offline", "--json"], { input: text, encoding: "utf8", timeout: 10000 });
+    const r = spawnSync(GUARD_BIN, ["check", "--offline", "--json", "--cwd", cwd], { input: text, encoding: "utf8", timeout: 10000 });
     if (r.stdout) v = JSON.parse(r.stdout) as Verdict;
   } catch {
     v = null;
@@ -53,10 +54,12 @@ function judgeOffline(text: string): Verdict {
   return v;
 }
 
-export const LayaGuard = async () => ({
+export const LayaGuard = async ({ directory }: { directory?: string } = {}) => ({
   "tool.execute.before": async (input: { tool: string }, output: { args: Record<string, unknown> }) => {
     const text = `${input.tool}(${JSON.stringify(output.args)})`;
-    const v = (await judge(text)) ?? judgeOffline(text);
+    const workdir = typeof output.args["workdir"] === "string" ? (output.args["workdir"] as string) : ".";
+    const cwd = resolve(directory ?? process.cwd(), workdir);
+    const v = (await judge(text, cwd)) ?? judgeOffline(text, cwd);
     if (v.action === "block") {
       throw new Error(`laya-guard blocked ${input.tool} [${v.policy_id} risk=${v.risk}]: ${v.reason}`);
     }

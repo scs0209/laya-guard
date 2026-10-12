@@ -71,7 +71,8 @@ agent tool_call
   → policy.yaml: 11 policies as regex prefilters (a block policy outranks a review one)
       · match + action_on_regex=block  → instant block (risk 0.92, model not consulted)
       · match + action_on_regex=review → model judges, floor is review (risk ≥ 0.55)
-      · no match + safe command        → instant allow (one plain command: ls, git status, npm test…)
+      · no match + safe command        → instant allow (one plain command: ls, git status, npm test…;
+                                         the package.json scripts `npm test` & co. run are regex-checked first)
       · no match                       → model judges freely
   → Laya: choice (allow/review/block) + score (risk) + noul (maliciousness)
   → thresholds: block ≥ 0.8, review ≥ 0.45 (stricter for tool/email/web sources: 0.6/0.30)
@@ -85,6 +86,18 @@ only opens for a single command with no shell metacharacters (`; & | $ < > ( )` 
 no program-running/file-writing flags (`-exec`, `--config`, `--output`…), and no
 sensitive paths (`.ssh`, `.aws`, `.env`…). Installs, `git push`, and `npx` always
 go to the model.
+
+`npm test` is a safe command, but what it actually runs is `scripts.test` in
+package.json, which an agent (or an injection it read) can edit first. So when
+the adapter sends the command's directory (`cwd`, all 11 do), the guard reads the
+nearest package.json and checks `pre<name>`, `<name>`, and `post<name>` for
+`npm`/`pnpm`/`yarn` `test`/`build`/`lint`/`run <name>` (`bun run <name>` and
+`bun lint`; `bun test`/`bun build` are bun's own tools). Nested `npm run` calls and
+`cd` inside chains are followed. Scripts are checked against the regex policies
+only, not the model: the model blocks ordinary scripts like `next build`, `vite
+build`, and `jest`. A hit blocks or reviews per its policy (`package.json
+scripts.test: …` in the reason). If it can't tell which scripts run (`--prefix`,
+`--filter`, `-w`, a lost `cd -`, nesting deeper than 3), the call goes to review.
 
 Chains are split only at top-level `;`, `&&`, `||`, and `&` (never inside quotes,
 `$(…)`, or parentheses), so `cd app && npm test` is two safe commands while
@@ -240,8 +253,9 @@ All patterns live in [policy.yaml](src/laya_guard/policy.yaml) — edit, add you
 ## API
 
 - `GET /health` → `{"ok": true, "mock": false}`
-- `POST /guard` `{tool_call, source?}` → `{action, risk, policy_id, reason, mock, verdict_source}`
+- `POST /guard` `{tool_call, source?, cwd?}` → `{action, risk, policy_id, reason, mock, verdict_source}`
   (`source`: `user` | `tool` | `email` | `web`; non-user sources get stricter thresholds.
+  `cwd`: absolute directory the command runs in; enables package.json script checks.
   `reason` is Korean when the input contains Hangul, English otherwise.
   `verdict_source`: `regex` (prefilter block, model skipped) |
   `allowlist` (safe command, model skipped) | `model` |
@@ -272,6 +286,7 @@ no model) instead:
 | Call | Offline verdict |
 |---|---|
 | matches any regex policy (block or review level) | block |
+| package.json script of a safe command matches a regex policy | block |
 | safe command, or a chain of only safe commands | allow |
 | anything else | allow with a stderr warning; block with `LAYA_GUARD_FAIL=closed` |
 
@@ -291,8 +306,18 @@ read: some regexes are quadratic in line length, and a 200KB line used to take
   marked `verdict_source: "heuristic"` and a warning is logged — check it if you
   rely on model judgments.
 - The safe-command lane allows `npm test`, `make test`, `go test`, etc. without the
-  model — those run your project's own scripts, so a malicious repo's test script
-  is not judged. Trim `safe_commands` in `policy.yaml` if that matters to you.
+  model. package.json scripts are regex-checked (see above), so `curl … | sh` or a
+  secret upload in `scripts.test` is caught, but a quieter script (`node -e …`,
+  `node scripts/x.js`) passes. Code those commands run is not checked at all:
+  test files, `conftest.py`, `build.rs`, `node_modules/.bin`, Makefile recipes
+  (expanding them with `make -n` would run `$(shell …)`), and `.npmrc`
+  `script-shell`. An edit to them is judged only when the agent writes it, and only
+  by adapters that hook file edits. Trim `safe_commands` in `policy.yaml` if that
+  matters to you.
+- Script checks trust the `cwd` the agent reports. If an agent's shell keeps a
+  `cd` from an earlier call but reports the project root, the wrong package.json
+  is read. Five adapters (Cline, Gemini, Qwen, Kilo, Amp) send the tool call as
+  JSON, so it never qualifies as a safe command and goes to the model instead.
 - Chain commands are judged one by one, so the model doesn't see that `cd /etc`
   came before `cat shadow`. Sensitive-path checks and whole-string regexes cover
   the common cases, not all of them.

@@ -1,5 +1,6 @@
 """laya-guard HTTP server. POST /guard + Jev-compatible POST /v1/systemone."""
 from __future__ import annotations
+import os
 import time
 from fastapi import FastAPI
 from pydantic import BaseModel
@@ -9,9 +10,9 @@ from .log import log_verdict
 app = FastAPI(title="laya-guard")
 
 
-def _judge_and_log(text: str, source: str):
+def _judge_and_log(text: str, source: str, cwd: str | None = None):
     t0 = time.perf_counter()
-    v = judge(text, source=source)
+    v = judge(text, source=source, cwd=cwd)
     log_verdict(
         action=v.action, risk=v.risk, policy_id=v.policy_id, reason=v.reason,
         mock=v.mock, source=source,
@@ -23,6 +24,7 @@ class GuardReq(BaseModel):
     tool_call: str = ""
     state: str = ""
     source: str = "user"  # user | tool | email | web
+    cwd: str | None = None  # absolute directory the command runs in (enables package script checks)
 
 class GuardRes(BaseModel):
     action: str
@@ -39,7 +41,8 @@ def health():
 @app.post("/guard", response_model=GuardRes)
 def guard(req: GuardReq):
     text = req.tool_call or req.state
-    v = _judge_and_log(text, source=req.source)
+    cwd = req.cwd if req.cwd and os.path.isabs(req.cwd) else None
+    v = _judge_and_log(text, source=req.source, cwd=cwd)
     return GuardRes(action=v.action, risk=v.risk, policy_id=v.policy_id, reason=v.reason,
                     mock=v.mock, verdict_source=v.verdict_source)
 
