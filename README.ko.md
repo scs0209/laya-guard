@@ -64,7 +64,7 @@ curl -X POST localhost:8787/guard -H 'Content-Type: application/json' \
   → guard-hook.sh (Claude Code PreToolUse 훅; block이면 exit 2로 실행 취소)
   → POST /guard (localhost:8787)
   → 체인(`a && b`, `a; b`, `a || b`)은 명령별로 나눠 아래 단계를 거치고, 가장 나쁜 판정을 씀
-  → policy.yaml: 정규식 프리필터 11종 (block 정책이 review 정책보다 우선)
+  → policy.yaml: 정규식 프리필터 12종 (block 정책이 review 정책보다 우선)
       · 매칭 + action_on_regex=block  → 즉시 차단 (risk 0.92, 모델 미호출)
       · 매칭 + action_on_regex=review → 모델 심판, 하한은 review (risk ≥ 0.55)
       · 미매칭 + 안전 명령            → 즉시 허용 (단일 일반 명령: ls, git status, npm test…;
@@ -218,21 +218,22 @@ laya-guard stats   # 판정 분포, block/review율, 상위 정책, 지연시간
 이 표의 어떤 도구도 제3자 검증 AgentDojo 점수는 없습니다. 우리 수치도 자체 측정·심판
 레벨입니다 ([한계](#한계) 참조).
 
-## 정책 (11종)
+## 정책 (12종)
 
 | id | 잡는 것 | 정규식 적중 시 |
 |---|---|---|
-| `destructive-fs` | `rm -rf /`, `mkfs`, 디바이스 `dd`, 포크밤 | block |
+| `destructive-fs` | `rm -rf /`, `rm -rf ~`/`$HOME` (플래그 순서 무관: `-fr`, `-r -f`, `--recursive --force`), `mkfs`, 디바이스 `dd`, 포크밤 | block |
 | `pipe-to-shell` | `curl … \| sh`, `wget … \| sudo bash`, `bash -c "$(curl …)"`, `bash <(curl …)` | block |
 | `exfiltration` | 터널, `nc`로 파이프, `curl -d @파일` 업로드 | review |
 | `prompt-injection` | 이전 지시 무시, 탈옥, 한영 | block |
-| `secrets-leak` | API 키, 개인키, 토큰 | block |
+| `secrets-leak` | API 키, 개인키, 토큰, 키 파일(`~/.ssh`, `~/.aws` 등)을 `curl`/`wget`/`nc`로 파이프 | block |
 | `payment-action` | 결제/환불/청구, 한영 | review |
 | `remote-exec` | 수상한 패키지 인덱스, 원격 스크립트, 로컬 내용을 셸로 파이프, 인코딩된 PS | review |
 | `priv-escalation` | `sudo sh`, `chmod 777`, setuid, `/etc/`로 리다이렉트 | review |
 | `persistence` | cron, 서비스 등록, 셸rc 후킹, git `core.hooksPath`/`core.pager` | review |
-| `mass-delete` | `DROP TABLE`, `s3 rm --recursive`, `kubectl delete --all`, `git push --force` | review |
+| `mass-delete` | `DROP TABLE`, `s3 rm --recursive`, `kubectl delete --all`, `git push --force`, `git reset --hard`, `git clean -f`, `git checkout -- .` | review |
 | `auth-bypass` | 인증/TLS 무력화, 비밀번호 초기화, 한영 | block |
+| `credential-read` | 개인키·클라우드 자격 증명 읽기(`cat ~/.ssh/id_rsa`, `cat ~/.aws/credentials` 등) | review |
 
 패턴은 전부 [policy.yaml](src/laya_guard/policy.yaml)에 있습니다. 코드 수정 없이 추가·수정 가능.
 

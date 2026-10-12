@@ -5,6 +5,23 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+### Security
+
+- `destructive-fs` only matched `rm -rf /` / `rm -r /` in that exact flag order, so
+  `rm -fr /`, `rm -r -f /` and `rm --recursive --force /` slipped past the regex
+  floor (and past `check --offline`). It now matches any recursive-flag spelling
+  and order, and also `rm -rf ~`, `rm -rf $HOME`, `rm -fr ~/*`.
+- `secrets-leak` now blocks key material (`~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.kube`,
+  `.netrc`, `.git-credentials`, `id_rsa`, `id_ed25519`) piped into `curl`, `wget`,
+  `nc`, `ncat`, `netcat` or `socat`, e.g. `tar czf - ~/.ssh | curl -T - URL`.
+
+### Added
+
+- `credential-read` policy (review): reading private keys or cloud credentials
+  with `cat`/`head`/`tail`/`base64`/`cp` (`cat ~/.aws/credentials`, …).
+- `mass-delete` also flags work-losing git commands: `git reset --hard`,
+  `git clean -f…`, `git checkout -- .` (review).
+
 ## [0.2.4] - 2026-10-12
 
 ### Security

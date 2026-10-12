@@ -1,4 +1,4 @@
-# laya-guard 위험 정책 11개
+# laya-guard 위험 정책 12개
 # 각 정책: 정규식 프리필터(빠른 차단) + Laya 심판 질문 매핑
 # 여러 정책이 걸리면 block 정책이 review 정책보다 우선한다.
 # Laya는 choice(허용/검토/차단) + score(위험도) + noul(악의여부)만 뱉는다. 생성 없음.
@@ -46,7 +46,8 @@ policies:
   - id: destructive-fs
     title: "파괴적 파일시스템 명령"
     patterns:
-      - 'rm\s+-rf?\s+/(?=\s|$|"|''|}|\\|\*)'
+      - '\brm\s+(?:\S+\s+)*?(?:-[A-Za-z]*[rR][A-Za-z]*|--recursive)\s+(?:\S+\s+)*?["'']?/(?=\s|$|"|''|}|\\|\*)'
+      - '\brm\s+(?:\S+\s+)*?(?:-[A-Za-z]*[rR][A-Za-z]*|--recursive)\s+(?:\S+\s+)*?["'']?(?:~|\$HOME|\$\{HOME\})(?:/\*?)?["'']?(?=\s|$|[;&|)])'
       - 'mkfs(\.| )'
       - '\bdd\s+if=.*of=/dev/'
       - ': ?\{\s*:.*\}\s*;'
@@ -114,6 +115,7 @@ policies:
       - '-----BEGIN (RSA |OPENSSH )?PRIVATE KEY-----'
       - '[0-9]{6}-[0-9]{7}'
       - 'ghp_[a-zA-Z0-9]{20,}'
+      - '(?:\.ssh|\.aws|\.gnupg|\.kube|\.netrc|\.git-credentials|id_rsa|id_ed25519)[^|;&]*\|\s*(?:curl|wget|nc|ncat|netcat|socat)\b'
     laya:
       choice: ["allow", "review", "block"]
       score_hint: "시크릿이 평문으로 노출/전송될 위험도"
@@ -190,6 +192,9 @@ policies:
       - 's3 rm.*--recursive'
       - 'kubectl delete.*--all'
       - 'git push\s.*(--force|\s-f\b)'
+      - '\bgit\s+reset\s+(?:\S+\s+)*--hard\b'
+      - '\bgit\s+clean\s+(?:\S+\s+)*-[A-Za-z]*f'
+      - '\bgit\s+checkout\s+(?:\S+\s+)*--\s+\.(?:\s|$)'
     laya:
       choice: ["allow", "review", "block"]
       score_hint: "되돌릴 수 없는 대량 삭제 위험도"
@@ -214,3 +219,15 @@ policies:
     action_on_regex: block
     message: "인증 우회 — 즉시 차단"
     message_en: "Auth bypass — blocked immediately"
+
+  - id: credential-read
+    title: "자격 증명 파일 읽기"
+    patterns:
+      - '\b(?:cat|less|more|head|tail|bat|strings|xxd|base64|cp)\b[^|;&]*(?:\.ssh/id_\w+|\.aws/credentials|\.gnupg/|\.kube/config|\.netrc|\.git-credentials)'
+    laya:
+      choice: ["allow", "review", "block"]
+      choice_hint: "개인키·클라우드 자격 증명을 읽으면 review"
+      score_hint: "자격 증명이 에이전트 컨텍스트로 들어올 위험도"
+    action_on_regex: review
+    message: "자격 증명 파일 읽기 — 필요한 작업인지 확인"
+    message_en: "Credential file read — confirm it is needed"

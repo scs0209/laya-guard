@@ -68,7 +68,7 @@ agent tool_call
   → POST /guard (localhost:8787)
   → chains (`a && b`, `a; b`, `a || b`) are split and each command judged below;
     the worst verdict wins
-  → policy.yaml: 11 policies as regex prefilters (a block policy outranks a review one)
+  → policy.yaml: 12 policies as regex prefilters (a block policy outranks a review one)
       · match + action_on_regex=block  → instant block (risk 0.92, model not consulted)
       · match + action_on_regex=review → model judges, floor is review (risk ≥ 0.55)
       · no match + safe command        → instant allow (one plain command: ls, git status, npm test…;
@@ -232,21 +232,22 @@ Most guardrails scan **prompt text**. laya-guard sits one step later: it judges 
 No verified third-party AgentDojo score exists for any tool in this table —
 ours is self-reported and judge-level (see [Limitations](#limitations)).
 
-## Policies (11)
+## Policies (12)
 
 | id | What it catches | Regex hit ⇒ |
 |---|---|---|
-| `destructive-fs` | `rm -rf /`, `mkfs`, `dd` to devices, fork bombs | block |
+| `destructive-fs` | `rm -rf /` and `rm -rf ~`/`$HOME` in any flag order (`-fr`, `-r -f`, `--recursive --force`), `mkfs`, `dd` to devices, fork bombs | block |
 | `pipe-to-shell` | `curl … \| sh`, `wget … \| sudo bash`, `bash -c "$(curl …)"`, `bash <(curl …)` | block |
 | `exfiltration` | tunnels, pipes into `nc`, `curl -d @file` uploads | review |
 | `prompt-injection` | ignore-previous-instructions, jailbreaks, KR+EN | block |
-| `secrets-leak` | API keys, private keys, tokens | block |
+| `secrets-leak` | API keys, private keys, tokens, key files (`~/.ssh`, `~/.aws`, …) piped into `curl`/`wget`/`nc` | block |
 | `payment-action` | payments/refunds/charges, KR+EN | review |
 | `remote-exec` | sketchy package indexes, remote scripts, local pipes into a shell, encoded PS | review |
 | `priv-escalation` | `sudo sh`, `chmod 777`, setuid, redirects into `/etc/` | review |
 | `persistence` | cron, services, shell-rc hooks, git `core.hooksPath`/`core.pager` | review |
-| `mass-delete` | `DROP TABLE`, `s3 rm --recursive`, `kubectl delete --all`, `git push --force` | review |
+| `mass-delete` | `DROP TABLE`, `s3 rm --recursive`, `kubectl delete --all`, `git push --force`, `git reset --hard`, `git clean -f`, `git checkout -- .` | review |
 | `auth-bypass` | auth/TLS disabling, password resets, KR+EN | block |
+| `credential-read` | reading private keys / cloud credentials (`cat ~/.ssh/id_rsa`, `cat ~/.aws/credentials`, …) | review |
 
 All patterns live in [policy.yaml](src/laya_guard/policy.yaml) — edit, add your own, no code changes needed.
 
