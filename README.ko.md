@@ -61,7 +61,7 @@ curl -X POST localhost:8787/guard -H 'Content-Type: application/json' \
 
 ```
 에이전트 tool_call
-  → guard-hook.sh (Claude Code PreToolUse 훅; block이면 exit 2로 실행 취소)
+  → guard-hook.sh (Claude Code PreToolUse 훅; block이면 exit 2로 실행 취소, review면 권한 프롬프트)
   → POST /guard (localhost:8787)
   → 체인(`a && b`, `a; b`, `a || b`)은 명령별로 나눠 아래 단계를 거치고, 가장 나쁜 판정을 씀
   → policy.yaml: 정규식 프리필터 12종 (block 정책이 review 정책보다 우선)
@@ -103,7 +103,7 @@ build`, `vite build`, `jest` 같은 평범한 스크립트를 차단하기 때�
 
 | 에이전트 | 연동 | `review` 처리 |
 |---|---|---|
-| Claude Code | [PreToolUse 훅](guard-hook.sh) | 통과 (exit 0) |
+| Claude Code | [PreToolUse 훅](guard-hook.sh) | `ask` (권한 프롬프트, `LAYA_GUARD_REVIEW=pass`면 통과) |
 | OpenCode | [`tool.execute.before` 플러그인](integrations/opencode/laya-guard.ts) | allow + stderr 경고 |
 | Codex CLI | [`PreToolUse` 훅](integrations/codex/) | allow + stderr 안내 (ask 불가) |
 | Cursor | [`beforeShellExecution` 훅](integrations/cursor/) | `ask` (사람 승인) |
@@ -118,8 +118,8 @@ build`, `vite build`, `jest` 같은 평범한 스크립트를 차단하기 때�
 훅 메커니즘이 없어 어댑터 불가: Aider, Roo Code(2026-05 종료), Continue(단계제만,
 저장소 아카이브), Junie(allow/ask만). 자세히는 [integrations/](integrations/).
 
-에이전트별 설치법: [integrations/](integrations/). `review`를 사람에게 넘기는
-건 Cursor뿐입니다. 나머지는 경고 후 통과하니, 강제 승인이 필요하면 각 도구의
+에이전트별 설치법: [integrations/](integrations/). `review`를 기본으로 사람에게
+넘기는 건 Cursor와 Claude Code입니다. 나머지는 경고 후 통과하니, 강제 승인이 필요하면 각 도구의
 `permission`/`allowlist` 규칙을 함께 쓰세요.
 
 ## 사용처
@@ -128,7 +128,7 @@ build`, `vite build`, `jest` 같은 평범한 스크립트를 차단하기 때�
 
 [guard-hook.sh](guard-hook.sh)를 PreToolUse 훅으로 등록하세요. tool 페이로드를
 stdin으로 읽어 로컬 서버에 POST하고, `block`이면 exit 2로 해당 실행을 취소합니다.
-`review`·`allow`는 exit 0으로 통과합니다. Bash 도구는 에이전트가 쓴 설명이 아니라 명령만 심판합니다. 서버에 닿지 않거나 10초 안에 답이 없으면 오프라인 검사로 대체합니다([서버 장애](#서버-장애) 참조).
+`review`면 `permissionDecision: "ask"` JSON을 출력해 Claude Code가 정책과 사유가 담긴 권한 프롬프트로 사람에게 묻습니다(`LAYA_GUARD_REVIEW=pass`면 예전처럼 통과). `allow`는 조용히 통과합니다. 응답할 사람이 없는 비대화형(`claude -p`)에서는 ask가 거부됩니다. Bash 도구는 에이전트가 쓴 설명이 아니라 명령만 심판합니다. 서버에 닿지 않거나 10초 안에 답이 없으면 오프라인 검사로 대체합니다([서버 장애](#서버-장애) 참조).
 [한계](#한계)를 먼저 읽어주세요. 서버 주소는 `LAYA_GUARD_URL`로 바꿀 수 있습니다.
 
 ### 2. 아무 에이전트 루프 가드 (HTTP)
@@ -259,6 +259,7 @@ laya-guard stats   # 판정 분포, block/review율, 상위 정책, 지연시간
 | `LAYA_GUARD_DEVICE` | 환경변수 | `cpu` (결정적. `mps`는 빠르지만 재현성 포기) |
 | `LAYA_GUARD_URL` | 환경변수 (훅/어댑터) | `http://localhost:8787/guard` |
 | `LAYA_GUARD_FAIL` | 환경변수 (훅/어댑터) | `open` — 서버 장애 시 판정 못 한 호출은 통과, `closed`면 차단 |
+| `LAYA_GUARD_REVIEW` | 환경변수 (Claude Code 훅) | `ask` — `review`를 권한 프롬프트로 사람에게 묻기, `pass`면 묻지 않고 통과 |
 | `LAYA_GUARD_BIN` | 환경변수 (훅/어댑터) | `laya-guard` — 오프라인 검사에 쓰는 CLI |
 | `--no-warmup` | `laya-guard serve` | off — 서버가 대기하기 전에 모델을 먼저 올림 |
 | block/review 임계값 | `policy.yaml` → `defaults` | 0.8 / 0.45 |

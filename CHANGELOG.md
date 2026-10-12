@@ -31,6 +31,16 @@ All notable changes to this project are documented here. Versions follow
 - `mass-delete` also flags work-losing git commands: `git reset --hard`,
   `git clean -f…`, `git checkout -- .` (review).
 
+### Changed
+
+- **Behavior change.** The Claude Code hook (`guard-hook.sh`) now asks you on `review`:
+  it prints a `permissionDecision: "ask"` JSON (with the policy id and reason) and
+  exits 0, so Claude Code shows a permission prompt. Before, `review` passed through
+  silently, which made `review` a warning nobody saw. `block` still exits 2 and
+  `allow` still passes silently. Set `LAYA_GUARD_REVIEW=pass` to restore the old
+  behavior. Non-interactive runs (`claude -p`) have nobody to answer, so Claude Code
+  denies the `ask` there; use `LAYA_GUARD_REVIEW=pass` for unattended runs.
+
 ## [0.2.4] - 2026-10-12
 
 ### Security

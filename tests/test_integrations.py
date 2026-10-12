@@ -77,12 +77,13 @@ def _run_claude(command: str, url: str, **env) -> subprocess.CompletedProcess:
 
 
 def test_claude_hook_contract():
-    # block -> exit 2, review/allow -> exit 0, guard down -> fail open
+    # block -> exit 2, review -> exit 0 + ask JSON, allow -> exit 0 silent, guard down -> fail open
     srv, url = _stub_url()
     try:
         p = _run_claude("BLOCKME please", url)
         assert p.returncode == 2 and "blocked" in p.stderr
-        assert _run_claude("REVIEWME x", url).returncode == 0
+        p = _run_claude("REVIEWME x", url)
+        assert p.returncode == 0 and "\"ask\"" in p.stdout        # review -> 사람에게 묻는다
         assert _run_claude("ls", url).returncode == 0  # description is not judged
         # non-Bash tools: tool name + flattened input values are judged
         p = subprocess.run(["bash", str(CLAUDE)], capture_output=True, text=True, timeout=60,
@@ -93,6 +94,54 @@ def test_claude_hook_contract():
     finally:
         srv.shutdown()
     assert _run_claude("ls", DEAD).returncode == 0
+
+
+def test_claude_review_asks_the_user_by_default():
+    srv, url = _stub_url()
+    try:
+        p = _run_claude("REVIEWME x", url)
+        assert p.returncode == 0
+        out = json.loads(p.stdout)["hookSpecificOutput"]
+        assert out["hookEventName"] == "PreToolUse" and out["permissionDecision"] == "ask"
+        assert "(t)" in out["permissionDecisionReason"] and "maybe" in out["permissionDecisionReason"]
+        # allow 는 아무것도 출력하지 않는다
+        p = _run_claude("ls", url)
+        assert p.returncode == 0 and p.stdout == ""
+    finally:
+        srv.shutdown()
+
+
+def test_claude_review_pass_env_restores_old_behavior():
+    srv, url = _stub_url()
+    try:
+        p = _run_claude("REVIEWME x", url, LAYA_GUARD_REVIEW="pass")
+        assert p.returncode == 0 and p.stdout == ""
+        # block 은 영향 없음
+        assert _run_claude("BLOCKME x", url, LAYA_GUARD_REVIEW="pass").returncode == 2
+    finally:
+        srv.shutdown()
+
+
+def test_claude_review_ask_survives_non_ascii_reason():
+    class KoHandler(StubHandler):
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("Content-Length", 0)))
+            data = json.dumps({"action": "review", "risk": 0.6, "policy_id": "mass-delete",
+                               "reason": "대량 삭제 — 백업/범위 확인 필요"}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+    srv = HTTPServer(("127.0.0.1", 0), KoHandler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        p = _run_claude("anything", f"http://127.0.0.1:{srv.server_port}/guard", LC_ALL="C", LANG="C")
+        out = json.loads(p.stdout)["hookSpecificOutput"]
+        assert p.returncode == 0 and out["permissionDecision"] == "ask"
+        assert "대량 삭제" in out["permissionDecisionReason"]
+    finally:
+        srv.shutdown()
 
 
 def test_codex_block_denies():

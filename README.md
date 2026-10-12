@@ -64,7 +64,7 @@ curl -X POST localhost:8787/guard -H 'Content-Type: application/json' \
 
 ```
 agent tool_call
-  → guard-hook.sh (Claude Code PreToolUse hook; block ⇒ exit 2 cancels the run)
+  → guard-hook.sh (Claude Code PreToolUse hook; block ⇒ exit 2 cancels the run, review ⇒ permission prompt)
   → POST /guard (localhost:8787)
   → chains (`a && b`, `a; b`, `a || b`) are split and each command judged below;
     the worst verdict wins
@@ -109,7 +109,7 @@ checked against the regexes, which catches patterns spanning commands
 
 | Agent | Integration | `review` becomes |
 |---|---|---|
-| Claude Code | [PreToolUse hook](guard-hook.sh) | passes through (exit 0) |
+| Claude Code | [PreToolUse hook](guard-hook.sh) | `ask` (permission prompt; `LAYA_GUARD_REVIEW=pass` to pass through) |
 | OpenCode | [`tool.execute.before` plugin](integrations/opencode/laya-guard.ts) | allow + stderr warning |
 | Codex CLI | [`PreToolUse` hook](integrations/codex/) | allow + stderr note (no ask lane) |
 | Cursor | [`beforeShellExecution` hook](integrations/cursor/) | `ask` (human approval) |
@@ -125,8 +125,8 @@ No hook mechanism, so no adapter: Aider, Roo Code (shut down May 2026),
 Continue (tiers only, repo archived), Junie (allow/ask only). Details in
 [integrations/](integrations/).
 
-Setup per agent: [integrations/](integrations/). Only Cursor routes `review`
-to a human; elsewhere `review` warns and passes — use native `permission`/
+Setup per agent: [integrations/](integrations/). Only Cursor and Claude Code route
+`review` to a human by default; elsewhere `review` warns and passes — use native `permission`/
 `allowlist` rules alongside if you want hard asks.
 
 ## Use cases
@@ -138,7 +138,10 @@ see Supported agents above for the full list.
 
 Register [guard-hook.sh](guard-hook.sh) as a PreToolUse hook. It reads the tool
 payload from stdin, POSTs it to the local server, and exits 2 on `block`
-(cancelling that run) — `review` and `allow` pass through with exit 0.
+(cancelling that run). `review` asks you: the hook prints a `permissionDecision: "ask"`
+JSON and Claude Code shows a permission prompt with the policy and reason
+(`LAYA_GUARD_REVIEW=pass` restores the old pass-through). `allow` passes silently.
+Non-interactive runs (`claude -p`) have nobody to answer, so an `ask` is denied there.
 For the Bash tool only the command is judged, not the agent's description.
 If the server is unreachable or slower than 10s, it falls back to the offline
 check (see [Server down](#server-down)). Point it elsewhere with `LAYA_GUARD_URL`.
@@ -273,6 +276,7 @@ All patterns live in [policy.yaml](src/laya_guard/policy.yaml) — edit, add you
 | `LAYA_GUARD_DEVICE` | env | `cpu` (deterministic; set `mps` for speed at the cost of reproducibility) |
 | `LAYA_GUARD_URL` | env (hooks/adapters) | `http://localhost:8787/guard` |
 | `LAYA_GUARD_FAIL` | env (hooks/adapters) | `open` — with the server down, unjudged calls pass; `closed` blocks them |
+| `LAYA_GUARD_REVIEW` | env (Claude Code hook) | `ask` — `review` becomes a permission prompt; `pass` lets it through without asking |
 | `LAYA_GUARD_BIN` | env (hooks/adapters) | `laya-guard` — CLI used for the offline check |
 | `--no-warmup` | `laya-guard serve` | off — the model loads before the server listens |
 | block/review thresholds | `policy.yaml` → `defaults` | 0.8 / 0.45 |

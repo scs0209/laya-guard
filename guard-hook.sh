@@ -1,6 +1,9 @@
 #!/bin/bash
 # Claude Code PreToolUse hook → laya-guard 심판.
-# block이면 exit 2(실행 취소), 그 외는 통과. 서버: $LAYA_GUARD_URL (기본 localhost:8787)
+# block이면 exit 2(실행 취소). review면 Claude Code 권한 프롬프트로 사람에게 묻는다
+# (stdout JSON permissionDecision "ask", exit 0). LAYA_GUARD_REVIEW=pass 면 예전처럼 묻지 않고 통과.
+# allow는 통과. 서버: $LAYA_GUARD_URL (기본 localhost:8787)
+# 주의: 응답할 사람이 없는 비대화형(`claude -p`)에서는 ask가 거부로 처리된다.
 # 서버가 없거나 10초 안에 답이 없으면 `laya-guard check --offline`으로 대체:
 # 정규식 적중은 차단, 안전 명령은 통과, 나머지는 통과 (LAYA_GUARD_FAIL=closed면 차단).
 url="${LAYA_GUARD_URL:-http://localhost:8787/guard}"
@@ -26,5 +29,19 @@ fi
 if [ "$action" = "block" ]; then
   echo "laya-guard: blocked ($res)" >&2
   exit 2
+fi
+if [ "$action" = "review" ] && [ "${LAYA_GUARD_REVIEW:-ask}" != "pass" ]; then
+  RES="$res" python3 -c '
+import json, os
+try:
+    d = json.loads(os.environ["RES"])
+    policy, reason = d.get("policy_id") or "general", d.get("reason") or "needs review"
+except Exception:
+    policy, reason = "general", "needs review"
+print(json.dumps({"hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
+    "permissionDecision": "ask",
+    "permissionDecisionReason": "laya-guard: review (%s) - %s" % (policy, reason)}}))
+'
 fi
 exit 0

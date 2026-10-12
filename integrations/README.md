@@ -10,7 +10,7 @@ regex-flagged calls are blocked, safe commands pass, and the rest pass unless
 
 | Agent | Mechanism | Files | review maps to |
 |---|---|---|---|
-| Claude Code | PreToolUse hook (stdin JSON, exit 2 blocks) | [`../guard-hook.sh`](../guard-hook.sh) | passes through (exit 0) |
+| Claude Code | PreToolUse hook (stdin JSON, exit 2 blocks) | [`../guard-hook.sh`](../guard-hook.sh) | `ask` (permission prompt; `LAYA_GUARD_REVIEW=pass` to pass through) |
 | OpenCode | `tool.execute.before` plugin (throw blocks) | [`opencode/laya-guard.ts`](opencode/laya-guard.ts) | allow + stderr warning |
 | Codex CLI | `PreToolUse` command hook (deny JSON) | [`codex/`](codex/) | allow + stderr note (PreToolUse has no ask lane) |
 | Cursor | `beforeShellExecution` hook (exit 2 / deny JSON) | [`cursor/`](cursor/) | `ask` (human approval lane) |
@@ -31,7 +31,9 @@ repo archived), **Junie** (allow/ask allowlists only, no deny, no hooks).
 ## Claude Code
 
 `guard-hook.sh` is a PreToolUse hook: register it in your settings, it POSTs
-each tool call and exits 2 on `block`.
+each tool call and exits 2 on `block`. On `review` it prints a `permissionDecision: "ask"`
+JSON so Claude Code asks you; set `LAYA_GUARD_REVIEW=pass` to let `review` through.
+In non-interactive runs (`claude -p`) nobody can answer, so the `ask` is denied.
 
 ## OpenCode
 
