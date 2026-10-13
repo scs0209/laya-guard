@@ -428,3 +428,12 @@ def test_page_has_the_degraded_indicator_and_the_start_at_login_card():
     for needle in ("Degraded", "Judged without the model", "Judged by", "Start at login", "/api/service/", "no model"):
         assert needle in html, needle
     assert html.count("<script") == 1 and html.count("<style") == 1 and "style=" not in html and "innerHTML" not in html
+
+
+def test_overview_keeps_the_verdict_counts_apart_from_the_setup_cards():
+    html = dashboard.render_page("N0NC3", "T0K3N")
+    assert html.index('id="cards-verdicts"') < html.index('id="protection-label"') < html.index('id="cards-protection"')
+    verdicts = html[html.index("function renderCards"):html.index("function renderFooter")]
+    first, _, second = verdicts.partition("agentList.filter")
+    assert all(t in first for t in ('title: "Blocked"', 'title: "Held for review"', 'title: "Allowed"', "Judged without the model"))
+    assert "serviceCard(" in second and "Judged without the model" not in second and 'title: "Blocked"' not in second

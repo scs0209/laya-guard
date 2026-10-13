@@ -331,8 +331,10 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
           <p class="note" id="note"></p>
           <div class="tape" id="tape"></div>
           <div class="axis"><span id="tape-from"></span><span id="tape-to"></span></div>
-          <div class="label">Status</div>
-          <div class="cards" id="cards"></div>
+          <div class="label">Verdicts</div>
+          <div class="cards" id="cards-verdicts"></div>
+          <div class="label" id="protection-label">Protection</div>
+          <div class="cards" id="cards-protection"></div>
           <p class="foot-note" id="footer"></p>
         </div>
       </section>
@@ -672,21 +674,24 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
     return card;
   }
 
+  // two groups: the counts of calls (by outcome, and the ones judged without the model), next to the tape, and
+  // whether the guard is set up (the agents it protects, the login service)
   function renderCards(d) {
-    var box = $("cards"), t = d.totals;
-    clear(box);
+    var verdicts = $("cards-verdicts"), protection = $("cards-protection"), t = d.totals;
+    clear(verdicts); clear(protection);
+    verdicts.appendChild(attentionCard({ title: "Blocked", sub: "Stopped before they ran", cls: t.block ? "bad" : "", badge: t.block, go: function () { setFilter("block"); setView("calls"); } }));
+    verdicts.appendChild(attentionCard({ title: "Held for review", sub: "Waiting for your answer", cls: t.review ? "warn" : "", badge: t.review, go: function () { setFilter("review"); setView("calls"); } }));
+    verdicts.appendChild(attentionCard({ title: "Allowed", sub: "Ran as usual", cls: "", go: function () { setFilter("allow"); setView("calls"); } }));
+    var dg = d.degraded || { total: 0 };
+    if (dg.total) verdicts.appendChild(attentionCard({ title: "Judged without the model", sub: "Offline check or heuristics only", cls: lastHour(d).total ? "warn" : "", badge: dg.total,
+      go: function () { setQuery("degraded"); setFilter("all"); setView("calls"); } }));
     agentList.filter(relevant).forEach(function (a) {
       var s = stateOf(a);
-      box.appendChild(attentionCard({ title: a.name, sub: s.pill + ", all projects", cls: a.state === "installed" ? "" : (s.cls === "warn" ? "warn" : s.cls === "bad" ? "bad" : ""),
+      protection.appendChild(attentionCard({ title: a.name, sub: s.pill + ", all projects", cls: a.state === "installed" ? "" : (s.cls === "warn" ? "warn" : s.cls === "bad" ? "bad" : ""),
         go: function () { if (a.state === "not-installed" || a.state === "broken") startChange(a); else { state.agent = a.id; setView("agents"); } } }));
     });
-    if (serviceInfo) box.appendChild(serviceCard(serviceInfo));
-    var dg = d.degraded || { total: 0 };
-    if (dg.total) box.appendChild(attentionCard({ title: "Judged without the model", sub: "Offline check or heuristics only", cls: lastHour(d).total ? "warn" : "", badge: dg.total,
-      go: function () { setQuery("degraded"); setFilter("all"); setView("calls"); } }));
-    box.appendChild(attentionCard({ title: "Blocked", sub: "Stopped before they ran", cls: t.block ? "bad" : "", badge: t.block, go: function () { setFilter("block"); setView("calls"); } }));
-    box.appendChild(attentionCard({ title: "Held for review", sub: "Waiting for your answer", cls: t.review ? "warn" : "", badge: t.review, go: function () { setFilter("review"); setView("calls"); } }));
-    box.appendChild(attentionCard({ title: "Allowed", sub: "Ran as usual", cls: "", go: function () { setFilter("allow"); setView("calls"); } }));
+    if (serviceInfo) protection.appendChild(serviceCard(serviceInfo));
+    $("protection-label").hidden = !protection.firstChild;
   }
 
   function renderFooter(d, ok) {
