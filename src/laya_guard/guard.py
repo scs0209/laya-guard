@@ -340,6 +340,52 @@ def _split_chain(text: str) -> list[str]:
         return [text]
     return parts
 
+# 셸 주석(`# …`)은 에이전트가 마음대로 쓸 수 있는 문장인데 모델이 그것에 반응한다:
+# `kubectl delete namespace prod  # clean stale build output`은 block(0.98)에서 allow(0.45)로
+# 내려갔다. 그래서 모델과 안전 레인은 주석을 뗀 명령만 보고, 정규식은 원문 전체를 계속 본다.
+# 셸처럼 보이는 입력(첫 비주석 줄이 소문자 명령으로 시작)과 user/tool 출처에만 적용한다.
+# 이메일·웹 같은 비신뢰 본문과 한국어 자연어에서는 `#`이 주석이 아니라 데이터다.
+_COMMENT_AFTER = " \t\n;&|()"
+
+def _looks_like_shell(text: str) -> bool:
+    for line in text.splitlines():
+        s = line.strip()
+        if s and not s.startswith("#"):
+            return bool(_CMD_HEAD.match(s))
+    return False
+
+def _strip_comments(text: str) -> str:
+    """Drop shell comments (`# …` to end of line); return text unchanged if it isn't shell.
+
+    Quote-aware, same rule as the shell: `#` only starts a comment at the start of a word,
+    so `'…#…'`, `"…#…"`, `\\#`, `$#`, `${#x}`, `a#b` and `http://x/#frag` stay. The result is
+    only ever judged, never executed, so a stray heredoc line being dropped is harmless."""
+    if _is_korean(text) or not _looks_like_shell(text):
+        return text
+    out: list[str] = []
+    quote, i, n = "", 0, len(text)
+    while i < n:
+        c = text[i]
+        if c == "\\" and quote != "'" and i + 1 < n:
+            out.append(text[i:i + 2])
+            i += 2
+            continue
+        if quote:
+            if c == quote:
+                quote = ""
+        elif c in "'\"":
+            quote = c
+        elif c == "#" and (i == 0 or text[i - 1] in _COMMENT_AFTER):
+            end = text.find("\n", i)
+            if end == -1:
+                break
+            i = end
+            continue
+        out.append(c)
+        i += 1
+    stripped = "\n".join(line.rstrip() for line in "".join(out).split("\n")).strip()
+    return stripped or text
+
 # 정규식 일부(X.*Y)는 한 줄 길이에 대해 제곱 시간이다: `curl `×4만(200KB)이 48초.
 # 훅 타임아웃(30초)을 넘기면 fail-open 우회가 되므로, 읽기 전에 길이로 차단한다.
 MAX_INPUT_CHARS = 256_000
@@ -539,9 +585,11 @@ def judge(tool_call: str, source: str = "user", cwd: str | None = None) -> Verdi
     that run package.json scripts have those scripts checked too."""
     if _oversized(tool_call):
         return _oversized_verdict(tool_call, mock=is_mock())
-    segments = _split_chain(tool_call)
+    # 모델·안전 레인은 주석을 뗀 명령만 본다 (정규식은 원문 전체를 본다)
+    text = _strip_comments(tool_call) if source in ("user", "tool") else tool_call
+    segments = _split_chain(text)
     if len(segments) == 1:
-        return _judge_one(tool_call, source, cwd)
+        return _judge_one(text, source, cwd, regex_text=tool_call)
     # 체인은 명령마다 따로 심판해 가장 나쁜 결과를 쓴다.
     # 명령 경계를 넘는 패턴(curl …; … | sh)은 전체 문자열 정규식이 잡는다.
     verdicts = []
@@ -551,12 +599,15 @@ def judge(tool_call: str, source: str = "user", cwd: str | None = None) -> Verdi
         seg_cwd = _next_cwd(seg, seg_cwd)
     hit = _regex_hit(tool_call)
     if hit is not None and all(v.policy_id != hit.id for v in verdicts):
-        verdicts.append(_judge_one(tool_call, source))
+        verdicts.append(_judge_one(text, source, regex_text=tool_call))
     return max(verdicts, key=lambda v: (_ACTION_RANK[v.action], v.risk))
 
-def _judge_one(tool_call: str, source: str, cwd: str | None = None) -> Verdict:
+def _judge_one(tool_call: str, source: str, cwd: str | None = None,
+               regex_text: str | None = None) -> Verdict:
+    """regex_text: what the regexes scan when it differs from what the model sees
+    (the original with comments, while the model gets the comment-free command)."""
     _ensure()
-    hit = _regex_hit(tool_call)
+    hit = _regex_hit(tool_call if regex_text is None else regex_text)
     regex_block = hit is not None and hit.action_on_regex == "block"
     safe = hit is None and _safe_command(tool_call)
     mock = is_mock()
