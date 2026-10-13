@@ -5,87 +5,73 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-13
+
+A local dashboard, one-command setup for all eleven supported agents, and failure modes that tell an outage from
+a verdict.
+
+### Added
+
+- **`laya-guard dashboard`**: a local dashboard at `http://127.0.0.1:8787/dashboard` (starts the server if it isn't
+  running; `--no-open` prints the URL). A small app with a sidebar and four views. *Overview*: verdict counts for a
+  window from 1 hour to all time, a tape with one fine line per judged call (blocks stand tall and red), and cards for
+  what needs a look. *Calls*: the list on the left and the selected call on the right (policy, reason, source, timing,
+  length and hash, never the command text) with a verdict filter and search. *Policies*: which rules decided the calls.
+  *Agents*: see below. Keyboard shortcuts (`j`/`k`, `a` `r` `b` `0`, `1`-`5`, `/`, `p`, `?`), light and dark. It is
+  served by the existing server (`GET /dashboard`, `GET /api/stats`, `GET /api/agents`), answers only a loopback `Host`
+  (DNS rebinding), is self-contained under a nonce-only CSP and loads nothing from the network. Roadmap: #37.
+- **`laya-guard install <agent>`, `uninstall <agent>` and `status`** for Claude Code, Codex CLI, Cursor, Gemini CLI, Qwen
+  Code, Windsurf, Copilot CLI, Cline, OpenCode, Kilo Code and Amp. Every install prints a diff first, backs up what it
+  replaces, writes absolute paths, writes atomically and then sends two test calls through the hook (`--dry-run`,
+  `--yes`, `--scope user|project|local`, `--force`; `status --check` repeats the test calls, `--agent` and `--all` pick
+  what to list). `uninstall` removes only what laya-guard added (marked `LAYA_GUARD_MANAGED=1`), and a hand-written
+  entry is reported and left alone unless `--force`. Each agent follows its own documented mechanism: JSON hook entries
+  merged next to other tools' (Claude Code, Codex, Cursor, Gemini CLI, Qwen Code, Windsurf), a marked block in Codex's
+  `config.toml` for people who keep hooks there, a drop-in file of its own for Copilot CLI, plugin files for OpenCode,
+  Kilo Code and Amp, and a wrapper script for Cline. Details that came from reading the agents' docs and real config files:
+  Cursor runs every matching hook and takes the strictest answer, and its `hooks.json` often has trailing commas (read
+  leniently, and the diff says they go); Gemini CLI 0.20 ships with hooks off, so `tools.enableHooks` is turned on and
+  said so (and, if the file already holds other tools' hooks, that they start running too); Codex asks you to trust a
+  new hook with `/hooks`; Cline's switch lives in its Hooks tab. What an install can't do for you is printed after it.
+  The agents are not launched in the tests: formats come from their docs and from files other tools leave behind, and
+  the install output says so for the ones it hasn't seen run.
+- **Install from the dashboard.** The Agents view finds the coding agents on the machine by itself (an executable on
+  `PATH`, an app bundle or a config directory; read-only, it never opens those files) and shows each as a tile with its
+  own logo and a status dot. **Install hook**, **Remove** and **Repair** open a sheet with the exact diff, and nothing is
+  written until *Apply change*. A button pinned in the sidebar installs where the hook is missing. The write endpoint
+  (`POST /api/agents/{agent}/{action}`, user scope only) needs a loopback `Host`, a same-origin `Origin`, a JSON body, a
+  per-process token only the page carries, and the id of the diff that was shown (409 if a file changed since). The logos
+  are the products' own marks, inline: Claude Code, Cursor, Gemini, Qwen, Windsurf, Copilot, Cline and OpenCode from
+  Simple Icons (CC0), Codex, Kilo Code and Amp from Lobe Icons (MIT); they belong to their owners.
+- **`LAYA_GUARD_FAIL=ask`**: with the server down, a call the offline check can't judge (neither regex-flagged nor on the
+  safe list) becomes `review` instead of passing. Claude Code, Cursor, Qwen Code and Copilot CLI put it to you, and a
+  headless run denies it, so it is closed when nobody is there. `open` stays the default and `closed` still blocks;
+  known destructive patterns block and safe commands pass in every mode.
+- **An outage is recorded as its own kind of event.** Every `laya-guard check --offline` (what hooks fall back to) is now
+  appended to the verdict log with `via: "offline"`, the server records how it judged (`via`: `model`, `regex`,
+  `allowlist`, `heuristic`, `limit`), and `laya-guard stats` prints how many calls were judged without the model, with
+  the server down or after a model error. Still hash and length only; mock mode isn't counted. See #42 for what's next.
+
 ### Security
 
 - The verdict log no longer records the names of `package.json` scripts. A script finding's reason read
   `package.json scripts.<name>: <policy message>`, and the name comes from the user's own file, so it is dropped when
-  the entry is written (the verdict returned to the caller keeps it). Hash and length were always the only things kept
-  of a command; now the reason can't carry command-derived text either. Found by review on #43.
-
-### Added
-
-- `LAYA_GUARD_FAIL=ask`: with the server down, a call the offline check can't judge (neither regex-flagged nor on the
-  safe list) becomes `review` instead of passing. Agents with an ask lane (Claude Code, Cursor, Qwen Code, Copilot CLI)
-  put it to you, and a headless run denies it, so it is closed when nobody is there. `open` stays the default and
-  `closed` still blocks; known destructive patterns block and safe commands pass in every mode.
-- An outage is recorded as its own kind of event. Every `laya-guard check --offline` (what hooks fall back to) is now
-  appended to the verdict log with `via: "offline"`, the server records how it judged (`via`: `model`, `regex`,
-  `allowlist`, `heuristic`, `limit`), and `laya-guard stats` prints how many calls were judged without the model, with the
-  server down or after a model error. Still hash and length only; mock mode isn't counted.
-- `laya-guard dashboard`: a local dashboard at `http://127.0.0.1:8787/dashboard`
-  (starts the server if it isn't running, `--no-open` prints the URL). A small app with a sidebar
-  and four views: Overview (a sentence with the verdict counts for a 1h to all-time window, a tape
-  with one fine line per judged call, outlined cards with count badges for blocks and reviews),
-  Calls (the list on the left, the selected call on the right with policy, reason, hash and length,
-  never command text; verdict filter and search), Policies, and Agents. Keyboard shortcuts
-  (`j`/`k`, `a` `r` `b` `0`, `1`-`5`, `/`, `p`, `?`). Served by the existing server as
-  `GET /dashboard` and `GET /api/stats`; both answer 403 unless the `Host` header is loopback
-  (DNS rebinding), the page is self-contained under a nonce-only CSP, and it loads nothing
-  from the network. The HTML ships as package data. Roadmap: #37.
-- `laya-guard install claude-code` / `uninstall claude-code` / `status`: registers (and removes,
-  and inspects) the Claude Code hook without editing JSON by hand. It writes absolute paths,
-  merges into existing hooks instead of overwriting them, prints a diff, backs up the settings
-  file and asks before writing (`--dry-run`, `--yes`, `--scope user|project|local`, `--matcher`,
-  `--force`). `uninstall` removes only entries it added (marked `LAYA_GUARD_MANAGED=1`); a
-  hand-written `guard-hook.sh` entry is reported and left alone unless `--force`. After installing
-  it sends two test calls through the hook and checks the exit codes; `status --check` repeats that.
-  Claude Code only for now.
-- Click-to-install in the dashboard: the **Agents** view shows whether the Claude Code hook is
-  in `~/.claude/settings.json` (agent tiles with a status dot), and a button pinned at the bottom of
-  the sidebar installs it in one click. The view finds the agents on the machine by itself (an
-  executable on `PATH`, an app bundle or a config directory; read-only) and lists Codex CLI and
-  Gemini CLI as found but not supported yet (Cursor is supported, see below). Each tile shows the product's own logo (inline, nothing
-  is loaded from the network; Simple Icons CC0 and Lobe Icons MIT, trademarks of their owners). **Install**, **Remove** and **Repair** open a sheet with the exact
-  diff, and nothing is written until *Apply change* (backup, atomic write, then the same two test
-  calls as the CLI). User scope only; `GET /api/agents` and `POST /api/agents/{agent}/{action}`.
-  The write endpoint needs a loopback `Host`, a same-origin `Origin`, a JSON body, a per-process
-  token only the page carries, and the `diff_id` of the diff that was shown (409 if the file
-  changed since). The dashboard is no longer read-only. Roadmap: #37.
-- `laya-guard install <agent>` for every supported agent, in the CLI and the dashboard: Claude Code, Codex CLI, Cursor,
-  Gemini CLI, Qwen Code, Windsurf, Copilot CLI, Cline, OpenCode, Kilo Code and Amp. Each follows its own documented
-  mechanism behind the same diff, backup, atomic write and test calls: JSON hook entries (merged next to other tools'),
-  a marked block in Codex's `config.toml` for people who keep hooks there, a drop-in file of its own for Copilot CLI,
-  plugin files for OpenCode, Kilo and Amp, and a wrapper script for Cline. Gemini CLI's hooks switch
-  (`tools.enableHooks`, off by default in 0.20) is turned on and said so in the diff. What an install can't do for you
-  (trusting the hook in Codex, switching it on in Cline, a restart or reload) is shown after it. The dashboard shows the
-  agents found on the machine as tiles, the rest behind a `+` tile. `status` covers all of them (`--agent`, `--all`);
-  the adapters now ship inside the package under names no other tool uses, and a test keeps them identical to
-  `integrations/`. Plugins can't be run from outside the agent, so they get no test calls. The agents are not launched
-  in the tests: formats come from their docs and from files other tools leave behind, and the install output says
-  so for the ones it hasn't seen run.
-- `laya-guard install cursor` / `uninstall cursor` / `status --agent cursor`, and Cursor in the dashboard: registers a
-  `beforeShellExecution` hook in `~/.cursor/hooks.json` (or `./.cursor/hooks.json` with `--scope project`) with the same
-  diff, backup, atomic write and test calls as Claude Code. It merges next to the entries other tools put there
-  (Cursor runs all of them and takes the strictest answer), reads `hooks.json` even when it has trailing commas (and
-  says so before rewriting it without them), and reports a hand-written `integrations/cursor` adapter instead of adding a
-  second judge. The new `guard-cursor-hook.sh` answers in Cursor's format (`permission` allow, ask or deny with
-  `user_message` and `agent_message`) and always prints valid JSON, because Cursor blocks a command when a permission
-  hook's output isn't. `status` now covers every supported agent.
+  the entry is written (the verdict returned to the caller keeps it).
+- `guard-hook.sh` judged an empty command when its input wasn't JSON it could read, and an empty command passes. A
+  parse failure now follows `LAYA_GUARD_FAIL`: `closed` blocks it (exit 2), `open` lets it through.
 
 ### Changed
+
+- The hook scripts now ship inside the package (`laya_guard/hooks/`, so a plain `pip install` has them), under names no
+  other tool uses, and a test keeps them identical to `integrations/`. `guard-hook.sh` in the repo root is a thin wrapper,
+  so settings that point at the old path keep working.
+- Amp has a real plugin (`integrations/amp/laya-guard.ts`, a `tool.call` handler, which is what Amp recommends now); the
+  `delegate` helper stays as the legacy route. Kilo Code's plugin default-exports `{ id, server }`, which its docs
+  require. The Copilot CLI adapter reads the documented `toolName`/`toolArgs` payload.
+- Settings backups (`<file>.laya-guard-<time>.bak`) no longer overwrite each other when two changes land in the same
+  second; the later one gets a `-1`, `-2` suffix.
 - The tests no longer write to the developer's own verdict log: `tests/conftest.py` points `LAYA_GUARD_LOG_PATH` at a
   temporary file for the whole run.
-
-- Amp now has a real plugin (`integrations/amp/laya-guard.ts`, a `tool.call` handler); the `delegate` helper stays as
-  the legacy route. Kilo's plugin default-exports `{ id, server }`, which Kilo's docs require. The Copilot adapter reads
-  the documented `toolName`/`toolArgs` payload. The dashboard's agent logos for Qwen Code, Windsurf, Copilot CLI,
-  Cline, OpenCode, Kilo Code and Amp come from Simple Icons and Lobe Icons.
-
-- The hook script now ships inside the package (`laya_guard/hooks/guard-hook.sh`, so a plain
-  `pip install` has it). `guard-hook.sh` in the repo root is a thin wrapper around it, so settings
-  that point at the old path keep working.
-- Settings backups (`<file>.laya-guard-<time>.bak`) no longer overwrite each other when two changes
-  land in the same second; the later one gets a `-1`, `-2` suffix.
 
 ## [0.2.6] - 2026-10-13
 
@@ -302,7 +288,8 @@ All notable changes to this project are documented here. Versions follow
   Claude Code PreToolUse hook, local redacted telemetry, Korean 30-case eval,
   AgentDojo judge-level eval, E2E rollout harness.
 
-[Unreleased]: https://github.com/scs0209/laya-guard/compare/v0.2.6...HEAD
+[Unreleased]: https://github.com/scs0209/laya-guard/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/scs0209/laya-guard/compare/v0.2.6...v0.3.0
 [0.2.6]: https://github.com/scs0209/laya-guard/compare/v0.2.5...v0.2.6
 [0.2.5]: https://github.com/scs0209/laya-guard/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/scs0209/laya-guard/compare/v0.2.3...v0.2.4
