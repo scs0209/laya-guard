@@ -5,6 +5,12 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-13
+
+An outage no longer turns the guard off. With the server down, what it can't judge is asked about or blocked instead
+of passing, the server can run as a service that comes back after a crash, and an outage shows up on the dashboard and
+can raise an alert.
+
 ### Added
 
 - **`laya-guard service install | uninstall | status`**: opt-in start at login, a macOS LaunchAgent or a Linux systemd
@@ -327,7 +333,8 @@ a verdict.
   Claude Code PreToolUse hook, local redacted telemetry, Korean 30-case eval,
   AgentDojo judge-level eval, E2E rollout harness.
 
-[Unreleased]: https://github.com/scs0209/laya-guard/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/scs0209/laya-guard/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/scs0209/laya-guard/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/scs0209/laya-guard/compare/v0.2.6...v0.3.0
 [0.2.6]: https://github.com/scs0209/laya-guard/compare/v0.2.5...v0.2.6
 [0.2.5]: https://github.com/scs0209/laya-guard/compare/v0.2.4...v0.2.5
