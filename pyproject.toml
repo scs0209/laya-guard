@@ -37,7 +37,7 @@ dev = ["pytest"]
 laya-guard = "laya_guard.cli:main"
 
 [tool.setuptools.package-data]
-laya_guard = ["*.yaml"]
+laya_guard = ["*.yaml", "*.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
