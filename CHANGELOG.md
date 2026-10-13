@@ -36,6 +36,18 @@ All notable changes to this project are documented here. Versions follow
   The write endpoint needs a loopback `Host`, a same-origin `Origin`, a JSON body, a per-process
   token only the page carries, and the `diff_id` of the diff that was shown (409 if the file
   changed since). The dashboard is no longer read-only. Roadmap: #37.
+- `laya-guard install <agent>` for every supported agent, in the CLI and the dashboard: Claude Code, Codex CLI, Cursor,
+  Gemini CLI, Qwen Code, Windsurf, Copilot CLI, Cline, OpenCode, Kilo Code and Amp. Each follows its own documented
+  mechanism behind the same diff, backup, atomic write and test calls: JSON hook entries (merged next to other tools'),
+  a marked block in Codex's `config.toml` for people who keep hooks there, a drop-in file of its own for Copilot CLI,
+  plugin files for OpenCode, Kilo and Amp, and a wrapper script for Cline. Gemini CLI's hooks switch
+  (`tools.enableHooks`, off by default in 0.20) is turned on and said so in the diff. What an install can't do for you
+  (trusting the hook in Codex, switching it on in Cline, a restart or reload) is shown after it. The dashboard shows the
+  agents found on the machine as tiles, the rest behind a `+` tile. `status` covers all of them (`--agent`, `--all`);
+  the adapters now ship inside the package under names no other tool uses, and a test keeps them identical to
+  `integrations/`. Plugins can't be run from outside the agent, so they get no test calls. The agents are not launched
+  in the tests: formats come from their docs and from files other tools leave behind, and the install output says
+  so for the ones it hasn't seen run.
 - `laya-guard install cursor` / `uninstall cursor` / `status --agent cursor`, and Cursor in the dashboard: registers a
   `beforeShellExecution` hook in `~/.cursor/hooks.json` (or `./.cursor/hooks.json` with `--scope project`) with the same
   diff, backup, atomic write and test calls as Claude Code. It merges next to the entries other tools put there
@@ -46,6 +58,11 @@ All notable changes to this project are documented here. Versions follow
   hook's output isn't. `status` now covers every supported agent.
 
 ### Changed
+
+- Amp now has a real plugin (`integrations/amp/laya-guard.ts`, a `tool.call` handler); the `delegate` helper stays as
+  the legacy route. Kilo's plugin default-exports `{ id, server }`, which Kilo's docs require. The Copilot adapter reads
+  the documented `toolName`/`toolArgs` payload. The dashboard's agent logos for Qwen Code, Windsurf, Copilot CLI,
+  Cline, OpenCode, Kilo Code and Amp come from Simple Icons and Lobe Icons.
 
 - The hook script now ships inside the package (`laya_guard/hooks/guard-hook.sh`, so a plain
   `pip install` has it). `guard-hook.sh` in the repo root is a thin wrapper around it, so settings

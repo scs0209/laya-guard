@@ -28,6 +28,19 @@ FAIL_CLOSED = os.environ.get("LAYA_GUARD_FAIL", "open") == "closed"
 
 def extract_text(event: object) -> str:
     if isinstance(event, dict):
+        # Copilot CLI sends {"toolName": "bash", "toolArgs": ...} for a camelCase `preToolUse` entry and
+        # {"tool_name": "Bash", "tool_input": {...}} for a PascalCase `PreToolUse` one. The args can be a JSON string.
+        for key in ("toolArgs", "tool_input"):
+            args = event.get(key)
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except ValueError:
+                    args = None
+            if isinstance(args, dict):
+                for name in ("command", "cmd", "script"):
+                    if isinstance(args.get(name), str) and args[name]:
+                        return args[name]
         for key in ("command", "tool_input", "input", "parameters"):
             val = event.get(key)
             if isinstance(val, str) and val:

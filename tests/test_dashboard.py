@@ -253,18 +253,22 @@ def test_agents_status_is_readable_and_reports_not_installed(agents):
     assert agents.client.get("/api/agents", headers={"host": "evil.example:8787"}).status_code == 403
 
 
-def test_agents_found_on_this_machine_are_listed_and_only_the_supported_ones_can_change(agents):
+def test_agents_api_lists_every_supported_agent_and_whether_it_was_found(agents):
     (agents.home / ".codex").mkdir()
     (agents.home / ".cursor").mkdir()
     rows = agents.client.get("/api/agents").json()["agents"]
-    assert [r["id"] for r in rows] == ["claude-code", "codex", "cursor"]       # gemini isn't here, so it isn't listed
-    claude, codex, cursor = rows
-    assert claude["supported"] and claude["found"] is False and claude["state"] == "not-installed"
-    assert cursor["supported"] and cursor["state"] == "not-installed" and cursor["path"] == "~/.cursor/hooks.json"
-    assert codex["found"] and codex["how"] == "config" and codex["via"] == ["~/.codex"]
-    assert codex["supported"] is False and codex["state"] == "unsupported" and codex["path"] is None
+    assert [r["id"] for r in rows] == ["claude-code", "codex", "cursor", "gemini-cli", "qwen-code", "windsurf",
+                                       "copilot-cli", "cline", "opencode", "kilo", "amp"]
+    by_id = {r["id"]: r for r in rows}
+    assert all(r["supported"] and r["state"] == "not-installed" for r in rows)
+    assert [r["id"] for r in rows if r["found"]] == ["codex", "cursor"]            # only what exists in this HOME
+    assert by_id["codex"]["how"] == "config" and by_id["codex"]["via"] == ["~/.codex"]
+    assert by_id["cursor"]["path"] == "~/.cursor/hooks.json" and by_id["codex"]["path"] == "~/.codex/hooks.json"
+    assert by_id["opencode"]["path"] == "~/.config/opencode/plugins/laya-guard.ts"
+    assert by_id["codex"]["follow_up"] and by_id["cline"]["follow_up"] and by_id["amp"]["probes"] is False
+    assert by_id["cursor"]["probes"] is True
     assert str(agents.home) not in json.dumps(rows)                              # only ~/ paths, never the full home
-    assert agents.post("install", {"mode": "preview"}, agent="codex").status_code == 404   # nothing to install for it
+    assert agents.post("install", {"mode": "preview"}, agent="not-an-agent").status_code == 404
 
 
 # what another tool leaves in a real ~/.cursor/hooks.json, trailing commas included
@@ -368,7 +372,7 @@ def test_a_hand_written_entry_needs_force_and_bad_requests_are_refused(agents):
     assert agents.post("install", {"scope": "project"}).status_code == 400                   # user scope only
     assert agents.post("install", {"mode": "dance"}).status_code == 400
     assert agents.post("frobnicate", {}).status_code == 404
-    r = agents.client.post("/api/agents/codex/install", content="{}",
+    r = agents.client.post("/api/agents/not-an-agent/install", content="{}",
                            headers={"Content-Type": "application/json", "Origin": "http://127.0.0.1:8787",
                                     "X-Laya-Token": agents.token})
     assert r.status_code == 404

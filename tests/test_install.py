@@ -242,7 +242,7 @@ def test_install_refuses_bad_input_without_touching_anything(home, capsys):
     path.write_text("{nope", encoding="utf-8")
     assert _cli("install", "claude-code", "--bin", str(GUARD_BIN), "--yes") == 1
     assert "not valid JSON" in capsys.readouterr().err and path.read_text() == "{nope"
-    assert _cli("install", "codex", "--yes") == 1
+    assert _cli("install", "aider", "--yes") == 1
     assert "unsupported agent" in capsys.readouterr().err
     path.write_text("{}", encoding="utf-8")
     assert _cli("install", "claude-code", "--bin", str(home / "missing"), "--yes") == 1
@@ -294,7 +294,7 @@ def test_detect_agents_reads_path_apps_and_config_dirs(tmp_path, monkeypatch):
     got = {a["id"]: a for a in install.detect_agents(home)}
     assert got["claude-code"]["how"] == "installed" and got["claude-code"]["supported"]
     assert got["claude-code"]["via"][0].startswith("claude in ")
-    assert got["codex"]["how"] == "config" and got["codex"]["via"] == ["~/.codex"] and not got["codex"]["supported"]
+    assert got["codex"]["how"] == "config" and got["codex"]["via"] == ["~/.codex"] and got["codex"]["supported"]
     assert got["cursor"]["how"] == "installed" and got["cursor"]["via"] == ["Cursor.app"]
     assert got["gemini-cli"]["found"] is False and got["gemini-cli"]["how"] is None   # a file that can't run isn't an install
 
@@ -377,7 +377,7 @@ def test_cursor_settings_path_and_scopes(tmp_path):
     with pytest.raises(install.InstallError, match="no local scope"):
         install.settings_path("local", tmp_path, proj, "cursor")
     with pytest.raises(install.InstallError, match="unsupported agent"):
-        install.settings_path("user", tmp_path, proj, "codex")
+        install.settings_path("user", tmp_path, proj, "aider")
 
 
 def test_cursor_install_into_a_new_file_writes_version_first(tmp_path):

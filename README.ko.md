@@ -166,6 +166,38 @@ laya-guard uninstall cursor
 `deny`)을 확인합니다. 이 훅은 Cursor 앱에 적용되며, Cursor CLI가 `beforeShellExecution` 훅을 실행하는지는
 Cursor 문서에 명시돼 있지 않아 거기서는 확인하지 않았습니다.
 
+### 1c. 나머지 에이전트 전부
+
+```bash
+laya-guard install gemini-cli     # 그 밖에: codex, qwen-code, windsurf, copilot-cli, cline, opencode, kilo, amp
+laya-guard status --check         # 이 컴퓨터에 뭐가 설치돼 있고 각 훅이 제대로 답하는지
+```
+
+에이전트마다 명령 하나이고 안전장치는 위와 같습니다. diff를 먼저 보여주고, 바꾸는 파일은 백업하고, 절대 경로를
+쓰고, 다른 도구의 항목 옆에 병합하며, `uninstall`은 자기가 넣은 것만 지웁니다. 무엇을 쓰는지, 그리고 직접 해야 하는
+한 가지는 다음과 같습니다.
+
+| 에이전트 | `laya-guard install`이 쓰는 것 | 직접 할 일 |
+|---|---|---|
+| Claude Code | `~/.claude/settings.json`의 훅 항목 | 열려 있으면 재시작 |
+| Codex CLI | `~/.codex/hooks.json` 항목(훅을 `config.toml`에 두는 경우는 표시된 블록) | `/hooks`로 신뢰 처리(새 훅은 Codex가 먼저 물음) |
+| Cursor | `~/.cursor/hooks.json` 항목 | — |
+| Gemini CLI | `~/.gemini/settings.json` 항목과 `tools.enableHooks`(옛 버전은 훅이 꺼져 있음) | 재시작 |
+| Qwen Code | `~/.qwen/settings.json` 항목 | 재시작 또는 `/hooks` |
+| Windsurf | `~/.codeium/windsurf/hooks.json` 항목 | 창 다시 불러오기(제한 모드에서는 훅이 안 돎) |
+| Copilot CLI | 전용 파일 `~/.copilot/hooks/laya-guard.json` | 새 세션 시작 |
+| Cline | 실행 파일 `~/Documents/Cline/Hooks/PreToolUse` | Cline의 Hooks 탭에서 켜기 |
+| OpenCode | `~/.config/opencode/plugins/laya-guard.ts` | 재시작 |
+| Kilo Code | `~/.config/kilo/plugin/laya-guard.ts` | 재시작 |
+| Amp | `~/.config/amp/plugins/laya-guard.ts` | "plugins: reload" 실행 |
+
+`--scope project`는 프로젝트 쪽 위치(`.codex/`, `.gemini/`, `.github/hooks/`, `.amp/plugins/` 등)에 씁니다. 훅은 설치
+직후 실제 어댑터로 테스트 호출 두 건을 보내 확인하고, 플러그인(OpenCode, Kilo, Amp)은 에이전트만 실행할 수
+있어서 `install`이 그렇다고 알려줍니다. 패키지에 들어 있는 어댑터는 [integrations/](integrations/)의 것과
+같습니다(테스트가 보장). **테스트에서 에이전트를 실제로 실행하지는 않습니다.** 형식은 각 에이전트의 현재 문서와, 다른
+도구가 실제 컴퓨터에 남긴 파일에서 가져왔고, Codex, Qwen Code, Windsurf, Cline, Kilo는 앱에서 직접 돌려보지 않았다고
+`install`이 알려줍니다. 특히 Cline의 훅은 문서가 플러그인 쪽으로 옮겨가는 중입니다.
+
 ### 2. 아무 에이전트 루프 가드 (HTTP)
 
 매 스텝 HTTP 호출이 되는 프레임워크(OpenClaw, OpenCode, LangChain/LlamaIndex
@@ -246,12 +278,12 @@ laya-guard dashboard   # 같은 내용을 로컬 웹 페이지로 (서버가 꺼
 
 **Agents**는 `laya-guard install`의 클릭 버전이고, 사이드바 맨 아래 파란 버튼으로 같은 일을 한 번에
 할 수 있습니다. 이 컴퓨터에 있는 코딩 에이전트는 스스로 찾아서(`PATH`의 실행 파일, 앱 번들, `~/.codex` 같은
-설정 폴더. 읽기 전용이며 그 파일의 내용은 열지 않음) 타일로 보여줍니다. 지금 laya-guard가 보호할 수 있는 것은
-Claude Code이고, 그 타일은 `~/.claude/settings.json`에 훅이 들어 있는지 보여주며 **Install hook** /
-**Remove**를 누르면 정확한 diff가 담긴 시트가 열립니다. 나머지(Codex CLI, Cursor, Gemini CLI)는
-"찾았지만 아직 지원하지 않음"으로 표시됩니다. 로고는 각 제품의 공식 마크입니다(Claude Code, Cursor, Gemini는
-[Simple Icons](https://simpleicons.org) CC0, Codex는 [Lobe Icons](https://github.com/lobehub/lobe-icons) MIT에서 가져옴).
-상표권은 각 소유자에게 있으며, 어떤 제품인지 알리는 용도로만 씁니다.
+설정 폴더. 읽기 전용이며 그 파일의 내용은 열지 않음) 타일로 보여줍니다(못 찾은 것은 `+` 타일 뒤에 있음). 타일은 그
+에이전트에 훅이 들어 있는지, 무엇을 쓰는지, 에이전트에서 직접 해야 할 일이 무엇인지 보여주고, **Install hook** /
+**Remove**를 누르면 정확한 diff가 담긴 시트가 열리며, 사이드바 버튼은 빠진 곳에 설치합니다. 로고는 각 제품의 공식
+마크입니다(Claude Code, Cursor, Gemini, Qwen, Windsurf, Copilot, Cline, OpenCode는 [Simple Icons](https://simpleicons.org)
+CC0, Codex, Kilo Code, Amp는 [Lobe Icons](https://github.com/lobehub/lobe-icons) MIT에서 가져옴). 상표권은 각 소유자에게
+있으며, 어떤 제품인지 알리는 용도로만 씁니다.
 *Apply change*를 누르기 전에는 아무것도 쓰지 않고, 누르면 설정 파일을 백업하고
 (`settings.json.laya-guard-<시각>.bak`) 원자적으로 쓴 뒤, 훅을 통해 테스트 호출 두 건을 보내 확인합니다.
 페이지에서는 user 범위만 바꿀 수 있고, `--scope project|local`은 CLI를 쓰세요. 페이지가 파일을 쓰는

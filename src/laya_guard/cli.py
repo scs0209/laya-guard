@@ -86,8 +86,9 @@ def _plan(args, action):
     """The planned change for the agent/scope in args (writes nothing); raises InstallError."""
     from pathlib import Path
     from . import install as ins
+    args.agent = ins.spec_for(args.agent).id            # accept `gemini`, `copilot`, ... too
     return ins, ins.make_plan(action, args.agent, args.scope, Path.home(), Path(args.project_dir).resolve(),
-                              bin_override=getattr(args, "bin", None), matcher=getattr(args, "matcher", "Bash"),
+                              bin_override=getattr(args, "bin", None), matcher=getattr(args, "matcher", None),
                               force=args.force)
 
 def _apply(ins, plan, args) -> tuple[int, bool]:
@@ -95,9 +96,11 @@ def _apply(ins, plan, args) -> tuple[int, bool]:
     if not plan.changed:
         print("Nothing to change.")
         return 0, False
-    if plan.settings.repaired:
+    if plan.repaired:
         print("Note: the file has trailing commas. The agent accepts them, strict JSON doesn't, and they are "
               "dropped when it is rewritten.\n")
+    for note in plan.notes:
+        print(f"Note: {note}\n")
     print(plan.diff)
     if args.dry_run:
         print("\n(dry run: nothing was written)")
@@ -109,17 +112,20 @@ def _apply(ins, plan, args) -> tuple[int, bool]:
         if input("\nApply this change? [y/N] ").strip().lower() not in ("y", "yes"):
             print("Cancelled.")
             return 1, False
-    backup = ins.write_settings(plan.settings, plan.new_text)
-    print(f"\nWrote {_short(plan.settings.path)}" + (f" (backup: {_short(backup)})" if backup else ""))
+    backups, _ = ins.apply_plan(plan, verify=False)
+    for a in (a for a in plan.artifacts if a.changed):
+        print(f"\n{'Removed' if a.after is None else 'Wrote'} {_short(a.path)}")
+    for b in backups:
+        print(f"  backup: {_short(b)}")
     return 0, True
 
 _ANSWERS = {0: "allow", 1: "ask", 2: "deny", 9: "unreadable output"}
 
 def _probe_line(agent, label, expected, got) -> str:
     ok = "ok  " if got == expected else "FAIL"
-    if agent == "cursor":
-        return f"  {ok} {label} (answered {_ANSWERS.get(got, f'exit {got}')}, expected {_ANSWERS.get(expected, expected)})"
-    return f"  {ok} {label} (exit {got}, expected {expected})"
+    if agent == "claude-code":
+        return f"  {ok} {label} (exit {got}, expected {expected})"
+    return f"  {ok} {label} (answered {_ANSWERS.get(got, f'exit {got}')}, expected {_ANSWERS.get(expected, expected)})"
 
 def cmd_install(args):
     try:
@@ -127,31 +133,36 @@ def cmd_install(args):
     except InstallError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    spec = ins.SPECS[args.agent]
+    spec = plan.spec
     if plan.outcome == "unchanged":
-        print(f"Already installed and up to date in {_short(plan.settings.path)}.")
+        print(f"Already installed and up to date in {_short(plan.path)}.")
         return 0
     if plan.outcome == "manual":
-        existing = ins.find_entries(plan.settings.data, spec)[0][2]["command"]
-        print(f"{_short(plan.settings.path)} already runs {spec.script}, but not through `laya-guard install`:\n"
-              f"  {existing}\nLeft as it is. Re-run with --force to replace it.")
+        print(f"{_short(plan.path)} already has a laya-guard hook, but not through `laya-guard install`:\n"
+              f"  {plan.existing}\nLeft as it is. Re-run with --force to replace it.")
         return 0
     verb = "Adding" if plan.outcome == "added" else "Updating"
-    how = f", matcher {args.matcher!r}" if spec.grouped else ""
-    print(f"{verb} the laya-guard hook for {spec.name} ({args.scope} scope{how}) in {_short(plan.settings.path)}:\n")
+    how = f", matcher {(args.matcher or spec.matcher)!r}" if spec.grouped and spec.id == "claude-code" else ""
+    print(f"{verb} the laya-guard hook for {spec.name} ({args.scope} scope{how}) in {_short(plan.path)}:\n")
+    if spec.unverified:
+        print(f"(Heads-up: this format is {spec.unverified}; it hasn't been run against the app itself.)\n")
     code, wrote = _apply(ins, plan, args)
     if code or not wrote:
         return code
     if not ins.server_health():
         print("\nThe laya-guard server isn't running, so the hook uses the offline check (regexes only) "
               "until you start it: `laya-guard serve`.")
-    if args.no_verify:
-        return 0
-    print("\nChecking the hook:")
     failed = False
-    for label, expected, got in ins.run_probes(plan.command, args.agent):
-        print(_probe_line(args.agent, label, expected, got))
-        failed = failed or got != expected
+    if not args.no_verify:
+        probes = ins.run_probes(plan.command, args.agent)
+        if probes:
+            print("\nChecking the hook:")
+            for label, expected, got in probes:
+                print(_probe_line(args.agent, label, expected, got))
+                failed = failed or got != expected
+        else:
+            print(f"\nNo test calls: {spec.name} loads this by itself, so laya-guard can't run it from here.")
+    print(f"\nNext: {plan.follow_up}")
     if failed:
         print("\nThe hook is registered but didn't behave as expected; run `laya-guard status --check`.", file=sys.stderr)
         return 1
@@ -163,15 +174,14 @@ def cmd_uninstall(args):
     except InstallError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    spec = ins.SPECS[args.agent]
     if plan.outcome != "removed":
-        extra = f" A hand-written {spec.script} entry is left alone; use --force to remove it too." if plan.left else ""
-        print(f"No hook written by `laya-guard install` found in {_short(plan.settings.path)}.{extra}")
+        extra = " A hand-written laya-guard entry is left alone; use --force to remove it too." if plan.left else ""
+        print(f"No hook written by `laya-guard install` found in {_short(plan.path)}.{extra}")
         return 0
-    print(f"Removing the laya-guard hook from {_short(plan.settings.path)}:\n")
+    print(f"Removing the laya-guard hook for {plan.spec.name} from {_short(plan.path)}:\n")
     code, _ = _apply(ins, plan, args)
     if code == 0 and plan.left:
-        print(f"{plan.left} hand-written {spec.script} entr{'y' if plan.left == 1 else 'ies'} left in place (use --force).")
+        print(f"{plan.left} hand-written laya-guard entr{'y' if plan.left == 1 else 'ies'} left in place (use --force).")
     return code
 
 def cmd_status(args):
@@ -179,11 +189,12 @@ def cmd_status(args):
     from pathlib import Path
     from . import install as ins
     home, project = Path.home(), Path(args.project_dir).resolve()
-    agents = [args.agent] if args.agent else list(ins.AGENTS)
-    for agent in agents:
-        if agent not in ins.AGENTS:
-            print(f"error: unsupported agent {agent!r}; supported: {', '.join(ins.AGENTS)}", file=sys.stderr)
-            return 1
+    names = [args.agent] if args.agent else list(ins.AGENTS)
+    try:
+        agents = [ins.spec_for(n).id for n in names]
+    except InstallError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     report = {a: [ins.status(s, home, project, a) for s in ([args.scope] if args.scope else ins.SPECS[a].scopes)
                   if s in ins.SPECS[a].scopes] for a in agents}
     up = ins.server_health()
@@ -191,7 +202,7 @@ def cmd_status(args):
     if args.check:
         probes = []
         for agent, rows in report.items():
-            active = next((r for r in rows if r.state in ("installed", "manual")), None)
+            active = next((r for r in rows if r.state in ("installed", "manual") and r.command), None)
             if active:
                 probes += [(agent, *probe) for probe in ins.run_probes(active.command, agent)]
     ok = all(e == g for _, _, e, g in (probes or []))
@@ -203,7 +214,12 @@ def cmd_status(args):
             **({"probes": [{"agent": a, "label": l, "expected": e, "exit": g, "ok": e == g} for a, l, e, g in probes]}
                if probes is not None else {})}, indent=1))
         return 0 if ok else 1
+    present = {d["id"] for d in ins.detect_agents(home) if d["found"]}
+    quiet = []
     for agent, rows in report.items():
+        if not args.agent and not args.all and agent not in present and all(r.state == "not-installed" for r in rows):
+            quiet.append(agent)                      # not here and nothing installed: don't list eleven agents
+            continue
         print(agent)
         if not rows:
             print(f"  (no {args.scope} scope)")
@@ -213,9 +229,11 @@ def cmd_status(args):
             label = {"installed": "installed", "manual": "installed by hand", "broken": "BROKEN",
                      "invalid": "invalid file", "not-installed": "not installed"}[r.state]
             print(f"  {r.scope:<8}{_short(r.path):<{width}}{label}" + (f"  ({r.detail})" if r.detail else ""))
+    if quiet:
+        print(f"not found on this machine: {', '.join(quiet)} (`laya-guard status --all` lists them too)")
     print(f"server: {'running' if up else 'not running; the hook uses the offline check (regexes only)'}")
     if probes is not None:
-        print("probes:" if probes else "probes: nothing installed to check")
+        print("probes:" if probes else "probes: nothing installed that laya-guard can run from here")
         for agent, label, expected, got in probes:
             print(_probe_line(agent, label, expected, got))
     return 0 if ok else 1
@@ -242,14 +260,15 @@ def main(argv=None):
     d.set_defaults(fn=cmd_dashboard)
     def _scope_args(p, default):
         p.add_argument("--scope", choices=("user", "project", "local"), default=default,
-                       help="Claude Code: user ~/.claude/settings.json, project ./.claude/settings.json, "
-                            "local ./.claude/settings.local.json. Cursor: user ~/.cursor/hooks.json, "
-                            "project ./.cursor/hooks.json (no local)")
+                       help="user: the agent's own config in your home directory; project: the one inside the "
+                            "project (see --project-dir); local: Claude Code's settings.local.json only")
         p.add_argument("--project-dir", default=".", help="project for the project/local scopes (default: current directory)")
     i = sub.add_parser("install", help="register the laya-guard hook in a coding agent (shows a diff first)")
-    i.add_argument("agent", help="claude-code or cursor")
+    i.add_argument("agent", help="claude-code, codex, cursor, gemini-cli, qwen-code, windsurf, copilot-cli, "
+                                 "cline, opencode, kilo or amp (gemini, qwen, copilot and claude work too)")
     _scope_args(i, "user")
-    i.add_argument("--matcher", default="Bash", help="tools the hook guards, a Claude Code matcher (default: Bash; Cursor guards shell commands)")
+    i.add_argument("--matcher", default=None, help="Claude Code only: the tools the hook guards (default: Bash). "
+                                                   "The other agents' hooks always guard shell commands")
     i.add_argument("--bin", default=None, help="absolute path of the laya-guard executable (default: found automatically)")
     i.add_argument("--dry-run", action="store_true", help="print the diff, write nothing")
     i.add_argument("-y", "--yes", action="store_true", help="apply without asking")
@@ -257,7 +276,7 @@ def main(argv=None):
     i.add_argument("--no-verify", action="store_true", help="skip the test calls after installing")
     i.set_defaults(fn=cmd_install)
     u = sub.add_parser("uninstall", help="remove the hook that `laya-guard install` added")
-    u.add_argument("agent", help="claude-code or cursor")
+    u.add_argument("agent", help="the agent to remove the hook from (same names as install)")
     _scope_args(u, "user")
     u.add_argument("--dry-run", action="store_true", help="print the diff, write nothing")
     u.add_argument("-y", "--yes", action="store_true", help="apply without asking")
@@ -265,7 +284,8 @@ def main(argv=None):
     u.set_defaults(fn=cmd_uninstall)
     st = sub.add_parser("status", help="where the hook is installed, whether the server is up")
     _scope_args(st, None)
-    st.add_argument("--agent", default=None, help="only this agent (default: all that are supported)")
+    st.add_argument("--agent", default=None, help="only this agent (default: the ones found on this machine)")
+    st.add_argument("--all", action="store_true", help="list every supported agent, including the ones not found here")
     st.add_argument("--check", action="store_true", help="also run two test calls through the installed hook")
     st.add_argument("--json", action="store_true")
     st.set_defaults(fn=cmd_status)

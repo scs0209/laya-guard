@@ -108,8 +108,11 @@ def api_agents(request: Request):
         row = dict(found, state="unsupported", scope=None, path=None, detail="", managed=None)
         if found["supported"]:
             st = install.status("user", home, Path.cwd(), found["id"])
+            spec = install.SPECS[found["id"]]
             row.update(scope="user", path=dashboard.display_path(st.path), state=st.state, detail=st.detail,
-                       managed=install.is_managed(st.command) if st.command else None)
+                       managed=(st.state != "manual") if st.state != "not-installed" else None,
+                       follow_up=spec.follow_up or f"If {spec.name} is already open, restart it so it picks the hook up.",
+                       unverified=spec.unverified, probes=install.can_probe(found["id"]), kind=spec.kind)
         agents.append(row)
     return JSONResponse({"agents": agents}, headers=dashboard.api_headers())
 
@@ -118,6 +121,16 @@ class AgentReq(BaseModel):
     mode: str = "preview"        # preview: show the change; apply: make it (needs the preview's diff_id)
     diff_id: str | None = None
     force: bool = False
+
+def _shorten_paths(diff: str, plan) -> str:
+    """Swap the full paths in each file's ---/+++ header lines for ~/... ones."""
+    lines = diff.split("\n")
+    for i, line in enumerate(lines):
+        if line.startswith(("--- ", "+++ ")):
+            for a in plan.artifacts:
+                lines[i] = lines[i].replace(str(a.path), dashboard.display_path(a.path))
+    return "\n".join(lines)
+
 
 @app.post("/api/agents/{agent}/{action}", dependencies=[Depends(_require_write_access)])
 def api_agent_action(agent: str, action: str, req: AgentReq):
@@ -133,23 +146,28 @@ def api_agent_action(agent: str, action: str, req: AgentReq):
         plan = install.make_plan(action, agent, "user", Path.home(), Path.cwd(), force=req.force)
     except install.InstallError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    shown = dashboard.display_path(plan.settings.path)
-    head, _, rest = plan.diff.partition("\n@@")                        # only the ---/+++ header lines carry the path
-    diff = head.replace(str(plan.settings.path), shown) + (("\n@@" + rest) if rest else "")
-    notes = ["The file has trailing commas. The agent accepts them, strict JSON doesn't, and they are dropped "
-             "when the file is rewritten."] if plan.settings.repaired else []
+    shown = dashboard.display_path(plan.path)
+    diff = _shorten_paths(plan.diff, plan)                             # only the ---/+++ header lines carry paths
+    notes = list(plan.notes)
+    if plan.repaired:
+        notes.insert(0, "The file has trailing commas. The agent accepts them, strict JSON doesn't, and they are "
+                        "dropped when the file is rewritten.")
+    if plan.outcome == "manual" and plan.existing:
+        notes.append(f"Already set up by hand: {plan.existing}")
     body = {"outcome": plan.outcome, "path": shown, "changed": plan.changed, "notes": notes,
-            "diff": diff, "diff_id": plan.diff_id if plan.changed else None, "left": plan.left}
+            "diff": diff, "diff_id": plan.diff_id if plan.changed else None, "left": plan.left,
+            "follow_up": plan.follow_up}
     if req.mode == "preview" or not plan.changed:
         return JSONResponse({**body, "applied": False}, headers=dashboard.api_headers())
     # applying needs the id of the diff the user was shown: if the file changed since, it won't match
     if not req.diff_id or not hmac.compare_digest(req.diff_id, plan.diff_id):
         raise HTTPException(status_code=409, detail="the settings changed since the preview; review the change again")
     try:
-        backup, probes = install.apply_plan(plan)
+        backups, probes = install.apply_plan(plan)
     except OSError as exc:
         raise HTTPException(status_code=500, detail=f"couldn't write the settings file: {exc.strerror or exc}")
-    return JSONResponse({**body, "applied": True, "backup": dashboard.display_path(backup) if backup else None,
+    return JSONResponse({**body, "applied": True, "backup": dashboard.display_path(backups[0]) if backups else None,
+                         "backups": [dashboard.display_path(b) for b in backups],
                          "probes": [{"label": l, "expected": e, "exit": g, "ok": e == g} for l, e, g in probes]},
                         headers=dashboard.api_headers())
 

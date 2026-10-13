@@ -182,6 +182,39 @@ reported and left alone unless you pass `--force`, so you don't end up with two 
 the answer (`allow` / `deny`), not an exit code. These hooks apply to the Cursor app; whether the Cursor CLI
 runs `beforeShellExecution` hooks isn't something Cursor's docs state, so this isn't tested there.
 
+### 1c. Every other agent
+
+```bash
+laya-guard install gemini-cli     # also: codex, qwen-code, windsurf, copilot-cli, cline, opencode, kilo, amp
+laya-guard status --check         # what's installed on this machine, and whether each hook answers
+```
+
+One command per agent, with the same safety as above: it shows a diff first, backs up what it replaces,
+writes absolute paths, merges next to other tools' entries and removes only its own on `uninstall`.
+What it writes, and the one thing it can't do for you:
+
+| Agent | `laya-guard install` writes | You still do |
+|---|---|---|
+| Claude Code | a hook entry in `~/.claude/settings.json` | restart it if it's open |
+| Codex CLI | an entry in `~/.codex/hooks.json`, or a marked block in `config.toml` if that's where your hooks live | run `/hooks` and trust it (Codex asks before running a new hook) |
+| Cursor | an entry in `~/.cursor/hooks.json` | — |
+| Gemini CLI | an entry in `~/.gemini/settings.json`, and `tools.enableHooks` (older versions ship with hooks off) | restart it |
+| Qwen Code | an entry in `~/.qwen/settings.json` | restart it, or open `/hooks` |
+| Windsurf | an entry in `~/.codeium/windsurf/hooks.json` | reload; hooks don't run in Restricted Mode |
+| Copilot CLI | its own file, `~/.copilot/hooks/laya-guard.json` | start a new session |
+| Cline | an executable `~/Documents/Cline/Hooks/PreToolUse` | switch it on in Cline's Hooks tab |
+| OpenCode | `~/.config/opencode/plugins/laya-guard.ts` | restart it |
+| Kilo Code | `~/.config/kilo/plugin/laya-guard.ts` | restart it |
+| Amp | `~/.config/amp/plugins/laya-guard.ts` | run "plugins: reload" |
+
+`--scope project` writes the project-level equivalent instead (`.codex/`, `.gemini/`, `.github/hooks/`, `.amp/plugins/`, ...).
+Hooks get two test calls through the real adapter after installing; plugins (OpenCode, Kilo, Amp) can only be run
+by the agent itself, so `install` says so instead. The adapters shipped in the package are the ones in
+[integrations/](integrations/) (a test keeps them identical). **None of the agents are launched in the tests.**
+The formats come from each agent's current docs and from files other tools leave on a real machine; for Codex,
+Qwen Code, Windsurf, Cline and Kilo `install` says it hasn't been run against the app, and Cline's hook mechanism in
+particular is documented in a way that's moving to plugins.
+
 ### 2. Guard any agent loop (HTTP)
 
 Any framework that can make an HTTP call per step — OpenClaw, OpenCode,
@@ -265,12 +298,13 @@ rebinding) and loads nothing from the network. `--no-open` prints the URL instea
 **Agents** is the click version of `laya-guard install`, and the blue button pinned at the bottom of
 the sidebar does the same in one click. It finds the coding agents on this machine by itself (an
 executable on `PATH`, an app bundle or a config directory such as `~/.codex`; read-only, it never
-opens those files) and shows each as a tile. Claude Code and Cursor are the ones laya-guard can protect so far:
-their tiles show whether the hook is in `~/.claude/settings.json` or `~/.cursor/hooks.json`, and
-**Install hook** / **Remove** open a sheet with the exact diff. Codex CLI and Gemini CLI are listed as found
-but not supported yet. The logos are the products' own marks (Claude Code, Cursor and Gemini from
-[Simple Icons](https://simpleicons.org), CC0; Codex from [Lobe Icons](https://github.com/lobehub/lobe-icons), MIT).
-They belong to their owners and are only there to say which product a tile is.
+opens those files) and shows each as a tile (the ones that weren't found sit behind the `+` tile). A tile shows whether
+the hook is in place for that agent, what it would write and what's left for you to do in the agent, and
+**Install hook** / **Remove** open a sheet with the exact diff; the sidebar button installs where it's missing.
+The logos are the products' own marks (Claude Code, Cursor, Gemini, Qwen, Windsurf, Copilot, Cline and OpenCode from
+[Simple Icons](https://simpleicons.org), CC0; Codex, Kilo Code and Amp from
+[Lobe Icons](https://github.com/lobehub/lobe-icons), MIT). They belong to their owners and are only there to say which
+product a tile is.
 Nothing is written until you press *Apply change*; then the settings file is backed up
 (`settings.json.laya-guard-<time>.bak`), written atomically, and two test calls go through the
 hook to check it. Only the user scope can be changed from the page; use the CLI for `--scope

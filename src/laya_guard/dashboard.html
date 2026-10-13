@@ -149,10 +149,17 @@ button.card:hover { background: var(--card-hi); }
 .ic.mark { fill: currentColor; stroke: none; }
 .ag-claude-code, .pane-head .tile-lg.ag-claude-code { color: #d97757; }
 .ag-gemini-cli, .pane-head .tile-lg.ag-gemini-cli { color: #8e75b2; }
+.ag-qwen-code, .pane-head .tile-lg.ag-qwen-code { color: #6950ef; }
 .pane-head .tile-lg.ag-codex, .pane-head .tile-lg.ag-cursor { color: var(--text); }
 .tile.add { border-style: dashed; background: transparent; color: var(--faint); cursor: default; }
 .tile .sdot { position: absolute; right: -4px; bottom: -4px; width: 13px; height: 13px; border-radius: 50%; border: 2.5px solid var(--pane); background: var(--faint); }
 .tile .sdot.ok { background: var(--ok); } .tile .sdot.warn { background: var(--warn); } .tile .sdot.bad { background: var(--bad); }
+.more-agents { margin-top: 16px; max-width: 640px; }
+.more-agents .label { margin: 0 0 8px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { padding: 5px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--muted); font-size: 12.5px; }
+.chip:hover { background: var(--card-hi); color: var(--text); }
+.fine { margin: 12px 0 0; color: var(--faint); font-size: 12.5px; max-width: 40em; }
 .tilelabel { font-size: 12px; color: var(--muted); max-width: 76px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agent-body { margin-top: 36px; padding: 26px 28px 28px; background: var(--card); border-radius: 16px; max-width: 640px; }
 .agent-body h3 { margin: 0; font-size: 18px; font-weight: 620; letter-spacing: -0.015em; }
@@ -268,6 +275,13 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
   <symbol id="i-cursor-logo" viewBox="0 0 24 24"><path d="M11.503.131 1.891 5.678a.84.84 0 0 0-.42.726v11.188c0 .3.162.575.42.724l9.609 5.55a1 1 0 0 0 .998 0l9.61-5.55a.84.84 0 0 0 .42-.724V6.404a.84.84 0 0 0-.42-.726L12.497.131a1.01 1.01 0 0 0-.996 0M2.657 6.338h18.55c.263 0 .43.287.297.515L12.23 22.918c-.062.107-.229.064-.229-.06V12.335a.59.59 0 0 0-.295-.51l-9.11-5.257c-.109-.063-.064-.23.061-.23"/></symbol>
   <symbol id="i-gemini" viewBox="0 0 24 24"><path d="M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81"/></symbol>
   <symbol id="i-codex" viewBox="0 0 24 24"><path fill-rule="evenodd" d="M8.086.457a6.105 6.105 0 013.046-.415c1.333.153 2.521.72 3.564 1.7a.117.117 0 00.107.029c1.408-.346 2.762-.224 4.061.366l.063.03.154.076c1.357.703 2.33 1.77 2.918 3.198.278.679.418 1.388.421 2.126a5.655 5.655 0 01-.18 1.631.167.167 0 00.04.155 5.982 5.982 0 011.578 2.891c.385 1.901-.01 3.615-1.183 5.14l-.182.22a6.063 6.063 0 01-2.934 1.851.162.162 0 00-.108.102c-.255.736-.511 1.364-.987 1.992-1.199 1.582-2.962 2.462-4.948 2.451-1.583-.008-2.986-.587-4.21-1.736a.145.145 0 00-.14-.032c-.518.167-1.04.191-1.604.185a5.924 5.924 0 01-2.595-.622 6.058 6.058 0 01-2.146-1.781c-.203-.269-.404-.522-.551-.821a7.74 7.74 0 01-.495-1.283 6.11 6.11 0 01-.017-3.064.166.166 0 00.008-.074.115.115 0 00-.037-.064 5.958 5.958 0 01-1.38-2.202 5.196 5.196 0 01-.333-1.589 6.915 6.915 0 01.188-2.132c.45-1.484 1.309-2.648 2.577-3.493.282-.188.55-.334.802-.438.286-.12.573-.22.861-.304a.129.129 0 00.087-.087A6.016 6.016 0 015.635 2.31C6.315 1.464 7.132.846 8.086.457zm-.804 7.85a.848.848 0 00-1.473.842l1.694 2.965-1.688 2.848a.849.849 0 001.46.864l1.94-3.272a.849.849 0 00.007-.854l-1.94-3.393zm5.446 6.24a.849.849 0 000 1.695h4.848a.849.849 0 000-1.696h-4.848z"/></symbol>
+  <symbol id="i-windsurf" viewBox="0 0 24 24"><path d="M23.55 5.067c-1.2038-.002-2.1806.973-2.1806 2.1765v4.8676c0 .972-.8035 1.7594-1.7597 1.7594-.568 0-1.1352-.286-1.4718-.7659l-4.9713-7.1003c-.4125-.5896-1.0837-.941-1.8103-.941-1.1334 0-2.1533.9635-2.1533 2.153v4.8957c0 .972-.7969 1.7594-1.7596 1.7594-.57 0-1.1363-.286-1.4728-.7658L.4076 5.1598C.2822 4.9798 0 5.0688 0 5.2882v4.2452c0 .2147.0656.4228.1884.599l5.4748 7.8183c.3234.462.8006.8052 1.3509.9298 1.3771.313 2.6446-.747 2.6446-2.0977v-4.893c0-.972.7875-1.7593 1.7596-1.7593h.003a1.798 1.798 0 0 1 1.4718.7658l4.9723 7.0994c.4135.5905 1.05.941 1.8093.941 1.1587 0 2.1515-.9645 2.1515-2.153v-4.8948c0-.972.7875-1.7594 1.7596-1.7594h.194a.22.22 0 0 0 .2204-.2202v-4.622a.22.22 0 0 0-.2203-.2203Z"/></symbol>
+  <symbol id="i-copilot" viewBox="0 0 24 24"><path d="M23.922 16.997C23.061 18.492 18.063 22.02 12 22.02 5.937 22.02.939 18.492.078 16.997A.641.641 0 0 1 0 16.741v-2.869a.883.883 0 0 1 .053-.22c.372-.935 1.347-2.292 2.605-2.656.167-.429.414-1.055.644-1.517a10.098 10.098 0 0 1-.052-1.086c0-1.331.282-2.499 1.132-3.368.397-.406.89-.717 1.474-.952C7.255 2.937 9.248 1.98 11.978 1.98c2.731 0 4.767.957 6.166 2.093.584.235 1.077.546 1.474.952.85.869 1.132 2.037 1.132 3.368 0 .368-.014.733-.052 1.086.23.462.477 1.088.644 1.517 1.258.364 2.233 1.721 2.605 2.656a.841.841 0 0 1 .053.22v2.869a.641.641 0 0 1-.078.256Zm-11.75-5.992h-.344a4.359 4.359 0 0 1-.355.508c-.77.947-1.918 1.492-3.508 1.492-1.725 0-2.989-.359-3.782-1.259a2.137 2.137 0 0 1-.085-.104L4 11.746v6.585c1.435.779 4.514 2.179 8 2.179 3.486 0 6.565-1.4 8-2.179v-6.585l-.098-.104s-.033.045-.085.104c-.793.9-2.057 1.259-3.782 1.259-1.59 0-2.738-.545-3.508-1.492a4.359 4.359 0 0 1-.355-.508Zm2.328 3.25c.549 0 1 .451 1 1v2c0 .549-.451 1-1 1-.549 0-1-.451-1-1v-2c0-.549.451-1 1-1Zm-5 0c.549 0 1 .451 1 1v2c0 .549-.451 1-1 1-.549 0-1-.451-1-1v-2c0-.549.451-1 1-1Zm3.313-6.185c.136 1.057.403 1.913.878 2.497.442.544 1.134.938 2.344.938 1.573 0 2.292-.337 2.657-.751.384-.435.558-1.15.558-2.361 0-1.14-.243-1.847-.705-2.319-.477-.488-1.319-.862-2.824-1.025-1.487-.161-2.192.138-2.533.529-.269.307-.437.808-.438 1.578v.021c0 .265.021.562.063.893Zm-1.626 0c.042-.331.063-.628.063-.894v-.02c-.001-.77-.169-1.271-.438-1.578-.341-.391-1.046-.69-2.533-.529-1.505.163-2.347.537-2.824 1.025-.462.472-.705 1.179-.705 2.319 0 1.211.175 1.926.558 2.361.365.414 1.084.751 2.657.751 1.21 0 1.902-.394 2.344-.938.475-.584.742-1.44.878-2.497Z"/></symbol>
+  <symbol id="i-cline" viewBox="0 0 24 24"><path d="m23.365 13.556-1.442-2.895V8.994c0-2.764-2.218-5.002-4.954-5.002h-2.464c.178-.367.276-.779.276-1.213A2.77 2.77 0 0 0 12.018 0a2.77 2.77 0 0 0-2.763 2.779c0 .434.098.846.276 1.213H7.067c-2.736 0-4.954 2.238-4.954 5.002v1.667L.64 13.549c-.149.29-.149.636 0 .927l1.472 2.855v1.667C2.113 21.762 4.33 24 7.067 24h9.902c2.736 0 4.954-2.238 4.954-5.002V17.33l1.44-2.865c.143-.286.143-.622.002-.91m-12.854 2.36a2.27 2.27 0 0 1-2.261 2.273 2.27 2.27 0 0 1-2.261-2.273v-4.042A2.27 2.27 0 0 1 8.249 9.6a2.267 2.267 0 0 1 2.262 2.274zm7.285 0a2.27 2.27 0 0 1-2.26 2.273 2.27 2.27 0 0 1-2.262-2.273v-4.042A2.267 2.267 0 0 1 15.535 9.6a2.267 2.267 0 0 1 2.261 2.274z"/></symbol>
+  <symbol id="i-opencode" viewBox="0 0 24 24"><path d="M22 24H2V0h20zM17 4.8H7v14.4h10z"/></symbol>
+  <symbol id="i-qwen" viewBox="0 0 24 24"><path d="M23.919 14.545 20.817 9.17l1.47-2.544a.56.56 0 0 0 0-.566l-1.633-2.83a.57.57 0 0 0-.49-.283h-6.207L12.487.402a.57.57 0 0 0-.49-.284H8.732a.56.56 0 0 0-.49.284L5.139 5.775h-2.94a.56.56 0 0 0-.49.284L.077 8.887a.56.56 0 0 0 0 .567L3.18 14.83l-1.47 2.545a.56.56 0 0 0 0 .566l1.634 2.83a.57.57 0 0 0 .49.283h6.205l1.47 2.545a.57.57 0 0 0 .49.284h3.266a.57.57 0 0 0 .49-.284l3.104-5.375h2.94a.57.57 0 0 0 .49-.283l1.634-2.828a.55.55 0 0 0-.004-.568M8.733.686l1.634 2.828-1.634 2.828H21.8L20.164 9.17H7.425L5.63 6.06Zm1.306 19.801-6.205-.002 1.634-2.83h3.265L2.201 6.344h3.267q3.182 5.517 6.367 11.032zm10.124-5.66L18.53 12l-6.532 11.315-1.634-2.83c2.129-3.673 4.25-7.351 6.373-11.028h3.592l3.102 5.374z"/></symbol>
+  <symbol id="i-kilo" viewBox="0 0 24 24"><path fill-rule="evenodd" d="M0 0v24h24V0H0zm22.222 22.222H1.778V1.778h20.444v20.444zm-7.555-4.964h2.222v1.778h-2.794L12.89 17.83v-2.794h1.778v2.222zm4 0h-1.778v-2.222h-2.222v-1.778h2.793l1.207 1.207v2.793zm-7.556-2.591H9.333v-1.778h1.778v1.778zm-5.778-1.778h1.778v4h4v1.778H6.54L5.333 17.46V12.89zm13.334-3.556v1.778h-5.778V9.333h1.987V7.111h-1.987V5.333h2.558l1.206 1.207v2.793h2.014zm-11.556-2h2.222l1.778 1.778v2H9.333v-2H7.111v2H5.333V5.333h1.778v2zm4 0H9.333v-2h1.778v2z"/></symbol>
+  <symbol id="i-amp" viewBox="0 0 24 24" fill-rule="evenodd"><path d="M15.087 23.18L12.03 24l-2.097-7.823-5.738 5.738-2.251-2.251 5.718-5.719-7.769-2.082.82-3.057 11.294 3.08 3.08 11.295z"/><path d="M19.505 18.762l-3.057.82-2.564-9.573-9.572-2.564.819-3.057 11.295 3.079 3.08 11.295z"/><path d="M23.893 14.374l-3.057.82-2.565-9.572L8.7 3.057 9.52 0l11.295 3.08 3.079 11.294z"/></symbol>
   <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 7.5a2 2 0 0 1 2-2H10l2 2.5h6.5a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></symbol>
 </svg>
 
@@ -443,27 +457,26 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
   var TOKEN = (document.querySelector('meta[name="laya-token"]') || {}).content || "";
   var agentsSig = "", agentList = [], pending = null;
   var STATES = {
-    "installed": { cls: "ok", pill: "Protected", head: function (a) { return a.name + " is protected."; }, body: function (a) { return "Each shell command is judged before " + a.name + " runs it. You can remove the hook any time; the settings file is backed up first."; }, btn: "Remove", action: "uninstall", cta: "ok", ctaText: "Protected" },
-    "not-installed": { cls: "warn", pill: "Not protected", head: function (a) { return a.name + " isn't protected yet."; }, body: "Installing adds a hook that sends each shell command to laya-guard before it runs. You see the exact change first, and the settings file is backed up.", btn: "Install hook", action: "install", primary: true, cta: "primary", ctaText: "Install hook" },
-    "manual": { cls: "", pill: "Hook added by hand", head: "A laya-guard hook is already in the file.", body: "It was written by hand, so laya-guard leaves it alone. Let laya-guard manage it to get backups and repairs.", btn: "Let laya-guard manage it", action: "install", force: true, cta: "quiet", ctaText: "Review hook" },
-    "broken": { cls: "bad", pill: "Needs repair", head: "The hook points to a file that is gone.", body: "This happens after laya-guard is reinstalled or moved. Repair points the hook at the current install.", btn: "Repair hook", action: "install", primary: true, cta: "bad", ctaText: "Repair hook" },
-    "unsupported": { cls: "", pill: "Found", btn: null, cta: "quiet", ctaText: "Not supported yet" },
+    "installed": { cls: "ok", pill: "Protected", head: function (a) { return a.name + " is protected."; }, body: function (a) { return "Each shell command is judged before " + a.name + " runs it. You can remove the hook any time; whatever was there is backed up first."; }, btn: "Remove", action: "uninstall", cta: "ok", ctaText: "Protected" },
+    "not-installed": { cls: "warn", pill: "Not protected", head: function (a) { return a.name + " isn't protected yet."; }, body: "Installing adds a hook that sends each shell command to laya-guard before it runs. You see the exact change first, and anything it replaces is backed up.", btn: "Install hook", action: "install", primary: true, cta: "primary", ctaText: "Install hook" },
+    "manual": { cls: "", pill: "Set up by hand", head: "A laya-guard hook is already there.", body: "It wasn't written by `laya-guard install`, so laya-guard leaves it alone. Let laya-guard manage it to get backups and repairs.", btn: "Let laya-guard manage it", action: "install", force: true, cta: "quiet", ctaText: "Review hook" },
+    "broken": { cls: "bad", pill: "Needs repair", head: "The hook needs repairing.", body: function (a) { return (a.detail ? a.detail + ". " : "") + "Repair rewrites it for the current install."; }, btn: "Repair hook", action: "install", primary: true, cta: "bad", ctaText: "Repair hook" },
     "invalid": { cls: "bad", pill: "Settings unreadable", head: "The settings file isn't valid JSON.", body: "Nothing was changed. Fix the file first, then reload this page.", btn: null, cta: "bad", ctaText: "Settings invalid" }
   };
   function stateOf(a) { return STATES[a.state] || STATES.invalid; }
   function say(v, a) { return typeof v === "function" ? v(a) : v; }
-  var MARKS = { "claude-code": "claudecode", "codex": "codex", "cursor": "cursor-logo", "gemini-cli": "gemini" };
+  var MARKS = { "claude-code": "claudecode", "codex": "codex", "cursor": "cursor-logo", "gemini-cli": "gemini", "qwen-code": "qwen", "windsurf": "windsurf",
+                "copilot-cli": "copilot", "cline": "cline", "opencode": "opencode", "kilo": "kilo", "amp": "amp" };
   function agentIcon(id) { return MARKS[id] ? ic(MARKS[id], "mark") : ic("shield"); }
-  // the agent the sidebar button talks about: the first protectable one that still needs the hook
-  function primary() {
-    var sup = agentList.filter(function (a) { return a.supported; });
-    for (var i = 0; i < sup.length; i++) if (sup[i].state === "not-installed" || sup[i].state === "broken") return sup[i];
-    for (var j = 0; j < sup.length; j++) if (sup[j].state !== "installed") return sup[j];
-    return sup[0] || null;
-  }
+  // the agents the page talks about: found on this machine, or already carrying a hook, or picked from the "+" list
+  function relevant(a) { return !!(a.found || a.state !== "not-installed"); }
+  function shown(a) { return relevant(a) || a.id === state.agent; }
+  function needing() { return agentList.filter(function (a) { return relevant(a) && (a.state === "not-installed" || a.state === "broken"); }); }
+  // the agent the sidebar button acts on: the first relevant one that still needs the hook
+  function primary() { return needing()[0] || null; }
   function selected() {
     for (var i = 0; i < agentList.length; i++) if (agentList[i].id === state.agent) return agentList[i];
-    return agentList[0] || null;
+    return agentList.filter(shown)[0] || agentList[0] || null;
   }
   function startChange(a) { var s = stateOf(a); if (s.btn) openSheet(a, s.action, s.force || (s.action === "install" && a.managed === false)); }
 
@@ -478,16 +491,23 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
     });
   }
 
-  // the one button pinned under the nav: install, repair, or a quiet "Protected"
+  // the one button pinned under the nav: install the hook where it's missing, or a quiet "Protected"
   function renderCta() {
-    var b = $("cta"), a = primary();
+    var b = $("cta"), rel = agentList.filter(relevant), need = needing();
     clear(b);
-    if (!a) { b.hidden = true; return; }
-    var s = stateOf(a);
+    if (!rel.length) { b.hidden = true; return; }
     b.hidden = false;
-    b.className = "cta " + s.cta;
-    b.appendChild(ic(s.cls === "ok" ? "check" : "shield"));
-    b.appendChild(el("span", null, document.createTextNode(s.ctaText), el("span", { "class": "sub", text: a.name })));
+    if (need.length) {
+      var broken = need.some(function (a) { return a.state === "broken"; });
+      b.className = "cta " + (broken ? "bad" : "primary");
+      b.appendChild(ic("shield"));
+      b.appendChild(el("span", null, document.createTextNode(broken && need.length === 1 ? "Repair hook" : "Install hook"),
+        el("span", { "class": "sub", text: need.length === 1 ? need[0].name : need.length + " agents need it" })));
+    } else {
+      b.className = "cta ok";
+      b.appendChild(ic("check"));
+      b.appendChild(el("span", null, document.createTextNode("Protected"), el("span", { "class": "sub", text: rel.length === 1 ? rel[0].name : rel.length + " agents" })));
+    }
   }
 
   function renderAgentsView() {
@@ -498,26 +518,36 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
     state.agent = a.id;
     var s = stateOf(a), found = a.via && a.via.length ? a.via.join(", ") : "Not found on this machine";
     box.appendChild(el("div", { "class": "pane-head" },
-      el("span", { "class": "tile-lg ag-" + a.id }, a.supported ? ic("folder") : agentIcon(a.id)),
-      el("div", null, el("h2", { text: a.supported ? "All projects" : a.name }), el("div", { "class": "sub", text: a.supported ? a.path : "No hook support yet" })),
+      el("span", { "class": "tile-lg ag-" + a.id }, ic("folder")),
+      el("div", null, el("h2", { text: "All projects" }), el("div", { "class": "sub", text: a.path })),
       el("span", { "class": "pill " + s.cls }, el("i", { "class": "dot " + s.cls }), s.pill)));
     box.appendChild(el("div", { "class": "label", text: "Agents on this machine" }));
     var tiles = el("div", { "class": "tiles" });
-    agentList.forEach(function (ag) {
+    agentList.filter(shown).forEach(function (ag) {
       var st = stateOf(ag);
       var tile = el("button", { type: "button", "class": "tile ag-" + ag.id, "aria-pressed": String(ag.id === a.id), title: ag.name + ": " + st.pill }, agentIcon(ag.id), el("i", { "class": "sdot " + st.cls }));
       tile.addEventListener("click", function () { state.agent = ag.id; renderAgentsView(); });
       tiles.appendChild(el("div", { "class": "tilebox" }, tile, el("span", { "class": "tilelabel", text: ag.name })));
     });
-    tiles.appendChild(el("div", { "class": "tilebox" },
-      el("span", { "class": "tile add", title: "laya-guard can protect Claude Code and Cursor so far", role: "img", "aria-label": "More agents are not supported yet" }, ic("plus")),
-      el("span", { "class": "tilelabel", text: "More later" })));
+    var hidden = agentList.filter(function (ag) { return !shown(ag); });
+    if (hidden.length) {
+      var plus = el("button", { type: "button", "class": "tile add", title: "Agents laya-guard can protect that weren't found here", "aria-expanded": String(!!state.more), "aria-label": "Show the agents that weren't found on this machine" }, ic("plus"));
+      plus.addEventListener("click", function () { state.more = !state.more; renderAgentsView(); });
+      tiles.appendChild(el("div", { "class": "tilebox" }, plus, el("span", { "class": "tilelabel", text: state.more ? "Hide" : "Not found" })));
+    }
     box.appendChild(tiles);
+    if (hidden.length && state.more) {
+      var chips = el("div", { "class": "chips" });
+      hidden.forEach(function (ag) {
+        var c = el("button", { type: "button", "class": "chip", text: ag.name });
+        c.addEventListener("click", function () { state.agent = ag.id; renderAgentsView(); });
+        chips.appendChild(c);
+      });
+      box.appendChild(el("div", { "class": "more-agents" }, el("div", { "class": "label", text: "Not found on this machine" }), chips));
+    }
 
-    var head = a.supported ? say(s.head, a) : a.name + " is on this machine.";
-    var text = a.supported ? say(s.body, a) : "laya-guard can't install a hook for it yet. It can protect Claude Code and Cursor so far.";
-    var body = el("div", { "class": "agent-body" }, el("h3", { text: head }), el("p", { text: text }));
-    if (a.supported && !a.found) body.appendChild(el("p", { text: a.name + " wasn't found on this machine, but you can set the hook up now." }));
+    var body = el("div", { "class": "agent-body" }, el("h3", { text: say(s.head, a) }), el("p", { text: say(s.body, a) }));
+    if (!a.found) body.appendChild(el("p", { text: a.name + " wasn't found on this machine, but you can set the hook up now." }));
     if (a.state === "invalid" && a.detail) body.appendChild(el("p", { text: a.detail }));
     if (s.btn) {
       var b = el("button", { type: "button", "class": "btn" + (s.primary ? " primary" : ""), text: s.btn });
@@ -525,14 +555,13 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
       body.appendChild(el("div", { "class": "row" }, b));
     }
     var facts = el("dl", { "class": "agent-facts" }, el("dt", { text: "Found" }), el("dd", { text: found }));
-    if (a.supported) {
-      facts.appendChild(el("dt", { text: "File" })); facts.appendChild(el("dd", { text: a.path }));
-      facts.appendChild(el("dt", { text: "Applies to" })); facts.appendChild(el("dd", { text: "Every project you open with " + a.name }));
-      facts.appendChild(el("dt", { text: "Changes" })); facts.appendChild(el("dd", { text: "Only the laya-guard hook entry; your other settings stay" }));
-    } else {
-      facts.appendChild(el("dt", { text: "Hook" })); facts.appendChild(el("dd", { text: "Not supported yet" }));
-    }
+    facts.appendChild(el("dt", { text: a.kind === "json" ? "File" : "Writes" })); facts.appendChild(el("dd", { text: a.path }));
+    facts.appendChild(el("dt", { text: "Applies to" })); facts.appendChild(el("dd", { text: "Every project you open with " + a.name }));
+    facts.appendChild(el("dt", { text: "Changes" })); facts.appendChild(el("dd", { text: a.kind === "json" ? "Only the laya-guard hook entry; your other settings stay" : "Adds one file; nothing else is touched" }));
+    facts.appendChild(el("dt", { text: "Test calls" })); facts.appendChild(el("dd", { text: a.probes ? "Two run through the hook right after installing" : a.name + " loads this itself, so laya-guard can't run test calls for it" }));
+    if (a.follow_up) { facts.appendChild(el("dt", { text: "Then" })); facts.appendChild(el("dd", { text: a.follow_up })); }
     body.appendChild(facts);
+    if (a.unverified) body.appendChild(el("p", { "class": "fine", text: "Heads-up: this hook format comes " + a.unverified + ". laya-guard hasn't run it against " + a.name + " itself." }));
     box.appendChild(body);
   }
 
@@ -609,7 +638,7 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
   function renderCards(d) {
     var box = $("cards"), t = d.totals;
     clear(box);
-    agentList.filter(function (a) { return a.supported; }).forEach(function (a) {
+    agentList.filter(relevant).forEach(function (a) {
       var s = stateOf(a);
       box.appendChild(attentionCard({ title: a.name, sub: s.pill + ", all projects", cls: a.state === "installed" ? "" : (s.cls === "warn" ? "warn" : s.cls === "bad" ? "bad" : ""),
         go: function () { if (a.state === "not-installed" || a.state === "broken") startChange(a); else { state.agent = a.id; setView("agents"); } } }));
@@ -805,7 +834,7 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
   }
 
   function openSheet(a, action, force) {
-    pending = { agent: a.id, name: a.name, action: action, force: !!force, diffId: null };
+    pending = { agent: a.id, name: a.name, kind: a.kind, action: action, force: !!force, diffId: null };
     $("sheet-title").textContent = (action === "install" ? "Install the hook for " : "Remove the hook from ") + a.name;
     $("sheet-lead").textContent = "Checking what would change in " + a.path + ".";
     clear($("sheet-diff")); $("sheet-diff").hidden = true; clear($("sheet-checks")); $("sheet-err").textContent = "";
@@ -818,7 +847,10 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
         return;
       }
       pending.diffId = j.diff_id;
-      $("sheet-lead").textContent = (action === "install" ? "This adds a hook to " : "This removes the hook from ") + j.path + ". Your other settings stay as they are and the file is backed up first. The JSON is re-indented, so some lines may show as changed." + ((j.notes || []).length ? " " + j.notes.join(" ") : "");
+      var what = a.kind === "json"
+        ? (action === "install" ? "This adds a hook to " : "This removes the hook from ") + j.path + ". Your other settings stay as they are and the file is backed up first. The JSON is re-indented, so some lines may show as changed."
+        : (action === "install" ? "This writes " : "This removes ") + j.path + ". Nothing else is touched, and anything it replaces is backed up first.";
+      $("sheet-lead").textContent = what + ((j.notes || []).length ? " " + j.notes.join(" ") : "");
       paintDiff(j.diff);
       $("sheet-diff").hidden = false; $("sheet-apply").disabled = false; $("sheet-apply").focus();
     }).catch(function (e) {
@@ -840,12 +872,13 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
     btn.disabled = true; $("sheet-err").textContent = "";
     api("POST", "/api/agents/" + p.agent + "/" + p.action, { scope: "user", mode: "apply", diff_id: p.diffId, force: p.force }).then(function (j) {
       $("sheet-title").textContent = p.action === "install" ? "Hook installed" : "Hook removed";
-      $("sheet-lead").textContent = "Saved to " + j.path + (j.backup ? ". The previous file is at " + j.backup + "." : ".") +
-        (p.action === "install" ? " If " + p.name + " is already open, restart it so it picks the hook up." : "");
+      $("sheet-lead").textContent = (p.action === "install" ? "Saved to " : "Removed from ") + j.path + (j.backup ? ". The previous file is at " + j.backup + "." : ".") +
+        (p.action === "install" && j.follow_up ? " " + j.follow_up : "");
       $("sheet-diff").hidden = true; btn.hidden = true; $("sheet-cancel").textContent = "Close";
       var list = $("sheet-checks");
       clear(list);
       (j.probes || []).forEach(function (c) { list.appendChild(el("li", { "class": c.ok ? "ok" : "no", text: (c.ok ? "Passed: " : "Failed: ") + c.label })); });
+      if (p.action === "install" && !(j.probes || []).length) list.appendChild(el("li", { text: "No test calls: " + p.name + " loads this itself, so laya-guard can't run it from here." }));
       pending = null;
     }).catch(function (e) { btn.disabled = false; $("sheet-err").textContent = e.message; });
   });
