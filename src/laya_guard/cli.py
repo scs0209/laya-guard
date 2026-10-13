@@ -42,6 +42,10 @@ def cmd_serve(args):
         # holds the port, exits non-zero, and is started again later.)
         print(f"laya-guard is already running on http://{args.host}:{args.port}", file=sys.stderr)
         return 1
+    import signal
+    # A stop (`kill`, launchd, systemd) must exit 0: uvicorn re-raises SIGTERM after shutting down, and launchd
+    # takes the resulting 143 for a crash and starts the server again.
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     # Load before listening: hooks time out (and fail open) if the first
     # request has to wait for the checkpoint download.
     if not args.no_warmup and not is_mock():
@@ -231,7 +235,11 @@ def cmd_service(args):
                 print(f"  log: {svc.log_hint(st.kind, home)}")
             print(f"server on port {st.port}: {'answering' if up else 'not answering'}")
             return 0
-        busy = args.service_cmd == "install" and svc.port_answers(args.host, args.port)
+        busy = False
+        if args.service_cmd == "install" and svc.port_answers(args.host, args.port):
+            st = svc.status(home)
+            # the service itself answering (a reinstall) isn't something else holding the port
+            busy = not (st.running is True and st.port == args.port)
         plan = svc.make_plan(args.service_cmd, home, bin_override=getattr(args, "bin", None),
                              host=getattr(args, "host", "127.0.0.1"), port=getattr(args, "port", svc.DEFAULT_PORT),
                              warmup=not getattr(args, "no_warmup", False), force=args.force, port_busy=busy)

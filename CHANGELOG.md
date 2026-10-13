@@ -8,7 +8,8 @@ All notable changes to this project are documented here. Versions follow
 ### Added
 
 - **`laya-guard service install | uninstall | status`**: opt-in start at login, a macOS LaunchAgent or a Linux systemd
-  user unit that runs `laya-guard serve` (restarted after a crash, 30 seconds apart at most). The file is shown as a
+  user unit that runs `laya-guard serve` (restarted after a crash, 30 seconds apart at most; `serve` exits 0 when it is
+  told to stop, so a plain `kill` isn't taken for a crash). The file is shown as a
   diff first (`--dry-run`, `--yes`), is readable only by you, and a file that `laya-guard` didn't write is left alone
   unless `--force` (it is then backed up). `--port`, `--no-warmup` (load the model on the first call: about 90 MB
   idle instead of 1.4 GB) and `--bin` are options; the `LAYA_GUARD_*` settings the server reads are copied in. The

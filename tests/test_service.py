@@ -339,6 +339,63 @@ def test_cli_reports_a_service_manager_that_is_missing_as_an_error(cli_env, home
     assert "launchctl" in capsys.readouterr().err and not service.unit_path("macos", home).exists()
 
 
+def test_cli_does_not_take_its_own_service_for_a_server_started_by_hand(cli_env, home, capsys, monkeypatch):
+    monkeypatch.setattr(service, "port_answers", lambda host, port: True)
+    for running, note in ((True, False), (False, True), (None, True)):
+        monkeypatch.setattr(service, "status", lambda home, running=running: service.ServiceStatus(
+            kind="macos", path=service.unit_path("macos", home), state="installed", running=running))
+        assert cli.main(["service", "install", "--dry-run", *cli_env]) == 0
+        assert ("Something already answers on port 8787" in capsys.readouterr().out) is note, running
+
+
+def test_serve_exits_0_when_it_is_told_to_stop(monkeypatch):
+    # uvicorn re-raises SIGTERM after a clean shutdown; launchd would take the 143 for a crash and restart it
+    import signal
+    pytest.importorskip("fastapi")
+    monkeypatch.setattr(cli, "_server_up", lambda host, port: False)
+    codes = []
+
+    def fake_run(host, port):
+        with pytest.raises(SystemExit) as stop:
+            signal.getsignal(signal.SIGTERM)(signal.SIGTERM, None)
+        codes.append(stop.value.code)
+
+    monkeypatch.setattr("laya_guard.server.run", fake_run)
+    before = signal.getsignal(signal.SIGTERM)
+    try:
+        cli.cmd_serve(type("A", (), {"host": "127.0.0.1", "port": 8787, "no_warmup": True}))
+    finally:
+        signal.signal(signal.SIGTERM, before)
+    assert codes == [0]
+
+
+def test_a_real_server_stopped_with_sigterm_exits_0(tmp_path):
+    import signal
+    import socket
+    import urllib.request
+    pytest.importorskip("uvicorn")
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    env = dict(os.environ, LAYA_GUARD_MOCK="1", LAYA_GUARD_LOG="0", PYTHONPATH=str(Path(__file__).resolve().parent.parent / "src"))
+    proc = subprocess.Popen([sys.executable, "-m", "laya_guard.cli", "serve", "--port", str(port), "--no-warmup"],
+                            env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        for _ in range(100):
+            try:
+                urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=1)
+                break
+            except OSError:
+                time.sleep(0.1)
+        else:
+            pytest.fail("the server didn't start")
+        proc.send_signal(signal.SIGTERM)
+        assert proc.wait(timeout=20) == 0
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+
+
 def test_serve_does_not_start_a_second_server_on_a_taken_port(monkeypatch, capsys):
     monkeypatch.setattr(cli, "_server_up", lambda host, port: True)
     monkeypatch.setattr("laya_guard.cli.warmup", lambda: pytest.fail("must not load the model"))
