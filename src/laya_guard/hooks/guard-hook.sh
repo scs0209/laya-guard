@@ -9,7 +9,14 @@
 url="${LAYA_GUARD_URL:-http://localhost:8787/guard}"
 input=$(cat)
 # Bash는 실제 실행될 command만 심판 (description은 실행되지 않음). 그 외 도구는 이름+입력값 평탄화.
-tool=$(echo "$input" | python3 -c "import json,sys; d=json.load(sys.stdin); a=d.get('tool_input',{}); c=a.get('command') if isinstance(a,dict) else None; flat=' '.join([str(v) for v in (a.values() if isinstance(a,dict) else [a])]); print(c if isinstance(c,str) and c else d.get('tool_name','')+': '+flat)")
+if ! tool=$(echo "$input" | python3 -c "import json,sys; d=json.load(sys.stdin); a=d.get('tool_input',{}); c=a.get('command') if isinstance(a,dict) else None; flat=' '.join([str(v) for v in (a.values() if isinstance(a,dict) else [a])]); print(c if isinstance(c,str) and c else d.get('tool_name','')+': '+flat)"); then
+  # the input wasn't JSON we can read: judging an empty command would pass it, so the fail mode decides
+  if [ "${LAYA_GUARD_FAIL:-open}" = closed ]; then
+    echo "laya-guard: could not parse the hook input; blocked (LAYA_GUARD_FAIL=closed)" >&2
+    exit 2
+  fi
+  tool=""
+fi
 # 명령이 실행될 디렉터리: npm test 등이 돌릴 package.json 스크립트를 여기서 찾는다.
 cwd=$(echo "$input" | python3 -c "import json,os,sys; c=json.load(sys.stdin).get('cwd'); print(c if isinstance(c,str) and os.path.isabs(c) else os.getcwd())" 2>/dev/null || pwd)
 payload=$(CWD="$cwd" python3 -c 'import json,os,sys; print(json.dumps({"tool_call": sys.stdin.read().strip(), "cwd": os.environ["CWD"]}))' <<< "$tool")

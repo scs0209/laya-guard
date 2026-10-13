@@ -214,7 +214,11 @@ def write_settings(settings: Settings, new_text: str) -> Path | None:
     path.parent.mkdir(parents=True, exist_ok=True)
     backup = None
     if settings.exists:
-        backup = path.with_name(f"{path.name}.laya-guard-{time.strftime('%Y%m%d-%H%M%S')}.bak")
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        backup, n = path.with_name(f"{path.name}.laya-guard-{stamp}.bak"), 1
+        while backup.exists():             # two writes in the same second must not overwrite the first backup
+            backup = path.with_name(f"{path.name}.laya-guard-{stamp}-{n}.bak")
+            n += 1
         shutil.copy2(path, backup)
     fd, tmp = tempfile.mkstemp(prefix=path.name + ".", dir=path.parent)
     try:
