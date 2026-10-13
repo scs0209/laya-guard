@@ -347,11 +347,20 @@ def _split_chain(text: str) -> list[str]:
 # 이메일·웹 같은 비신뢰 본문과 한국어 자연어에서는 `#`이 주석이 아니라 데이터다.
 _COMMENT_AFTER = " \t\n;&|()"
 
+# 영어 문장은 소문자 단어로 시작해도 셸이 아니다 ("please review #123 …"의 `#123 …`은 주석이
+# 아니다). 흔한 문장 시작 단어만 걸러내는 최선 노력 휴리스틱이다. 실제 명령이거나 셸 키워드인
+# 단어(find, which, who, let, help, if, do …)는 넣지 않는다.
+_PROSE_STARTERS = frozenset({
+    "please", "can", "could", "would", "should", "will", "what", "how", "why", "when", "where",
+    "i", "we", "you", "show", "tell", "explain", "summarize", "summarise", "describe", "review",
+    "the", "a", "an", "this", "that", "my", "our"})
+
 def _looks_like_shell(text: str) -> bool:
     for line in text.splitlines():
         s = line.strip()
         if s and not s.startswith("#"):
-            return bool(_CMD_HEAD.match(s))
+            first = s.split(None, 1)[0].rstrip(",.:;?!")
+            return bool(_CMD_HEAD.match(s)) and first not in _PROSE_STARTERS
     return False
 
 def _strip_comments(text: str) -> str:
@@ -556,7 +565,8 @@ def judge_offline(tool_call: str, fail_closed: bool = False, cwd: str | None = N
                        verdict_source="offline")
     judged = True
     seg_cwd = cwd
-    for seg in _split_chain(tool_call):
+    # 안전 레인은 주석을 뗀 명령으로 판단한다 (정규식은 위에서 원문 전체에 적용)
+    for seg in _split_chain(_strip_comments(tool_call)):
         if not _safe_command(seg):
             judged = False
         elif seg_cwd is not None:
