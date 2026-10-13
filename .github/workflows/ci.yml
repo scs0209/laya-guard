@@ -18,7 +18,8 @@ jobs:
           python-version: ${{ matrix.python-version }}
       # Intentionally lightweight: mock mode never imports `laya`/torch,
       # so CI validates logic without downloading the model checkpoint.
-      - run: pip install pyyaml pytest
+      # fastapi + httpx are only for the dashboard route tests (skipped when missing).
+      - run: pip install pyyaml pytest fastapi httpx
       - run: python -m pytest tests/ -q
       - run: LAYA_GUARD_MOCK=1 PYTHONPATH=src python eval/run_eval.py --min-acc 1.0
       - run: LAYA_GUARD_MOCK=1 PYTHONPATH=src python eval/run_eval.py --set shell --source tool --min-acc 0.96

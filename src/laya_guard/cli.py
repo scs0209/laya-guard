@@ -171,6 +171,34 @@ def cmd_status(args):
             print(f"  {'ok  ' if got == expected else 'FAIL'} {label} (exit {got}, expected {expected})")
     return 0 if all(e == g for _, e, g in (probes or [])) else 1
 
+def _server_up(host: str, port: int) -> bool:
+    import urllib.request
+    try:
+        urllib.request.urlopen(f"http://{host}:{port}/health", timeout=1)
+        return True
+    except Exception:
+        return False
+
+def cmd_dashboard(args):
+    """Open the local dashboard; start the server first if it isn't running."""
+    import threading, time, webbrowser
+    url = f"http://{args.host}:{args.port}/dashboard"
+    if _server_up(args.host, args.port):
+        print(f"dashboard: {url}")
+        if not args.no_open:
+            webbrowser.open(url)
+        return 0
+    if not args.no_open:
+        def open_when_ready():
+            for _ in range(240):             # the model can take a while to load
+                if _server_up(args.host, args.port):
+                    webbrowser.open(url)
+                    return
+                time.sleep(0.5)
+        threading.Thread(target=open_when_ready, daemon=True).start()
+    print(f"laya-guard is not running; starting it. dashboard: {url}", flush=True)
+    return cmd_serve(args)
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="laya-guard")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -213,6 +241,12 @@ def main(argv=None):
     st.add_argument("--check", action="store_true", help="also run two test calls through the installed hook")
     st.add_argument("--json", action="store_true")
     st.set_defaults(fn=cmd_status)
+
+    d = sub.add_parser("dashboard", help="open the local dashboard (starts the server if it isn't running)")
+    d.add_argument("--host", default="127.0.0.1"); d.add_argument("--port", type=int, default=8787)
+    d.add_argument("--no-open", action="store_true", help="print the URL instead of opening a browser")
+    d.add_argument("--no-warmup", action="store_true", help="skip loading the model when starting the server")
+    d.set_defaults(fn=cmd_dashboard)
     args = ap.parse_args(argv)
     return args.fn(args)
 

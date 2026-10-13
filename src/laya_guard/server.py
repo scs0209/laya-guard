@@ -2,10 +2,14 @@
 from __future__ import annotations
 import os
 import time
-from fastapi import FastAPI
+import secrets
+from datetime import datetime, timezone
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
+from . import dashboard
 from .guard import judge, is_mock
-from .log import log_verdict
+from .log import load_entries, log_enabled, log_path, log_verdict
 
 app = FastAPI(title="laya-guard")
 
@@ -45,6 +49,35 @@ def guard(req: GuardReq):
     v = _judge_and_log(text, source=req.source, cwd=cwd)
     return GuardRes(action=v.action, risk=v.risk, policy_id=v.policy_id, reason=v.reason,
                     mock=v.mock, verdict_source=v.verdict_source)
+
+def _require_loopback_host(request: Request) -> None:
+    # DNS rebinding: a page on another origin can make its hostname resolve to 127.0.0.1 and
+    # then read these responses, but the browser still sends that hostname in the Host header.
+    if not dashboard.host_allowed(request.headers.get("host")):
+        raise HTTPException(status_code=403, detail="the dashboard is only served to localhost")
+
+def _version() -> str:
+    try:
+        from importlib.metadata import version
+        return version("laya-guardrail")
+    except Exception:
+        return "unknown"
+
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard_page(request: Request):
+    _require_loopback_host(request)
+    nonce = secrets.token_urlsafe(16)
+    return HTMLResponse(dashboard.render_page(nonce), headers=dashboard.page_headers(nonce))
+
+@app.get("/api/stats")
+def api_stats(request: Request, window: str = "24h"):
+    _require_loopback_host(request)
+    if window not in dashboard.WINDOWS:
+        raise HTTPException(status_code=400, detail=f"window must be one of {', '.join(dashboard.WINDOWS)}")
+    stats = dashboard.build_stats(load_entries(), datetime.now(timezone.utc), window)
+    stats["health"] = {"ok": True, "mock": is_mock(), "version": _version(), "logging": log_enabled(),
+                       "log_path": dashboard.display_path(log_path())}
+    return JSONResponse(stats, headers=dashboard.api_headers())
 
 @app.post("/v1/systemone")
 def systemone(body: dict):

@@ -7,6 +7,15 @@ All notable changes to this project are documented here. Versions follow
 
 ### Added
 
+- `laya-guard dashboard`: a read-only local dashboard at `http://127.0.0.1:8787/dashboard`
+  (starts the server if it isn't running, `--no-open` prints the URL). A calm one-column page:
+  a sentence with the verdict counts for a 1h to all-time window, a tape with one fine line per
+  judged call (linked to the list: point at one and the other lights up), the most recent calls
+  with policy, reason, hash and length (never command text) and per-policy counts; keyboard
+  shortcuts (`j`/`k`, `enter`, `1`-`5`, `p`, `?`). Served by the existing server as
+  `GET /dashboard` and `GET /api/stats`; both answer 403 unless the `Host` header is loopback
+  (DNS rebinding), the page is self-contained under a nonce-only CSP, and it loads nothing
+  from the network. The HTML ships as package data. Roadmap: #37.
 - `laya-guard install claude-code` / `uninstall claude-code` / `status`: registers (and removes,
   and inspects) the Claude Code hook without editing JSON by hand. It writes absolute paths,
   merges into existing hooks instead of overwriting them, prints a diff, backs up the settings

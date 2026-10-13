@@ -227,8 +227,18 @@ stored** — only metadata (action, risk, policy, latency) plus a truncated SHA-
 for counting unique prompts.
 
 ```bash
-laya-guard stats   # verdict distribution, block/review rates, top policies, latency
+laya-guard stats       # verdict distribution, block/review rates, top policies, latency
+laya-guard dashboard   # the same as a local web page; starts the server if it isn't running
 ```
+
+The dashboard (`http://127.0.0.1:8787/dashboard`) is a read-only, one-column page: a sentence
+saying how many calls were judged over a 1h to all-time window and how they split, a tape with one
+fine line per judged call (blocks stand tall and red), the most recent calls (click one for its
+policy, reason, source, timing, length and hash, never the text) and per-policy counts. Point at a
+call and its line on the tape lights up, and the other way round. Keyboard: `j`/`k` move, `enter`
+details, `a` `r` `b` `0` verdict, `1`-`5` window, `p` pause, `?` help. It refuses requests whose
+`Host` isn't loopback (DNS rebinding) and loads nothing from the network. `--no-open` prints the
+URL instead of opening a browser.
 
 Disable with `LAYA_GUARD_LOG=0`, relocate with `LAYA_GUARD_LOG_PATH=...`.
 Publish the aggregates (never raw prompts) as field evidence next to benchmarks.
@@ -282,6 +292,9 @@ All patterns live in [policy.yaml](src/laya_guard/policy.yaml) — edit, add you
   `limit` (input over 256K chars or a line over 16K chars, blocked unread).
   `laya-guard check --offline --json` returns the same shape with `offline`.)
 - `POST /v1/systemone` — drop-in compatible shim for Jev-style `{state, questions}` calls
+- `GET /dashboard` — the local dashboard page; `GET /api/stats?window=1h|24h|7d|30d|all` — the
+  numbers behind it (totals, timeline, per-policy counts, recent verdicts as hash + length).
+  Both answer 403 unless the `Host` header is loopback.
 
 ## Configuration
 
