@@ -126,6 +126,20 @@ build`, `vite build`, `jest` 같은 평범한 스크립트를 차단하기 때�
 
 ### 1. Claude Code 가드 (PreToolUse 훅)
 
+```bash
+laya-guard install claude-code             # ~/.claude/settings.json. diff를 보여주고 먼저 묻습니다
+laya-guard install claude-code --scope local   # ./.claude/settings.local.json (project도 가능)
+laya-guard status --check                  # 어디에 설치됐는지, 서버는 떠 있는지, 훅이 동작하는지
+laya-guard uninstall claude-code           # `install`이 추가한 것만 제거
+```
+
+`install`은 `Bash` 도구용으로 훅을 등록하고(`--matcher`로 변경), 절대 경로를 씁니다(훅은 가상환경의
+`PATH`를 물려받지 못하는 경우가 많습니다). 변경을 diff로 보여주고, 파일을 백업하고, 쓰기 전에
+확인합니다(`--dry-run`은 보기만, `--yes`는 확인 생략). 기존 훅에 병합하고 덮어쓰지 않으며, 손으로
+쓴 `guard-hook.sh` 항목은 `--force` 없이는 건드리지 않습니다. 끝나면 훅에 시험 호출 두 개(무해한 것
+하나, 다운로드를 셸로 넘기는 것 하나)를 보내 종료 코드를 확인합니다. 훅이 bash 스크립트라 Windows는
+아직 지원하지 않습니다. 직접 하려면:
+
 [guard-hook.sh](guard-hook.sh)를 PreToolUse 훅으로 등록하세요. tool 페이로드를
 stdin으로 읽어 로컬 서버에 POST하고, `block`이면 exit 2로 해당 실행을 취소합니다.
 `review`면 `permissionDecision: "ask"` JSON을 출력해 Claude Code가 정책과 사유가 담긴 권한 프롬프트로 사람에게 묻습니다(`LAYA_GUARD_REVIEW=pass`면 예전처럼 통과). `allow`는 조용히 통과합니다. 응답할 사람이 없는 비대화형(`claude -p`)에서는 ask가 거부됩니다. Bash 도구는 에이전트가 쓴 설명이 아니라 명령만 심판합니다. 서버에 닿지 않거나 10초 안에 답이 없으면 오프라인 검사로 대체합니다([서버 장애](#서버-장애) 참조).

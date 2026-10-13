@@ -5,6 +5,23 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- `laya-guard install claude-code` / `uninstall claude-code` / `status`: registers (and removes,
+  and inspects) the Claude Code hook without editing JSON by hand. It writes absolute paths,
+  merges into existing hooks instead of overwriting them, prints a diff, backs up the settings
+  file and asks before writing (`--dry-run`, `--yes`, `--scope user|project|local`, `--matcher`,
+  `--force`). `uninstall` removes only entries it added (marked `LAYA_GUARD_MANAGED=1`); a
+  hand-written `guard-hook.sh` entry is reported and left alone unless `--force`. After installing
+  it sends two test calls through the hook and checks the exit codes; `status --check` repeats that.
+  Claude Code only for now.
+
+### Changed
+
+- The hook script now ships inside the package (`laya_guard/hooks/guard-hook.sh`, so a plain
+  `pip install` has it). `guard-hook.sh` in the repo root is a thin wrapper around it, so settings
+  that point at the old path keep working.
+
 ## [0.2.6] - 2026-10-13
 
 ### Security

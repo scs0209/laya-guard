@@ -136,6 +136,21 @@ see Supported agents above for the full list.
 
 ### 1. Guard Claude Code (PreToolUse hook)
 
+```bash
+laya-guard install claude-code             # ~/.claude/settings.json; shows a diff and asks first
+laya-guard install claude-code --scope local   # ./.claude/settings.local.json (also: project)
+laya-guard status --check                  # where it's installed, is the server up, does the hook work
+laya-guard uninstall claude-code           # removes only what `install` added
+```
+
+`install` registers the hook for the `Bash` tool (`--matcher` to change that), writes absolute
+paths (hooks often don't inherit your virtualenv's `PATH`), prints a diff, backs up the file
+and asks before writing (`--dry-run` to only look, `--yes` to skip the question). It merges into
+your existing hooks, never overwrites them, and leaves a hand-written `guard-hook.sh` entry alone
+unless you pass `--force`. Afterwards it sends two test calls through the hook (a harmless one and a
+download piped into a shell) and checks the exit codes. The hook is a bash script, so Windows isn't
+supported yet. To do it by hand instead:
+
 Register [guard-hook.sh](guard-hook.sh) as a PreToolUse hook. It reads the tool
 payload from stdin, POSTs it to the local server, and exits 2 on `block`
 (cancelling that run). `review` asks you: the hook prints a `permissionDecision: "ask"`
