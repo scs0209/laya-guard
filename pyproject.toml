@@ -1,6 +1,6 @@
 [project]
 name = "laya-guardrail"
-version = "0.2.5"
+version = "0.2.6"
 description = "Free local guardrail for AI coding agents: every tool_call judged on-device (regex + Laya model) as allow / review / block"
 readme = "README.md"
 license = { text = "MIT" }

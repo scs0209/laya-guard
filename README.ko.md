@@ -174,7 +174,7 @@ CI가 이미 이렇게 돕니다. `eval/run_eval.py --min-acc 1.0`은 판정 정
 | AgentDojo v1 공격 (심판 레벨) | **25/27 차단** | `eval/run_agentdojo.py` |
 | AgentDojo v1 정상 (심판 레벨) | **92/97 유지** (allow+review) | `eval/run_agentdojo.py` |
 | E2E 롤아웃 (qwen2.5:7b 에이전트 + 가드) | **4/4 시나리오** (1 방어, 2 미시도, 1 정상 OK) | `eval/run_rollout.py` → [결과](eval/rollout_results.md) |
-| 셸 명령 (자체: 일상 33 + 위험/우회 33, 그중 체인 10) | **64/66** (실전, `source=user`·`tool` 모두. 앞 50개는 안전 명령 레인 전 32/50·29/50) | `eval/run_eval.py --set shell` |
+| 셸 명령 (자체: 일상 35 + 위험/우회 36, 그중 체인 10) | **69/71** (실전, `source=user`·`tool` 모두. 앞 50개는 안전 명령 레인 전 32/50·29/50) | `eval/run_eval.py --set shell` |
 | 한국어 30문항 (자체) | **30/30** (MOCK·실전 모두) | `eval/run_eval.py` |
 
 두 자체 셋은 검증 대상 규칙과 함께 만들어졌습니다(한국어 셋은 MOCK 휴리스틱과, 셸 셋은
@@ -213,7 +213,7 @@ laya-guard stats   # 판정 분포, block/review율, 상위 정책, 지연시간
 | 판정 | allow / **review** / block + risk | allow / confirm / block | 이진 판정 | valid + score | 점수 / 임계값 |
 | 한국어 평가 | ✅ 30문항 30/30 | ❌ 확인 불가 | ❌ | ❌ | ❌ |
 | AgentDojo 수치 | ✅ 25/27, 92/97 (심판 레벨, 자체 측정) | ❌ 확인 불가 | ❌ | ❌ | ❌ |
-| 상태 | 개발 중, v0.2.5, MIT | MIT | ⚠️ 2025-05 아카이브 | ⚠️ 아카이브, 미유지보수 | 알파, Apache-2.0 |
+| 상태 | 개발 중, v0.2.6, MIT | MIT | ⚠️ 2025-05 아카이브 | ⚠️ 아카이브, 미유지보수 | 알파, Apache-2.0 |
 
 이 표의 어떤 도구도 제3자 검증 AgentDojo 점수는 없습니다. 우리 수치도 자체 측정·심판
 레벨입니다 ([한계](#한계) 참조).

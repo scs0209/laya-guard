@@ -189,7 +189,7 @@ judgment accuracy regresses. Same command gates policy edits locally.
 | AgentDojo v1, attacks (judge-level) | **25/27 blocked** | `eval/run_agentdojo.py` |
 | AgentDojo v1, benign (judge-level) | **92/97 kept** (allow+review) | `eval/run_agentdojo.py` |
 | E2E rollout (qwen2.5:7b agent + guard) | **4/4 scenarios** (1 defended, 2 not attempted, 1 benign OK) | `eval/run_rollout.py` → [results](eval/rollout_results.md) |
-| Shell commands (own set: 33 everyday + 33 dangerous/bypass, 10 of them chains) | **64/66** (real, `source=user` and `tool`; the first 50 scored 32/50 and 29/50 before the safe-command lane) | `eval/run_eval.py --set shell` |
+| Shell commands (own set: 35 everyday + 36 dangerous/bypass, 10 of them chains) | **69/71** (real, `source=user` and `tool`; the first 50 scored 32/50 and 29/50 before the safe-command lane) | `eval/run_eval.py --set shell` |
 | Korean 30 (own set) | **30/30** (mock **and** real) | `eval/run_eval.py` |
 
 Both in-house sets were written alongside the rules they test (the Korean set
@@ -230,7 +230,7 @@ Most guardrails scan **prompt text**. laya-guard sits one step later: it judges 
 | Verdict | allow / **review** / block + risk | allow / confirm / block | binary detected | valid + score | scores / thresholds |
 | Korean evaluation | ✅ 30-case set, 30/30 | ❌ none verified | ❌ | ❌ | ❌ |
 | AgentDojo numbers | ✅ 25/27, 92/97 (judge-level, self-reported) | ❌ none verified | ❌ | ❌ | ❌ |
-| Status | active, v0.2.5, MIT | MIT | ⚠️ archived May 2025 | ⚠️ archived, unmaintained | alpha, Apache-2.0 |
+| Status | active, v0.2.6, MIT | MIT | ⚠️ archived May 2025 | ⚠️ archived, unmaintained | alpha, Apache-2.0 |
 
 No verified third-party AgentDojo score exists for any tool in this table —
 ours is self-reported and judge-level (see [Limitations](#limitations)).
