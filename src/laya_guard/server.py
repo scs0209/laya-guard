@@ -18,7 +18,6 @@ app = FastAPI(title="laya-guard")
 # Changing an agent's settings from the dashboard needs this token. It is made when the server starts
 # and only the dashboard page carries it; nothing sends CORS headers, so another site can't read it.
 _WRITE_TOKEN = secrets.token_urlsafe(32)
-AGENT_NAMES = {"claude-code": "Claude Code"}
 
 
 def _judge_and_log(text: str, source: str, cwd: str | None = None):
@@ -99,14 +98,19 @@ def _require_write_access(request: Request) -> None:
 
 @app.get("/api/agents")
 def api_agents(request: Request):
-    """Where the hook stands for each agent (user scope only: that is what the dashboard changes)."""
+    """The agents that look installed on this machine, and where the hook stands for the ones laya-guard
+    can protect (user scope only: that is what the dashboard changes). Others come back as "unsupported"."""
     _require_loopback_host(request)
-    agents = []
-    for agent in install.AGENTS:
-        st = install.status("user", Path.home(), Path.cwd())
-        agents.append({"id": agent, "name": AGENT_NAMES.get(agent, agent), "scope": "user",
-                       "path": dashboard.display_path(st.path), "state": st.state, "detail": st.detail,
-                       "managed": install.is_managed(st.command) if st.command else None})
+    home, agents = Path.home(), []
+    for found in install.detect_agents(home):
+        if not (found["found"] or found["supported"]):
+            continue                      # not here and nothing to install: don't list it
+        row = dict(found, state="unsupported", scope=None, path=None, detail="", managed=None)
+        if found["supported"]:
+            st = install.status("user", home, Path.cwd())
+            row.update(scope="user", path=dashboard.display_path(st.path), state=st.state, detail=st.detail,
+                       managed=install.is_managed(st.command) if st.command else None)
+        agents.append(row)
     return JSONResponse({"agents": agents}, headers=dashboard.api_headers())
 
 class AgentReq(BaseModel):

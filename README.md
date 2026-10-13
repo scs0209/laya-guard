@@ -242,8 +242,12 @@ calls. **Agents** is described below. Keyboard: `j`/`k` move through the calls, 
 rebinding) and loads nothing from the network. `--no-open` prints the URL instead of opening a browser.
 
 **Agents** is the click version of `laya-guard install`, and the blue button pinned at the bottom of
-the sidebar does the same in one click. It shows whether the Claude Code hook is in
-`~/.claude/settings.json`, and **Install hook** / **Remove** open a sheet with the exact diff.
+the sidebar does the same in one click. It finds the coding agents on this machine by itself (an
+executable on `PATH`, an app bundle or a config directory such as `~/.codex`; read-only, it never
+opens those files) and shows each as a tile. Claude Code is the one laya-guard can protect so far:
+its tile shows whether the hook is in `~/.claude/settings.json`, and **Install hook** / **Remove**
+open a sheet with the exact diff. The others (Codex CLI, Cursor, Gemini CLI) are listed as found
+but not supported yet.
 Nothing is written until you press *Apply change*; then the settings file is backed up
 (`settings.json.laya-guard-<time>.bak`), written atomically, and two test calls go through the
 hook to check it. Only the user scope can be changed from the page; use the CLI for `--scope
@@ -306,7 +310,7 @@ All patterns live in [policy.yaml](src/laya_guard/policy.yaml) — edit, add you
 - `GET /dashboard` — the local dashboard page; `GET /api/stats?window=1h|24h|7d|30d|all` — the
   numbers behind it (totals, timeline, per-policy counts, recent verdicts as hash + length).
   Both answer 403 unless the `Host` header is loopback.
-- `GET /api/agents` — where the hook stands for each agent. `POST /api/agents/{agent}/{install|uninstall}`
+- `GET /api/agents` — the agents found on this machine and, for Claude Code, where the hook stands. `POST /api/agents/{agent}/{install|uninstall}`
   with `{"mode": "preview"}` returns the diff and its `diff_id`; `{"mode": "apply", "diff_id": ...}`
   makes the change. Needs the page's token and a same-origin JSON request (see above).
 ## Configuration

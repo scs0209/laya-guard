@@ -56,6 +56,65 @@ def cli_path(override: str | None = None) -> Path:
     raise InstallError("can't find the `laya-guard` executable; pass its absolute path with --bin")
 
 
+# --- finding the agents on this machine ---------------------------------------------------------
+
+@dataclass(frozen=True)
+class KnownAgent:
+    id: str
+    name: str
+    commands: tuple[str, ...] = ()     # executables looked for on PATH
+    dirs: tuple[str, ...] = ()         # config directories under $HOME
+    apps: tuple[str, ...] = ()         # macOS app bundles
+
+
+KNOWN_AGENTS = (
+    KnownAgent("claude-code", "Claude Code", ("claude",), (".claude",)),
+    KnownAgent("codex", "Codex CLI", ("codex",), (".codex",)),
+    KnownAgent("cursor", "Cursor", ("cursor-agent", "cursor"), (".cursor",), ("Cursor.app",)),
+    KnownAgent("gemini-cli", "Gemini CLI", ("gemini",), (".gemini",)),
+)
+
+
+def _search_dirs(home: Path) -> list[Path]:
+    """PATH, plus the places agents usually land when the server wasn't started from a login shell."""
+    dirs = [Path(p) for p in os.environ.get("PATH", "").split(os.pathsep) if p]
+    dirs += [home / ".local" / "bin", home / ".npm-global" / "bin", home / ".bun" / "bin",
+             home / ".volta" / "bin", Path("/opt/homebrew/bin"), Path("/usr/local/bin")]
+    return dirs
+
+
+def _app_dirs(home: Path) -> list[Path]:
+    return [Path("/Applications"), home / "Applications"]
+
+
+def _tilde(path: Path, home: Path) -> str:
+    s = str(path)
+    return "~" + s[len(str(home)):] if s.startswith(str(home) + os.sep) else s
+
+
+def detect_agents(home: Path) -> list[dict]:
+    """Which known agents look present on this machine: an executable on PATH, an app bundle, or
+    a config directory (`how` is "installed" for the first two, "config" for the last, else None).
+    Read-only: it reports where it looked, never what is inside those files."""
+    search, apps, found = _search_dirs(home), _app_dirs(home), []
+    for agent in KNOWN_AGENTS:
+        installed: list[str] = []
+        for cmd in agent.commands:
+            for d in search:
+                p = d / cmd
+                if p.is_file() and os.access(p, os.X_OK):
+                    installed.append(f"{cmd} in {_tilde(d, home)}")
+                    break
+        for app in agent.apps:
+            if any((d / app).is_dir() for d in apps):
+                installed.append(app)
+        config = [f"~/{sub}" for sub in agent.dirs if (home / sub).is_dir()]
+        found.append({"id": agent.id, "name": agent.name, "found": bool(installed or config),
+                      "how": "installed" if installed else "config" if config else None,
+                      "via": installed + config, "supported": agent.id in AGENTS})
+    return found
+
+
 def settings_path(scope: str, home: Path, project_dir: Path) -> Path:
     if scope == "user":
         return home / ".claude" / "settings.json"

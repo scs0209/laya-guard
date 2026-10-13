@@ -276,3 +276,24 @@ def test_status_flags_a_hook_whose_script_is_gone(home, capsys):
     proj.mkdir()                                  # a different directory from HOME, so a different settings file
     assert _cli("status", "--scope", "project", "--project-dir", str(proj)) == 0
     assert "not installed" in capsys.readouterr().out
+
+
+def test_detect_agents_reads_path_apps_and_config_dirs(tmp_path, monkeypatch):
+    home, bin_dir, apps = tmp_path / "home", tmp_path / "bin", tmp_path / "Applications"
+    for d in (home, bin_dir, apps):
+        d.mkdir()
+    monkeypatch.setattr(install, "_search_dirs", lambda h: [bin_dir])
+    monkeypatch.setattr(install, "_app_dirs", lambda h: [apps])
+    assert not any(a["found"] for a in install.detect_agents(home))
+    claude = bin_dir / "claude"
+    claude.write_text("#!/bin/sh\n")
+    claude.chmod(0o755)
+    (bin_dir / "gemini").write_text("not executable")
+    (home / ".codex").mkdir()
+    (apps / "Cursor.app").mkdir()
+    got = {a["id"]: a for a in install.detect_agents(home)}
+    assert got["claude-code"]["how"] == "installed" and got["claude-code"]["supported"]
+    assert got["claude-code"]["via"][0].startswith("claude in ")
+    assert got["codex"]["how"] == "config" and got["codex"]["via"] == ["~/.codex"] and not got["codex"]["supported"]
+    assert got["cursor"]["how"] == "installed" and got["cursor"]["via"] == ["Cursor.app"]
+    assert got["gemini-cli"]["found"] is False and got["gemini-cli"]["how"] is None   # a file that can't run isn't an install

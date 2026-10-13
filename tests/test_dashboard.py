@@ -229,15 +229,17 @@ def agents(client, tmp_path, monkeypatch):
                     f'exec "{sys.executable}" -m laya_guard.cli "$@"\n')
     stub.chmod(0o755)
     monkeypatch.setattr(install, "cli_path", lambda override=None: stub)
+    monkeypatch.setattr(install, "_search_dirs", lambda h: [tmp_path / "no-bin"])     # don't see this machine's agents
+    monkeypatch.setattr(install, "_app_dirs", lambda h: [])
     page = client.get("/dashboard")
     token = re.search(r'name="laya-token" content="([^"]+)"', page.text).group(1)
     settings = home / ".claude" / "settings.json"
 
-    def post(action, body, **kw):
+    def post(action, body, agent="claude-code", **kw):
         headers = {"Content-Type": "application/json", "Origin": "http://127.0.0.1:8787", "X-Laya-Token": token}
         headers.update(kw.get("headers", {}))
         headers = {k: v for k, v in headers.items() if v is not None}
-        return client.post(f"/api/agents/claude-code/{action}", content=json.dumps(body), headers=headers)
+        return client.post(f"/api/agents/{agent}/{action}", content=json.dumps(body), headers=headers)
 
     return type("Agents", (), {"client": client, "post": staticmethod(post), "settings": settings, "home": home, "token": token})
 
@@ -249,6 +251,19 @@ def test_agents_status_is_readable_and_reports_not_installed(agents):
     assert (a["id"], a["name"], a["scope"], a["state"]) == ("claude-code", "Claude Code", "user", "not-installed")
     assert a["path"].endswith(".claude/settings.json") and a["path"].startswith("~")
     assert agents.client.get("/api/agents", headers={"host": "evil.example:8787"}).status_code == 403
+
+
+def test_agents_found_on_this_machine_are_listed_but_only_claude_code_can_change(agents):
+    (agents.home / ".codex").mkdir()
+    (agents.home / ".cursor").mkdir()
+    rows = agents.client.get("/api/agents").json()["agents"]
+    assert [r["id"] for r in rows] == ["claude-code", "codex", "cursor"]       # gemini isn't here, so it isn't listed
+    claude, codex = rows[0], rows[1]
+    assert claude["supported"] and claude["found"] is False and claude["state"] == "not-installed"
+    assert codex["found"] and codex["how"] == "config" and codex["via"] == ["~/.codex"]
+    assert codex["supported"] is False and codex["state"] == "unsupported" and codex["path"] is None
+    assert str(agents.home) not in json.dumps(rows)                              # only ~/ paths, never the full home
+    assert agents.post("install", {"mode": "preview"}, agent="codex").status_code == 404   # nothing to install for it
 
 
 def test_changing_settings_needs_every_check(agents):

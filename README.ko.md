@@ -224,8 +224,11 @@ laya-guard dashboard   # 같은 내용을 로컬 웹 페이지로 (서버가 꺼
 `--no-open`은 브라우저를 열지 않고 URL만 출력합니다.
 
 **Agents**는 `laya-guard install`의 클릭 버전이고, 사이드바 맨 아래 파란 버튼으로 같은 일을 한 번에
-할 수 있습니다. `~/.claude/settings.json`에 Claude Code 훅이 들어 있는지 보여주고, **Install hook** /
-**Remove**를 누르면 정확한 diff가 담긴 시트가 열립니다.
+할 수 있습니다. 이 컴퓨터에 있는 코딩 에이전트는 스스로 찾아서(`PATH`의 실행 파일, 앱 번들, `~/.codex` 같은
+설정 폴더. 읽기 전용이며 그 파일의 내용은 열지 않음) 타일로 보여줍니다. 지금 laya-guard가 보호할 수 있는 것은
+Claude Code이고, 그 타일은 `~/.claude/settings.json`에 훅이 들어 있는지 보여주며 **Install hook** /
+**Remove**를 누르면 정확한 diff가 담긴 시트가 열립니다. 나머지(Codex CLI, Cursor, Gemini CLI)는
+"찾았지만 아직 지원하지 않음"으로 표시됩니다.
 *Apply change*를 누르기 전에는 아무것도 쓰지 않고, 누르면 설정 파일을 백업하고
 (`settings.json.laya-guard-<시각>.bak`) 원자적으로 쓴 뒤, 훅을 통해 테스트 호출 두 건을 보내 확인합니다.
 페이지에서는 user 범위만 바꿀 수 있고, `--scope project|local`은 CLI를 쓰세요. 페이지가 파일을 쓰는
@@ -286,7 +289,7 @@ id가 모두 필요합니다(그 사이 파일이 바뀌었으면 409가 나오�
 - `POST /v1/systemone` — Jev식 `{state, questions}` 호출용 드롭인 shim
 - `GET /dashboard` — 로컬 대시보드 페이지, `GET /api/stats?window=1h|24h|7d|30d|all` — 그 뒤의
   수치(합계, 추이, 정책별 건수, 최근 판정은 해시와 길이). 둘 다 `Host`가 루프백이 아니면 403.
-- `GET /api/agents` — 에이전트별 훅 상태. `POST /api/agents/{agent}/{install|uninstall}`에
+- `GET /api/agents` — 이 컴퓨터에서 찾은 에이전트와, Claude Code의 훅 상태. `POST /api/agents/{agent}/{install|uninstall}`에
   `{"mode": "preview"}`를 보내면 diff와 `diff_id`를, `{"mode": "apply", "diff_id": ...}`를 보내면
   실제 변경을 합니다. 페이지의 토큰과 같은 출처의 JSON 요청이 필요합니다(위 설명 참고).
 ## 설정

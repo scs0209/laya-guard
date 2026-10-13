@@ -144,6 +144,7 @@ button.card:hover { background: var(--card-hi); }
 .tile:hover { background: var(--card-hi); }
 .tile[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 4px var(--ring); }
 .tile .ic { width: 26px; height: 26px; }
+.tile.off { color: var(--muted); }
 .tile.add { border-style: dashed; background: transparent; color: var(--faint); cursor: default; }
 .tile .sdot { position: absolute; right: -4px; bottom: -4px; width: 13px; height: 13px; border-radius: 50%; border: 2.5px solid var(--pane); background: var(--faint); }
 .tile .sdot.ok { background: var(--ok); } .tile .sdot.warn { background: var(--warn); } .tile .sdot.bad { background: var(--bad); }
@@ -259,6 +260,9 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
   <symbol id="i-ban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M5.7 5.7l12.6 12.6"/></symbol>
   <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
   <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4"/></symbol>
+  <symbol id="i-terminal" viewBox="0 0 24 24"><path d="M5 7.5l5 4.5-5 4.5M12.5 17h6.5"/></symbol>
+  <symbol id="i-cursor" viewBox="0 0 24 24"><path d="M5.5 3.5l13 7.2-5.6 1.8-1.9 5.8z"/></symbol>
+  <symbol id="i-star4" viewBox="0 0 24 24"><path d="M12 3c.7 5 3.4 7.7 9 9-5.6 1.3-8.3 4-9 9-.7-5-3.4-7.7-9-9 5.6-1.3 8.3-4 9-9z"/></symbol>
   <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 7.5a2 2 0 0 1 2-2H10l2 2.5h6.5a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></symbol>
 </svg>
 
@@ -380,7 +384,7 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
   var WORD = { allow: "Allowed", review: "Review", block: "Blocked" };
   var VIEWS = ["overview", "agents", "calls", "policies"];
   var TITLES = { overview: "Overview", agents: "Agents", calls: "Calls", policies: "Policies" };
-  var state = { view: "overview", window: "24h", filter: "all", query: "", paused: false, data: null, sig: "", sel: null, seen: null, drawn: false };
+  var state = { agent: null, view: "overview", window: "24h", filter: "all", query: "", paused: false, data: null, sig: "", sel: null, seen: null, drawn: false };
 
   function $(id) { return document.getElementById(id); }
   function el(tag, props) {
@@ -438,9 +442,17 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
     "not-installed": { cls: "warn", pill: "Not protected", head: "Claude Code isn't protected yet.", body: "Installing adds a hook that sends each Bash call to laya-guard before it runs. You see the exact change first, and the settings file is backed up.", btn: "Install hook", action: "install", primary: true, cta: "primary", ctaText: "Install hook" },
     "manual": { cls: "", pill: "Hook added by hand", head: "A laya-guard hook is already in the file.", body: "It was written by hand, so laya-guard leaves it alone. Let laya-guard manage it to get backups and repairs.", btn: "Let laya-guard manage it", action: "install", force: true, cta: "quiet", ctaText: "Review hook" },
     "broken": { cls: "bad", pill: "Needs repair", head: "The hook points to a file that is gone.", body: "This happens after laya-guard is reinstalled or moved. Repair points the hook at the current install.", btn: "Repair hook", action: "install", primary: true, cta: "bad", ctaText: "Repair hook" },
+    "unsupported": { cls: "", pill: "Found", btn: null, cta: "quiet", ctaText: "Not supported yet" },
     "invalid": { cls: "bad", pill: "Settings unreadable", head: "The settings file isn't valid JSON.", body: "Nothing was changed. Fix the file first, then reload this page.", btn: null, cta: "bad", ctaText: "Settings invalid" }
   };
   function stateOf(a) { return STATES[a.state] || STATES.invalid; }
+  var ICONS = { "claude-code": "spark", "codex": "terminal", "cursor": "cursor", "gemini-cli": "star4" };
+  // the agent the sidebar button and the overview card talk about: the first one laya-guard can protect
+  function primary() { for (var i = 0; i < agentList.length; i++) if (agentList[i].supported) return agentList[i]; return null; }
+  function selected() {
+    for (var i = 0; i < agentList.length; i++) if (agentList[i].id === state.agent) return agentList[i];
+    return agentList[0] || null;
+  }
   function startChange(a) { var s = stateOf(a); if (s.btn) openSheet(a, s.action, s.force || (s.action === "install" && a.managed === false)); }
 
   function api(method, url, body) {
@@ -456,7 +468,7 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
 
   // the one button pinned under the nav: install, repair, or a quiet "Protected"
   function renderCta() {
-    var b = $("cta"), a = agentList[0];
+    var b = $("cta"), a = primary();
     clear(b);
     if (!a) { b.hidden = true; return; }
     var s = stateOf(a);
@@ -469,37 +481,46 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
   function renderAgentsView() {
     var box = $("agent-pane");
     clear(box);
-    var a = agentList[0];
-    if (!a) { box.appendChild(el("p", { "class": "muted", text: "Reading the agent settings." })); return; }
-    var s = stateOf(a);
+    var a = selected();
+    if (!a) { box.appendChild(el("p", { "class": "muted", text: "Looking for coding agents on this machine." })); return; }
+    state.agent = a.id;
+    var s = stateOf(a), found = a.via && a.via.length ? a.via.join(", ") : "Not found on this machine";
     box.appendChild(el("div", { "class": "pane-head" },
-      el("span", { "class": "tile-lg" }, ic("folder")),
-      el("div", null, el("h2", { text: "All projects" }), el("div", { "class": "sub", text: a.path })),
+      el("span", { "class": "tile-lg" }, ic(a.supported ? "folder" : (ICONS[a.id] || "spark"))),
+      el("div", null, el("h2", { text: a.supported ? "All projects" : a.name }), el("div", { "class": "sub", text: a.supported ? a.path : "No hook support yet" })),
       el("span", { "class": "pill " + s.cls }, el("i", { "class": "dot " + s.cls }), s.pill)));
-    box.appendChild(el("div", { "class": "label", text: "Agents" }));
+    box.appendChild(el("div", { "class": "label", text: "Agents on this machine" }));
     var tiles = el("div", { "class": "tiles" });
     agentList.forEach(function (ag) {
       var st = stateOf(ag);
-      tiles.appendChild(el("div", { "class": "tilebox" },
-        el("button", { type: "button", "class": "tile", "aria-pressed": "true", title: ag.name + ": " + st.pill }, ic("spark"), el("i", { "class": "sdot " + st.cls })),
-        el("span", { "class": "tilelabel", text: ag.name })));
+      var tile = el("button", { type: "button", "class": "tile" + (ag.supported ? "" : " off"), "aria-pressed": String(ag.id === a.id), title: ag.name + ": " + st.pill }, ic(ICONS[ag.id] || "spark"), el("i", { "class": "sdot " + st.cls }));
+      tile.addEventListener("click", function () { state.agent = ag.id; renderAgentsView(); });
+      tiles.appendChild(el("div", { "class": "tilebox" }, tile, el("span", { "class": "tilelabel", text: ag.name })));
     });
     tiles.appendChild(el("div", { "class": "tilebox" },
-      el("span", { "class": "tile add", title: "Claude Code is the only agent supported so far", role: "img", "aria-label": "More agents are not supported yet" }, ic("plus")),
+      el("span", { "class": "tile add", title: "laya-guard can only protect Claude Code so far", role: "img", "aria-label": "More agents are not supported yet" }, ic("plus")),
       el("span", { "class": "tilelabel", text: "More later" })));
     box.appendChild(tiles);
 
-    var body = el("div", { "class": "agent-body" }, el("h3", { text: s.head }), el("p", { text: s.body }));
+    var head = a.supported ? s.head : a.name + " is on this machine.";
+    var text = a.supported ? s.body : "laya-guard can't install a hook for it yet. Claude Code is the only agent it can protect so far.";
+    var body = el("div", { "class": "agent-body" }, el("h3", { text: head }), el("p", { text: text }));
+    if (a.supported && !a.found) body.appendChild(el("p", { text: "Claude Code wasn't found on this machine, but you can set the hook up now." }));
     if (a.state === "invalid" && a.detail) body.appendChild(el("p", { text: a.detail }));
     if (s.btn) {
       var b = el("button", { type: "button", "class": "btn" + (s.primary ? " primary" : ""), text: s.btn });
       b.addEventListener("click", function () { startChange(a); });
       body.appendChild(el("div", { "class": "row" }, b));
     }
-    body.appendChild(el("dl", { "class": "agent-facts" },
-      el("dt", { text: "File" }), el("dd", { text: a.path }),
-      el("dt", { text: "Applies to" }), el("dd", { text: "Every project you open with Claude Code" }),
-      el("dt", { text: "Changes" }), el("dd", { text: "Only the laya-guard hook entry; your other settings stay" })));
+    var facts = el("dl", { "class": "agent-facts" }, el("dt", { text: "Found" }), el("dd", { text: found }));
+    if (a.supported) {
+      facts.appendChild(el("dt", { text: "File" })); facts.appendChild(el("dd", { text: a.path }));
+      facts.appendChild(el("dt", { text: "Applies to" })); facts.appendChild(el("dd", { text: "Every project you open with " + a.name }));
+      facts.appendChild(el("dt", { text: "Changes" })); facts.appendChild(el("dd", { text: "Only the laya-guard hook entry; your other settings stay" }));
+    } else {
+      facts.appendChild(el("dt", { text: "Hook" })); facts.appendChild(el("dd", { text: "Not supported yet" }));
+    }
+    body.appendChild(facts);
     box.appendChild(body);
   }
 
@@ -574,7 +595,7 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
   }
 
   function renderCards(d) {
-    var box = $("cards"), t = d.totals, a = agentList[0];
+    var box = $("cards"), t = d.totals, a = primary();
     clear(box);
     if (a) {
       var s = stateOf(a);
@@ -821,7 +842,7 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
   $("nav").addEventListener("click", function (ev) { var b = ev.target.closest("button"); if (b) setView(b.getAttribute("data-view")); });
   $("windows").addEventListener("click", function (ev) { var b = ev.target.closest("button"); if (b) setWindow(b.getAttribute("data-window")); });
   $("filters").addEventListener("click", function (ev) { var b = ev.target.closest("button"); if (b) setFilter(b.getAttribute("data-filter")); });
-  $("cta").addEventListener("click", function () { var a = agentList[0]; if (!a) return; if (a.state === "not-installed" || a.state === "broken") startChange(a); else setView("agents"); });
+  $("cta").addEventListener("click", function () { var a = primary(); if (!a) return; state.agent = a.id; if (a.state === "not-installed" || a.state === "broken") startChange(a); else setView("agents"); });
   $("help-btn").addEventListener("click", function () { toggleHelp(); });
   $("pause-btn").addEventListener("click", togglePause);
   $("help").addEventListener("click", function (ev) { if (ev.target === this) toggleHelp(false); });

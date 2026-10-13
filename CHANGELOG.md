@@ -27,7 +27,9 @@ All notable changes to this project are documented here. Versions follow
   Claude Code only for now.
 - Click-to-install in the dashboard: the **Agents** view shows whether the Claude Code hook is
   in `~/.claude/settings.json` (agent tiles with a status dot), and a button pinned at the bottom of
-  the sidebar installs it in one click. **Install**, **Remove** and **Repair** open a sheet with the exact
+  the sidebar installs it in one click. The view finds the agents on the machine by itself (an
+  executable on `PATH`, an app bundle or a config directory; read-only) and lists Codex CLI, Cursor
+  and Gemini CLI as found but not supported yet. **Install**, **Remove** and **Repair** open a sheet with the exact
   diff, and nothing is written until *Apply change* (backup, atomic write, then the same two test
   calls as the CLI). User scope only; `GET /api/agents` and `POST /api/agents/{agent}/{action}`.
   The write endpoint needs a loopback `Host`, a same-origin `Origin`, a JSON body, a per-process
