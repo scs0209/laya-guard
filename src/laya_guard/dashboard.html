@@ -6,133 +6,173 @@
 <title>laya-guard</title>
 <!--
 Design plan (kept here so the next change starts from it)
-- Job: glance at what the agent tried and what the guard decided; spot blocks and reviews and why.
-- One bold thing: the verdict tape. Each judged call is one tick; block ticks stand tall. Everything else is quiet.
-- Palette, derived from the verdicts themselves: ink #14181c on cool paper #f5f6f7; allow sage #4f7a62,
-  review amber #b97a0c, block vermilion #c3322a. The controls use ink, not a brand blue.
-- Type: one system sans, tabular figures, sentence case. No web fonts: this page may not load anything.
-- No cards. Structure is whitespace plus hairlines where they separate rows of data.
+- It is a log viewer for developers, so it behaves like one: monospace, dense, driven from the keyboard.
+- The memorable parts: a verdict tape drawn with block characters (one glyph per call, the cursor at "now"),
+  a fingerprint of each call's hash drawn with quadrant blocks (the same command always looks the same,
+  so repeats are visible even though the log never keeps the command), and a vim-style status line.
+- Palette: gruvbox. Warm ink on a warm dark ground (cream ground in light mode); allow is aqua, review
+  yellow, block red. No cards, no gradients, no brand blue.
+- Motion: a new call flashes once when it arrives and the cursor blinks. Both stop under reduced motion.
+- No web fonts or anything else from the network: this page may not load anything.
 -->
 <style nonce="{{NONCE}}">
 :root {
   color-scheme: light dark;
-  --paper: #f5f6f7; --ink: #14181c; --ink2: #4a525a; --ink3: #6b737b; --rule: #d6dade; --soft: #e6e9ec;
-  --allow: #3f6b52; --review: #8f5b08; --block: #b02a22;
-  --t-allow: #b3c4ba; --t-review: #d99a1e; --t-block: #c3322a;
-  --sans: "Avenir Next", "Segoe UI Variable Text", "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --bg: #fbf1c7; --bg1: #ebdbb2; --bg2: #d5c4a1; --fg: #3c3836; --dim: #665c54; --faint: #7c6f64; --line: #d5c4a1;
+  --allow: #427b58; --review: #8f5b08; --block: #9d0006; --focus: #076678;
+  --t-allow: #8ec07c; --t-review: #d79921; --t-block: #cc241d; --flash: #f9e08a;
+  --mono: ui-monospace, "SF Mono", Menlo, "DejaVu Sans Mono", Consolas, "Liberation Mono", monospace;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --paper: #0c0d0e; --ink: #ebecee; --ink2: #aab0b6; --ink3: #858c93; --rule: #2c3034; --soft: #1c1f22;
-    --allow: #86b799; --review: #e2a93a; --block: #ff6a5d;
-    --t-allow: #34423a; --t-review: #d99a1e; --t-block: #ff5a4d;
+    --bg: #282828; --bg1: #3c3836; --bg2: #504945; --fg: #ebdbb2; --dim: #bdae93; --faint: #928374; --line: #504945;
+    --allow: #8ec07c; --review: #fabd2f; --block: #fb4934; --focus: #83a598;
+    --t-allow: #689d6a; --t-review: #fabd2f; --t-block: #fb4934; --flash: #5a4a1a;
   }
 }
 * { box-sizing: border-box; }
-html { background: var(--paper); }
-body { margin: 0; color: var(--ink); background: var(--paper); font: 15px/1.5 var(--sans); font-variant-numeric: tabular-nums; }
-.wrap { max-width: 1180px; margin: 0 auto; padding: 28px 24px 56px; }
-header { display: flex; flex-wrap: wrap; gap: 12px 32px; align-items: baseline; justify-content: space-between; padding-bottom: 14px; border-bottom: 1px solid var(--rule); }
-.wordmark { font-size: 17px; font-weight: 650; letter-spacing: -0.01em; }
-nav { display: flex; flex-wrap: wrap; gap: 4px 22px; align-items: baseline; }
-.tabs { display: flex; gap: 20px; }
-.tab { border: 0; background: none; padding: 4px 0; margin: 0; font: inherit; color: var(--ink3); cursor: pointer; border-bottom: 2px solid transparent; }
-.tab:hover { color: var(--ink); }
-.tab[aria-pressed="true"] { color: var(--ink); border-bottom-color: var(--ink); font-weight: 600; }
-.tab:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
-.quiet { color: var(--ink3); }
-button.quiet { border: 0; background: none; font: inherit; padding: 4px 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
-button.quiet:hover { color: var(--ink); }
+html { background: var(--bg); }
+body { margin: 0; color: var(--fg); background: var(--bg); font: 14px/1.55 var(--mono); font-variant-ligatures: none; }
+.wrap { max-width: 1240px; margin: 0 auto; padding: 0 20px 40px; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 
-.lede { margin: 40px 0 6px; font-size: clamp(24px, 3.6vw, 34px); line-height: 1.25; font-weight: 450; letter-spacing: -0.02em; max-width: 30em; }
-.lede b { font-weight: 700; }
-.lede .a { color: var(--allow); }
-.lede .r { color: var(--review); }
-.lede .b { color: var(--block); }
-.note { margin: 0 0 28px; color: var(--ink2); max-width: 46em; }
-.note .warn { color: var(--review); font-weight: 600; }
-.note .bad { color: var(--block); font-weight: 600; }
+.status { display: flex; flex-wrap: wrap; align-items: stretch; justify-content: space-between; background: var(--bg1); margin: 0 -20px; padding: 0 20px; font-size: 13px; }
+.status .seg { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px; white-space: nowrap; }
+.status .name { background: var(--fg); color: var(--bg); font-weight: 700; margin-left: -20px; padding-left: 20px; }
+.status .ok { color: var(--allow); }
+.status .warn { color: var(--review); }
+.status .bad { color: var(--block); }
+.status .grp { display: inline-flex; flex-wrap: wrap; align-items: stretch; }
+.win button { padding: 5px 9px; color: var(--dim); }
+.win button:hover { color: var(--fg); background: var(--bg2); }
+.win button[aria-pressed="true"] { background: var(--fg); color: var(--bg); font-weight: 700; }
+.status .live { color: var(--dim); }
+.status button.seg:hover { background: var(--bg2); }
 
-.tape { margin: 0 0 8px; }
-.tape svg { display: block; width: 100%; height: 52px; }
-.tape .allow { fill: var(--t-allow); }
-.tape .review { fill: var(--t-review); }
-.tape .block { fill: var(--t-block); }
-.tape .unknown { fill: var(--rule); }
-.axis { display: flex; justify-content: space-between; color: var(--ink3); font-size: 13px; margin-bottom: 44px; }
+.summary { margin: 22px 0 14px; display: flex; flex-wrap: wrap; gap: 4px 26px; align-items: baseline; }
+.summary .n { font-size: 26px; font-weight: 700; line-height: 1.2; }
+.summary .k { color: var(--dim); }
+.summary .a { color: var(--allow); }
+.summary .r { color: var(--review); }
+.summary .b { color: var(--block); }
+.summary .big { font-size: 26px; font-weight: 700; margin-right: 4px; }
+.note { margin: 0 0 18px; color: var(--dim); }
+.note .warn { color: var(--review); }
+.note .bad { color: var(--block); }
 
-.cols { display: grid; grid-template-columns: minmax(0, 2.3fr) minmax(250px, 1fr); gap: 56px; align-items: start; }
-h2 { margin: 0 0 14px; font-size: 17px; font-weight: 650; letter-spacing: -0.01em; }
-.head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 20px; margin-bottom: 4px; }
-.head h2 { margin: 0; }
+.tape { display: flex; justify-content: flex-end; align-items: flex-end; font-size: 20px; line-height: 1; overflow: hidden; white-space: pre; padding: 6px 0 4px; }
+.tape span { display: inline-block; }
+.tape .a { color: var(--t-allow); opacity: 0.55; }
+.tape .r { color: var(--t-review); }
+.tape .b { color: var(--t-block); }
+.tape .u { color: var(--faint); }
+.tape .now { color: var(--fg); animation: blink 1.1s steps(1) infinite; }
+.probe { position: absolute; visibility: hidden; font-size: 20px; white-space: pre; }
+.axis { display: flex; justify-content: space-between; color: var(--faint); font-size: 12px; margin-bottom: 26px; }
+@keyframes blink { 50% { opacity: 0; } }
+@keyframes flash { from { background: var(--flash); } to { background: transparent; } }
+
+.cols { display: grid; grid-template-columns: minmax(0, 3fr) minmax(250px, 1fr); gap: 40px; align-items: start; }
+.bar { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 24px; border-bottom: 1px solid var(--line); padding-bottom: 6px; margin-bottom: 4px; }
+.bar h2 { margin: 0; font-size: 14px; font-weight: 700; }
+.bar h2::before { content: "\25B8 "; color: var(--faint); }
+.tools { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: baseline; }
+.tools .f button { color: var(--dim); padding: 0 4px; }
+.tools .f button:hover { color: var(--fg); }
+.tools .f button[aria-pressed="true"] { color: var(--bg); background: var(--fg); }
+.q { display: inline-flex; align-items: baseline; gap: 6px; color: var(--faint); }
+.q input { width: 15ch; font: inherit; color: var(--fg); background: transparent; border: 0; border-bottom: 1px dashed var(--faint); padding: 0 2px; border-radius: 0; }
+.q input::placeholder { color: var(--faint); }
 .scroll { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-th { text-align: left; font-weight: 500; color: var(--ink3); padding: 8px 14px 8px 0; border-bottom: 1px solid var(--rule); white-space: nowrap; }
-td { padding: 11px 14px 11px 0; border-bottom: 1px solid var(--soft); vertical-align: baseline; }
-td.num, th.num { text-align: right; padding-right: 0; }
-.when { color: var(--ink3); white-space: nowrap; }
-.why { color: var(--ink2); }
-.hash { font-family: var(--mono); font-size: 12px; color: var(--ink3); }
-.v { display: inline-flex; align-items: baseline; gap: 7px; font-weight: 600; white-space: nowrap; }
-.v i { width: 7px; height: 7px; display: inline-block; background: currentColor; transform: translateY(-1px); }
-.v.allow { color: var(--allow); }
-.v.review { color: var(--review); }
-.v.block { color: var(--block); }
-.risk { white-space: nowrap; }
-.risk .bar { display: inline-block; width: 34px; height: 3px; margin-left: 8px; background: var(--soft); vertical-align: middle; }
-.risk .bar i { display: block; height: 100%; background: var(--ink2); }
-.empty { padding: 36px 0; color: var(--ink2); }
-.empty code { font-family: var(--mono); font-size: 13px; }
-.more { margin-top: 12px; color: var(--ink3); font-size: 13px; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-weight: 400; color: var(--faint); padding: 4px 16px 4px 8px; white-space: nowrap; font-size: 12px; }
+td { padding: 1px 16px 1px 8px; white-space: nowrap; }
+td.num, th.num { text-align: right; }
+tr.row { cursor: pointer; }
+tr.row:hover { background: var(--bg1); }
+tr.row.sel { background: var(--bg1); box-shadow: inset 3px 0 0 var(--focus); }
+tr.row.new { animation: flash 1.8s ease-out; }
+td.why { white-space: normal; color: var(--dim); min-width: 18ch; }
+.lvl { font-weight: 700; }
+.lvl.allow { color: var(--allow); }
+.lvl.review { color: var(--review); }
+.lvl.block { color: var(--block); }
+.when, .quiet { color: var(--faint); }
+.fp { letter-spacing: 0; color: var(--dim); }
+tr.detail td { white-space: normal; padding: 6px 8px 12px 24px; background: var(--bg1); box-shadow: inset 3px 0 0 var(--focus); }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 0 18px; }
+.kv dt { color: var(--faint); }
+.kv dd { margin: 0; }
+.empty { padding: 26px 8px; color: var(--dim); white-space: normal; }
+.more { margin: 8px 8px 0; color: var(--faint); font-size: 12px; }
 
-.side section + section { margin-top: 44px; }
-.pol { display: block; padding: 10px 0 11px; border-bottom: 1px solid var(--soft); }
+.side section + section { margin-top: 30px; }
+.pol { padding: 3px 0; }
 .pol .row { display: flex; justify-content: space-between; gap: 12px; }
 .pol .name { overflow-wrap: anywhere; }
-.pol .split { display: flex; height: 3px; margin-top: 7px; background: var(--soft); }
-.pol .split i { display: block; height: 100%; }
-.pol .split .a { background: var(--t-allow); }
-.pol .split .r { background: var(--t-review); }
-.pol .split .b { background: var(--t-block); }
-.over svg { display: block; width: 100%; height: 92px; }
-.over .allow { fill: var(--t-allow); }
-.over .review { fill: var(--t-review); }
-.over .block { fill: var(--t-block); }
-.over text { fill: var(--ink3); font-size: 12px; font-family: inherit; }
-footer { margin-top: 56px; padding-top: 14px; border-top: 1px solid var(--rule); color: var(--ink3); font-size: 13px; max-width: 52em; }
+.pol .meter { display: block; height: 1em; overflow: hidden; white-space: pre; line-height: 1; font-size: 13px; }
+.pol .meter .a { color: var(--t-allow); }
+.pol .meter .r { color: var(--t-review); }
+.pol .meter .b { color: var(--t-block); }
+.over { font-size: 18px; line-height: 1; letter-spacing: 0; overflow: hidden; white-space: pre; color: var(--faint); padding-top: 6px; }
+.over .hot { color: var(--t-block); }
+.over .mid { color: var(--t-review); }
+.over .lo { color: var(--faint); }
+.over-axis { display: flex; justify-content: space-between; color: var(--faint); font-size: 12px; margin-top: 4px; }
+
+.keys { margin-top: 40px; padding-top: 8px; border-top: 1px solid var(--line); color: var(--faint); font-size: 12px; display: flex; flex-wrap: wrap; gap: 2px 18px; }
+.keys kbd { font: inherit; color: var(--fg); background: var(--bg1); padding: 0 5px; }
+.foot { margin-top: 10px; color: var(--faint); font-size: 12px; }
+.help { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55); display: none; align-items: center; justify-content: center; padding: 20px; z-index: 5; }
+.help.show { display: flex; }
+.help .box { background: var(--bg); border: 1px solid var(--faint); padding: 18px 24px; max-width: 460px; width: 100%; }
+.help h2 { margin: 0 0 10px; font-size: 14px; }
+.help .kv dt { color: var(--fg); }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .nowrap { white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) {
+  .tape .now { animation: none; }
+  tr.row.new { animation: none; }
+}
 @media (max-width: 1100px) { .hide-md { display: none; } }
 @media (max-width: 900px) {
-  .cols { grid-template-columns: minmax(0, 1fr); gap: 48px; }
+  .cols { grid-template-columns: minmax(0, 1fr); gap: 34px; }
   .hide-sm { display: none; }
-  .wrap { padding: 20px 16px 40px; }
 }
 @media (max-width: 600px) {
-  .hide-xs, .risk .bar { display: none; }
-  th, td { padding-right: 10px; }
+  .hide-xs { display: none; }
+  .wrap { padding: 0 14px 32px; }
+  .status { margin: 0 -14px; padding: 0 14px; }
+  .status .name { margin-left: -14px; padding-left: 14px; }
+  .keys { display: none; }
 }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <header>
-    <div class="wordmark">laya-guard</div>
-    <nav aria-label="Controls">
-      <div class="tabs" role="group" aria-label="Time window" id="windows">
-        <button type="button" class="tab" data-window="1h" aria-pressed="false">1 hour</button>
-        <button type="button" class="tab" data-window="24h" aria-pressed="true">24 hours</button>
-        <button type="button" class="tab" data-window="7d" aria-pressed="false">7 days</button>
-        <button type="button" class="tab" data-window="30d" aria-pressed="false">30 days</button>
-        <button type="button" class="tab" data-window="all" aria-pressed="false">All time</button>
+  <div class="status" role="banner">
+    <div class="grp">
+      <span class="seg name">laya-guard</span>
+      <span class="seg" id="st-version"></span>
+      <span class="seg" id="st-mode"></span>
+      <span class="seg hide-xs" id="st-log"></span>
+    </div>
+    <div class="grp">
+      <div class="grp win" role="group" aria-label="Time window" id="windows">
+        <button type="button" data-window="1h" aria-pressed="false">1h</button>
+        <button type="button" data-window="24h" aria-pressed="true">24h</button>
+        <button type="button" data-window="7d" aria-pressed="false">7d</button>
+        <button type="button" data-window="30d" aria-pressed="false">30d</button>
+        <button type="button" data-window="all" aria-pressed="false">all</button>
       </div>
-      <button type="button" class="quiet" id="pause" aria-pressed="false">Pause updates</button>
-    </nav>
-  </header>
+      <button type="button" class="seg live" id="pause" aria-pressed="false" title="Pause updates (p)">live</button>
+      <button type="button" class="seg hide-xs" id="helpbtn" title="Keyboard shortcuts (?)">?</button>
+    </div>
+  </div>
 
   <main>
-    <p class="lede" id="lede" aria-live="polite">Loading the verdict log.</p>
+    <div class="summary" id="summary" aria-live="polite"></div>
     <p class="note" id="note"></p>
 
     <div class="tape" id="tape"></div>
@@ -140,17 +180,20 @@ footer { margin-top: 56px; padding-top: 14px; border-top: 1px solid var(--rule);
 
     <div class="cols">
       <section aria-labelledby="h-recent">
-        <div class="head">
-          <h2 id="h-recent">Recent calls</h2>
-          <div class="tabs" role="group" aria-label="Filter by verdict" id="filters">
-            <button type="button" class="tab" data-filter="all" aria-pressed="true">All</button>
-            <button type="button" class="tab" data-filter="allow" aria-pressed="false">Allowed</button>
-            <button type="button" class="tab" data-filter="review" aria-pressed="false">Review</button>
-            <button type="button" class="tab" data-filter="block" aria-pressed="false">Blocked</button>
+        <div class="bar">
+          <h2 id="h-recent">calls</h2>
+          <div class="tools">
+            <span class="f" role="group" aria-label="Filter by verdict" id="filters">
+              <button type="button" data-filter="all" aria-pressed="true">all</button>
+              <button type="button" data-filter="allow" aria-pressed="false">allow</button>
+              <button type="button" data-filter="review" aria-pressed="false">review</button>
+              <button type="button" data-filter="block" aria-pressed="false">block</button>
+            </span>
+            <label class="q"><span aria-hidden="true">/</span><span class="sr">Filter calls</span><input id="q" type="text" placeholder="filter" autocomplete="off" spellcheck="false"></label>
           </div>
         </div>
         <div class="scroll"><table>
-          <thead><tr><th>Time</th><th>Verdict</th><th>Risk</th><th class="hide-xs">Policy</th><th>Reason</th><th class="hide-md">Source</th><th class="num hide-md">Took</th><th class="hide-sm">Call</th></tr></thead>
+          <thead><tr><th>time</th><th>verdict</th><th>risk</th><th class="hide-xs">policy</th><th>reason</th><th class="hide-md">src</th><th class="num hide-md">took</th><th class="hide-sm">call</th></tr></thead>
           <tbody id="recent"></tbody>
         </table></div>
         <p class="more" id="recent-note"></p>
@@ -158,25 +201,50 @@ footer { margin-top: 56px; padding-top: 14px; border-top: 1px solid var(--rule);
 
       <div class="side">
         <section aria-labelledby="h-policies">
-          <h2 id="h-policies">Policies</h2>
+          <div class="bar"><h2 id="h-policies">policies</h2></div>
           <div id="policies"></div>
         </section>
         <section aria-labelledby="h-over">
-          <h2 id="h-over">Calls over time</h2>
+          <div class="bar"><h2 id="h-over">calls over time</h2></div>
           <div class="over" id="over"></div>
+          <div class="over-axis"><span id="over-from"></span><span id="over-to"></span></div>
         </section>
       </div>
     </div>
   </main>
 
-  <footer id="footer"></footer>
+  <div class="keys" id="keys" aria-hidden="true">
+    <span><kbd>j</kbd><kbd>k</kbd> move</span><span><kbd>enter</kbd> details</span><span><kbd>/</kbd> filter</span>
+    <span><kbd>a</kbd><kbd>r</kbd><kbd>b</kbd><kbd>0</kbd> verdict</span><span><kbd>1</kbd>..<kbd>5</kbd> window</span>
+    <span><kbd>p</kbd> pause</span><span><kbd>?</kbd> help</span>
+  </div>
+  <div class="foot" id="footer"></div>
+</div>
+
+<div class="help" id="help" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
+  <div class="box">
+    <h2>keyboard</h2>
+    <dl class="kv">
+      <dt>j / k, arrows</dt><dd>move through the calls</dd>
+      <dt>enter, space</dt><dd>open or close the details</dd>
+      <dt>g / G</dt><dd>first / last call</dd>
+      <dt>/</dt><dd>filter by policy, reason or hash</dd>
+      <dt>a r b 0</dt><dd>show allow, review, block, or all</dd>
+      <dt>1 2 3 4 5</dt><dd>window: 1h, 24h, 7d, 30d, all</dd>
+      <dt>p</dt><dd>pause or resume live updates</dd>
+      <dt>?  esc</dt><dd>open or close this help</dd>
+    </dl>
+  </div>
 </div>
 
 <script nonce="{{NONCE}}">
 (function () {
   "use strict";
-  var state = { window: "24h", filter: "all", paused: false, data: null };
-  var WINDOW_TEXT = { "1h": "in the last hour", "24h": "in the last 24 hours", "7d": "in the last 7 days", "30d": "in the last 30 days", "all": "in total" };
+  var WINDOWS = ["1h", "24h", "7d", "30d", "all"];
+  var WINDOW_TEXT = { "1h": "last hour", "24h": "last 24 hours", "7d": "last 7 days", "30d": "last 30 days", "all": "all time" };
+  var state = { window: "24h", filter: "all", query: "", paused: false, data: null, sel: -1, open: null, seen: null };
+  var QUAD = [" ", "▘", "▝", "▀", "▖", "▌", "▞", "▛", "▗", "▚", "▐", "▜", "▄", "▙", "▟", "█"];
+  var LEVELS = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
 
   function $(id) { return document.getElementById(id); }
   function el(tag, props) {
@@ -194,212 +262,301 @@ footer { margin-top: 56px; padding-top: 14px; border-top: 1px solid var(--rule);
     }
     return node;
   }
-  function svg(tag, attrs) {
-    var node = document.createElementNS("http://www.w3.org/2000/svg", tag);
-    Object.keys(attrs || {}).forEach(function (k) { node.setAttribute(k, attrs[k]); });
-    return node;
-  }
   function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
   function fmtInt(n) { return Number(n || 0).toLocaleString(); }
+  function pct(r) { return Math.round(Number(r || 0) * 100) + "%"; }
   function fmtTime(iso, withDate) {
     var d = new Date(iso);
-    var t = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-    return withDate ? d.toLocaleDateString([], { month: "short", day: "numeric" }) + " " + t : t;
+    var t = d.toLocaleTimeString([], { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    return withDate ? d.toLocaleDateString([], { month: "2-digit", day: "2-digit" }) + " " + t : t;
   }
-  function fmtStamp(iso) { return new Date(iso).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }); }
+  function fmtStamp(iso) { return new Date(iso).toLocaleString([], { hour12: false, month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }); }
   function fmtBucket(iso, win) {
     var d = new Date(iso);
-    if (win === "1h") return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    if (win === "24h") return d.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    if (win === "1h") return d.toLocaleTimeString([], { hour12: false, hour: "2-digit", minute: "2-digit" });
+    if (win === "24h") return d.toLocaleString([], { hour12: false, month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
     return d.toLocaleDateString([], { month: "short", day: "numeric" });
   }
-  function plural(n, one, many) { return fmtInt(n) + " " + (n === 1 ? one : many); }
+  function fingerprint(sha) {
+    var out = "";
+    for (var i = 0; i < 8; i++) { var v = parseInt((sha || "")[i], 16); out += QUAD[isNaN(v) ? 0 : v]; }
+    return out;
+  }
+  function charWidth(parent, size) {
+    var probe = el("span", { "class": "probe", text: "MMMMMMMMMM" });
+    if (size) probe.style.fontSize = size;
+    parent.appendChild(probe);
+    var w = probe.getBoundingClientRect().width / 10;
+    parent.removeChild(probe);
+    return w || 8;
+  }
+  function bars(parts, total, cells) {
+    // parts: [[className, count], ...] drawn as block characters; at least one cell for anything non-zero
+    var out = [], used = 0;
+    parts.forEach(function (p, i) {
+      var n = total ? Math.round(p[1] / total * cells) : 0;
+      if (p[1] > 0 && n === 0) n = 1;
+      n = Math.min(n, cells - used);
+      if (i === parts.length - 1) n = Math.max(0, Math.min(n, cells - used));
+      used += n;
+      if (n > 0) out.push(el("span", { "class": p[0], text: new Array(n + 1).join("█") }));
+    });
+    if (used < cells) out.push(el("span", { "class": "quiet", text: new Array(cells - used + 1).join("░") }));
+    return out;
+  }
 
-  function renderLede(d) {
-    var t = d.totals, box = $("lede");
+  function renderStatus(d, ok) {
+    var h = (d && d.health) || {};
+    $("st-version").textContent = ok ? (h.version || "") : "";
+    var mode = $("st-mode"), log = $("st-log");
+    mode.className = "seg " + (ok ? (h.mock ? "warn" : "ok") : "bad");
+    mode.textContent = ok ? (h.mock ? "◐ mock mode" : "● real model") : "○ server unreachable";
+    log.className = "seg hide-xs " + (ok && !h.logging ? "warn" : "");
+    log.textContent = ok ? (h.logging ? "log on" : "log off") : "";
+    $("pause").textContent = state.paused ? "paused" : "live";
+  }
+
+  function renderSummary(d) {
+    var t = d.totals, box = $("summary");
     clear(box);
-    if (!t.total) { box.textContent = "No calls were judged " + WINDOW_TEXT[d.window] + "."; return; }
-    box.appendChild(el("b", { text: plural(t.total, "call was", "calls were") }));
-    box.appendChild(document.createTextNode(" judged " + WINDOW_TEXT[d.window] + ". "));
-    box.appendChild(el("span", { "class": "a", text: fmtInt(t.allow) + " allowed" }));
-    box.appendChild(document.createTextNode(", "));
-    box.appendChild(el("span", { "class": "r", text: fmtInt(t.review) + " held for review" }));
-    box.appendChild(document.createTextNode(", "));
-    box.appendChild(el("span", { "class": "b", text: fmtInt(t.block) + " blocked" }));
-    box.appendChild(document.createTextNode("."));
+    function item(cls, n, label, rate) {
+      return el("span", null, el("span", { "class": "big " + cls, text: fmtInt(n) }), el("span", { "class": "k", text: label + (rate != null ? " " + pct(rate) : "") }));
+    }
+    box.appendChild(item("", t.total, "calls, " + WINDOW_TEXT[d.window]));
+    if (!t.total) return;
+    box.appendChild(item("a", t.allow, "allow", t.allow_rate));
+    box.appendChild(item("r", t.review, "review", t.review_rate));
+    box.appendChild(item("b", t.block, "block", t.block_rate));
   }
 
   function renderNote(d, ok) {
-    var note = $("note"), h = d.health;
+    var note = $("note"), h = (d && d.health) || {};
     clear(note);
     if (!ok) {
-      note.appendChild(el("span", { "class": "bad", text: "Can't reach the laya-guard server." }));
-      note.appendChild(document.createTextNode(" If the guard is down, hooks fall back to the offline check and calls it can't judge are let through."));
+      note.appendChild(el("span", { "class": "bad", text: "can't reach the laya-guard server." }));
+      note.appendChild(document.createTextNode(" with the guard down, hooks fall back to the offline check and let through what it can't judge."));
       return;
     }
-    var parts = [];
-    parts.push(h.mock ? ["warn", "The guard is in mock mode"] : [null, "The guard is running on the real model"]);
-    note.appendChild(parts[0][0] ? el("span", { "class": parts[0][0], text: parts[0][1] }) : document.createTextNode(parts[0][1]));
-    note.appendChild(document.createTextNode(h.mock ? ": verdicts come from regexes and heuristics, not the Laya model." : "."));
-    if (!h.logging) {
-      note.appendChild(document.createTextNode(" "));
-      note.appendChild(el("span", { "class": "warn", text: "Logging is off (LAYA_GUARD_LOG=0)" }));
-      note.appendChild(document.createTextNode(", so there is nothing to show."));
-    } else if (d.totals.total) {
-      note.appendChild(document.createTextNode(" Judging takes " + fmtInt(Math.round(d.totals.avg_latency_ms)) + " ms on average, " + fmtInt(Math.round(d.totals.p95_latency_ms)) + " ms for the slowest 5%."));
-    }
+    if (h.mock) note.appendChild(el("span", { "class": "warn", text: "mock mode: " }));
+    note.appendChild(document.createTextNode(h.mock ? "verdicts come from regexes and heuristics, not the Laya model. " : ""));
+    if (!h.logging) { note.appendChild(el("span", { "class": "warn", text: "logging is off (LAYA_GUARD_LOG=0), nothing to show." })); return; }
+    if (d.totals.total) note.appendChild(document.createTextNode("judging takes " + fmtInt(Math.round(d.totals.avg_latency_ms)) + " ms on average, " + fmtInt(Math.round(d.totals.p95_latency_ms)) + " ms at p95."));
   }
 
   function renderTape(d) {
     var box = $("tape");
     clear(box);
     var tape = d.tape || [];
-    $("tape-from").textContent = tape.length ? fmtStamp(tape[0][1]) : "";
-    $("tape-to").textContent = tape.length ? fmtStamp(tape[tape.length - 1][1]) : "";
-    if (!tape.length) return;
-    var W = Math.max(box.clientWidth || 800, 240), H = 52, step = Math.min(W / tape.length, 8), w = Math.max(step - 1.5, 1);
-    var heights = { a: 12, r: 28, b: 52 }, names = { a: "allow", r: "review", b: "block" };
-    var s = svg("svg", { viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": "The last " + tape.length + " calls, oldest on the left. Tall marks are blocks, medium are reviews, short are allowed calls." });
-    tape.forEach(function (c, i) {
-      var h = heights[c[0]] || 6, name = names[c[0]] || "unknown";
-      var x = W - (tape.length - i) * step;
-      var r = svg("rect", { "class": name, x: x, y: H - h, width: w, height: h });
-      var tip = svg("title", {});
-      tip.textContent = name + ", " + fmtTime(c[1], true);
-      r.appendChild(tip);
-      s.appendChild(r);
+    var cw = charWidth(box, "20px");
+    var cap = Math.max(Math.floor((box.clientWidth || 800) / cw) - 1, 8);
+    var items = tape.slice(-cap);
+    $("tape-from").textContent = items.length ? fmtStamp(items[0][1]) : "";
+    $("tape-to").textContent = items.length ? fmtStamp(items[items.length - 1][1]) : "";
+    var glyph = { a: ["a", "▁"], r: ["r", "▄"], b: ["b", "█"] };
+    box.setAttribute("role", "img");
+    box.setAttribute("aria-label", "The last " + items.length + " calls, oldest on the left. Tall red marks are blocks, medium yellow are reviews, short are allowed calls.");
+    items.forEach(function (c) {
+      var g = glyph[c[0]] || ["u", "·"];
+      var s = el("span", { "class": g[0], title: (c[0] === "a" ? "allow" : c[0] === "r" ? "review" : c[0] === "b" ? "block" : "unknown") + ", " + fmtTime(c[1], true), text: g[1] });
+      box.appendChild(s);
     });
-    box.appendChild(s);
+    box.appendChild(el("span", { "class": "now", "aria-hidden": "true", text: "█" }));
   }
 
   function renderOver(rows, win, total) {
     var box = $("over");
     clear(box);
-    if (!total || !rows.length) { box.appendChild(el("p", { "class": "quiet", text: "Nothing to plot." })); return; }
-    var W = Math.max(box.clientWidth || 260, 200), H = 92, padB = 18, plotH = H - padB, max = 1;
-    rows.forEach(function (r) { max = Math.max(max, r.allow + r.review + r.block); });
-    var slot = W / rows.length, bw = Math.max(slot - 2, 1);
-    var s = svg("svg", { viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": "Calls per interval, " + total + " in total, busiest interval " + max });
-    rows.forEach(function (r, i) {
-      var x = i * slot + (slot - bw) / 2, y = plotH, g = svg("g", {});
-      var tip = svg("title", {});
-      tip.textContent = fmtBucket(r.t, win) + ": " + r.allow + " allowed, " + r.review + " review, " + r.block + " blocked";
-      g.appendChild(tip);
-      ["allow", "review", "block"].forEach(function (a) {
-        var h = plotH * r[a] / max;
-        if (h <= 0) return;
-        y -= h;
-        g.appendChild(svg("rect", { "class": a, x: x, y: y, width: bw, height: h }));
-      });
-      s.appendChild(g);
+    $("over-from").textContent = rows.length && total ? fmtBucket(rows[0].t, win) : "";
+    $("over-to").textContent = rows.length && total ? fmtBucket(rows[rows.length - 1].t, win) : "";
+    if (!total || !rows.length) { box.textContent = "nothing to plot"; return; }
+    var cap = Math.max(Math.floor((box.clientWidth || 260) / charWidth(box, "18px")) - 1, 8);
+    var use = rows.slice(-cap), max = 1;
+    use.forEach(function (r) { max = Math.max(max, r.allow + r.review + r.block); });
+    use.forEach(function (r) {
+      var n = r.allow + r.review + r.block;
+      var ch = n ? LEVELS[Math.max(0, Math.min(7, Math.ceil(n / max * 8) - 1))] : "·";
+      var cls = r.block ? "hot" : r.review ? "mid" : "lo";
+      box.appendChild(el("span", { "class": n ? cls : "lo", title: fmtBucket(r.t, win) + ": " + r.allow + " allow, " + r.review + " review, " + r.block + " block", text: ch }));
     });
-    [[0, "start"], [rows.length - 1, "end"]].forEach(function (p) {
-      var t = svg("text", { x: p[1] === "start" ? 0 : W, y: H - 3, "text-anchor": p[1] });
-      t.textContent = fmtBucket(rows[p[0]].t, win);
-      s.appendChild(t);
-    });
-    box.appendChild(s);
   }
 
   function renderPolicies(rows) {
     var box = $("policies");
     clear(box);
-    if (!rows.length) { box.appendChild(el("p", { "class": "quiet", text: "No policies in this window." })); return; }
+    if (!rows.length) { box.appendChild(el("p", { "class": "quiet", text: "no policies in this window" })); return; }
+    var cells = Math.max(Math.floor((box.clientWidth || 250) / charWidth(box, "13px")) - 1, 10);
     rows.forEach(function (p) {
-      var split = el("div", { "class": "split", "aria-hidden": "true" });
-      [["a", p.allow], ["r", p.review], ["b", p.block]].forEach(function (pair) {
-        if (!p.count || !pair[1]) return;
-        var seg = el("i", { "class": pair[0] });
-        seg.style.width = (pair[1] / p.count * 100) + "%";
-        split.appendChild(seg);
-      });
-      box.appendChild(el("div", { "class": "pol", title: p.allow + " allowed, " + p.review + " review, " + p.block + " blocked" },
-        el("div", { "class": "row" }, el("span", { "class": "name", text: p.policy_id }), el("span", { text: fmtInt(p.count) })), split));
+      box.appendChild(el("div", { "class": "pol", title: p.allow + " allow, " + p.review + " review, " + p.block + " block" },
+        el("div", { "class": "row" }, el("span", { "class": "name", text: p.policy_id }), el("span", { text: fmtInt(p.count) })),
+        el.apply(null, ["span", { "class": "meter", "aria-hidden": "true" }].concat(bars([["a", p.allow], ["r", p.review], ["b", p.block]], p.count, cells)))));
     });
   }
 
-  function renderRecent(rows, totalInWindow) {
-    var body = $("recent");
+  function matches(r) {
+    if (state.filter !== "all" && r.action !== state.filter) return false;
+    var q = state.query.trim().toLowerCase();
+    if (!q) return true;
+    return [r.policy_id, r.reason, r.tool_sha, r.action, r.source].join(" ").toLowerCase().indexOf(q) !== -1;
+  }
+  function rowKey(r) { return r.ts + "|" + r.tool_sha + "|" + r.action; }
+  function visibleRows() { return state.data ? state.data.recent.filter(matches) : []; }
+
+  function detailRow(r) {
+    var kv = el("dl", { "class": "kv" });
+    [["time", new Date(r.ts).toLocaleString([], { hour12: false })], ["verdict", r.action + " (risk " + (Number(r.risk) || 0).toFixed(2) + ")"],
+     ["policy", r.policy_id || ""], ["reason", r.reason || ""], ["source", r.source || ""],
+     ["took", r.latency_ms != null ? Math.round(r.latency_ms) + " ms" : ""],
+     ["call", (r.tool_len != null ? r.tool_len + " characters, " : "") + "hash " + (r.tool_sha || "")],
+     ["fingerprint", fingerprint(r.tool_sha)]].forEach(function (p) {
+      kv.appendChild(el("dt", { text: p[0] }));
+      kv.appendChild(el("dd", { text: p[1] }));
+    });
+    return el("tr", { "class": "detail" }, el("td", { colspan: "8" }, kv));
+  }
+
+  function renderRecent(fresh) {
+    var d = state.data, body = $("recent");
     clear(body);
-    var shown = rows.filter(function (r) { return state.filter === "all" || r.action === state.filter; });
-    if (!shown.length) {
+    var rows = visibleRows();
+    if (state.sel >= rows.length) state.sel = rows.length - 1;
+    if (!rows.length) {
       var td = el("td", { colspan: "8", "class": "empty" });
-      if (totalInWindow) td.textContent = "None of the most recent calls were " + ({ allow: "allowed", review: "held for review", block: "blocked" }[state.filter] || "judged") + ".";
-      else { td.appendChild(document.createTextNode("Nothing has been judged yet. Try ")); td.appendChild(el("code", { text: "laya-guard check \"ls -la\"" })); td.appendChild(document.createTextNode(".")); }
+      if (d.totals.total) td.textContent = "no calls match the filter.";
+      else { td.appendChild(document.createTextNode("nothing has been judged yet. try ")); td.appendChild(el("code", { text: "laya-guard check \"ls -la\"" })); }
       body.appendChild(el("tr", null, td));
     }
     var dayAgo = Date.now() - 24 * 3600 * 1000;
-    var word = { allow: "allowed", review: "review", block: "blocked" };
-    shown.forEach(function (r) {
-      var risk = Math.max(0, Math.min(1, Number(r.risk) || 0)), fill = el("i", {});
-      fill.style.width = (risk * 100) + "%";
-      body.appendChild(el("tr", null,
+    rows.forEach(function (r, i) {
+      var key = rowKey(r), isNew = fresh && state.seen && !state.seen[key];
+      var tr = el("tr", { "class": "row" + (i === state.sel ? " sel" : "") + (isNew ? " new" : ""), "data-i": String(i), "aria-expanded": String(state.open === key) },
         el("td", { "class": "when", text: fmtTime(r.ts, new Date(r.ts).getTime() < dayAgo) }),
-        el("td", null, el("span", { "class": "v " + r.action }, el("i", {}), word[r.action] || String(r.action))),
-        el("td", { "class": "risk" }, risk.toFixed(2), el("span", { "class": "bar", "aria-hidden": "true" }, fill)),
+        el("td", null, el("span", { "class": "lvl " + r.action, text: String(r.action).toUpperCase() })),
+        el("td", { text: (Number(r.risk) || 0).toFixed(2) }),
         el("td", { "class": "hide-xs", text: r.policy_id || "" }),
         el("td", { "class": "why", text: r.reason || "" }),
         el("td", { "class": "hide-md quiet", text: r.source || "" }),
-        el("td", { "class": "num hide-md quiet nowrap", text: r.latency_ms != null ? Math.round(r.latency_ms) + " ms" : "" }),
-        el("td", { "class": "hide-sm hash nowrap", title: (r.tool_len != null ? r.tool_len + " characters" : ""), text: r.tool_sha || "" })));
+        el("td", { "class": "num hide-md quiet", text: r.latency_ms != null ? Math.round(r.latency_ms) + "ms" : "" }),
+        el("td", { "class": "hide-sm fp nowrap", title: (r.tool_len != null ? r.tool_len + " characters, " : "") + "hash " + (r.tool_sha || ""), text: fingerprint(r.tool_sha) + " " + (r.tool_sha || "") }));
+      body.appendChild(tr);
+      if (state.open === key) body.appendChild(detailRow(r));
     });
-    $("recent-note").textContent = rows.length && totalInWindow > rows.length ? "The " + rows.length + " most recent of " + fmtInt(totalInWindow) + " calls." : "";
+    var seen = {};
+    d.recent.forEach(function (r) { seen[rowKey(r)] = true; });
+    state.seen = seen;
+    $("recent-note").textContent = d.recent.length && d.totals.total > d.recent.length ? "the " + d.recent.length + " most recent of " + fmtInt(d.totals.total) + " calls" : "";
   }
 
   function renderFooter(d, ok) {
-    var f = $("footer");
-    f.textContent = ok
-      ? "Served from this machine only. The log keeps a hash and the length of each call, never the command text (" + (d.health.log_path || "") + "). laya-guard " + (d.health.version || "") + ". Updated " + fmtTime(d.generated_at, false) + (state.paused ? ", paused." : ", refreshing every 5 seconds.")
-      : "Disconnected. Trying again every 5 seconds.";
+    $("footer").textContent = ok
+      ? "served from this machine only. the log keeps a hash and the length of each call, never the command text (" + (d.health.log_path || "") + "). updated " + fmtTime(d.generated_at, false) + (state.paused ? ", paused." : ", every 5 s.")
+      : "disconnected, retrying every 5 s.";
   }
 
-  function render() {
+  function render(fresh) {
     var d = state.data;
     if (!d) return;
-    renderLede(d);
+    renderStatus(d, true);
+    renderSummary(d);
     renderNote(d, true);
     renderTape(d);
-    renderRecent(d.recent, d.totals.total);
+    renderRecent(fresh);
     renderPolicies(d.policies);
     renderOver(d.timeline, d.window, d.totals.total);
     renderFooter(d, true);
   }
 
-  function load() {
+  function load(fresh) {
     return fetch("/api/stats?window=" + encodeURIComponent(state.window), { cache: "no-store" })
       .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
-      .then(function (data) { state.data = data; render(); })
+      .then(function (data) { state.data = data; render(fresh); })
       .catch(function () {
-        $("lede").textContent = "The dashboard can't reach the server.";
-        renderNote({}, false);
-        renderFooter({}, false);
+        renderStatus(null, false);
+        renderNote(null, false);
+        renderFooter(null, false);
       });
   }
 
-  function bindTabs(id, attr, onPick) {
-    $(id).addEventListener("click", function (ev) {
-      var b = ev.target.closest("button");
-      if (!b) return;
-      Array.prototype.forEach.call($(id).querySelectorAll("button"), function (x) { x.setAttribute("aria-pressed", String(x === b)); });
-      onPick(b.getAttribute(attr));
-    });
+  function setWindow(w) {
+    state.window = w; state.seen = null; state.sel = -1; state.open = null;
+    Array.prototype.forEach.call($("windows").querySelectorAll("button"), function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-window") === w)); });
+    load(false);
   }
-  bindTabs("windows", "data-window", function (w) { state.window = w; load(); });
-  bindTabs("filters", "data-filter", function (f) { state.filter = f; if (state.data) renderRecent(state.data.recent, state.data.totals.total); });
-  $("pause").addEventListener("click", function () {
+  function setFilter(f) {
+    state.filter = f; state.sel = -1;
+    Array.prototype.forEach.call($("filters").querySelectorAll("button"), function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-filter") === f)); });
+    if (state.data) renderRecent(false);
+  }
+  function togglePause() {
     state.paused = !state.paused;
-    this.setAttribute("aria-pressed", String(state.paused));
-    this.textContent = state.paused ? "Resume updates" : "Pause updates";
-    if (!state.paused) load(); else if (state.data) renderFooter(state.data, true);
+    $("pause").setAttribute("aria-pressed", String(state.paused));
+    $("pause").textContent = state.paused ? "paused" : "live";
+    if (!state.paused) load(true); else if (state.data) renderFooter(state.data, true);
+  }
+  function move(delta, absolute) {
+    var rows = visibleRows();
+    if (!rows.length) return;
+    state.sel = absolute != null ? absolute : Math.max(0, Math.min(rows.length - 1, (state.sel < 0 ? (delta > 0 ? -1 : rows.length) : state.sel) + delta));
+    renderRecent(false);
+    var sel = $("recent").querySelector("tr.row.sel");
+    if (sel && sel.scrollIntoView) sel.scrollIntoView({ block: "nearest" });
+  }
+  function toggleOpen() {
+    var rows = visibleRows();
+    if (state.sel < 0 || state.sel >= rows.length) return;
+    var key = rowKey(rows[state.sel]);
+    state.open = state.open === key ? null : key;
+    renderRecent(false);
+  }
+  function toggleHelp(show) {
+    var h = $("help");
+    h.classList.toggle("show", show == null ? !h.classList.contains("show") : show);
+  }
+
+  $("windows").addEventListener("click", function (ev) { var b = ev.target.closest("button"); if (b) setWindow(b.getAttribute("data-window")); });
+  $("filters").addEventListener("click", function (ev) { var b = ev.target.closest("button"); if (b) setFilter(b.getAttribute("data-filter")); });
+  $("pause").addEventListener("click", togglePause);
+  $("helpbtn").addEventListener("click", function () { toggleHelp(); });
+  $("help").addEventListener("click", function (ev) { if (ev.target === this) toggleHelp(false); });
+  $("recent").addEventListener("click", function (ev) {
+    var tr = ev.target.closest("tr.row");
+    if (!tr) return;
+    state.sel = Number(tr.getAttribute("data-i"));
+    toggleOpen();
   });
+  $("q").addEventListener("input", function () { state.query = this.value; state.sel = -1; if (state.data) renderRecent(false); });
+  $("q").addEventListener("keydown", function (ev) { if (ev.key === "Escape") { this.value = ""; state.query = ""; this.blur(); renderRecent(false); } else if (ev.key === "Enter") { this.blur(); move(1); } });
+
+  document.addEventListener("keydown", function (ev) {
+    if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+    var typing = ev.target && (ev.target.tagName === "INPUT" || ev.target.tagName === "TEXTAREA");
+    if (typing) return;
+    var k = ev.key, handled = true;
+    if (k === "Escape") { if ($("help").classList.contains("show")) toggleHelp(false); else if (state.open) { state.open = null; renderRecent(false); } else handled = false; }
+    else if (k === "?") toggleHelp();
+    else if (k === "j" || k === "ArrowDown") move(1);
+    else if (k === "k" || k === "ArrowUp") move(-1);
+    else if (k === "g") move(0, 0);
+    else if (k === "G") move(0, Math.max(visibleRows().length - 1, 0));
+    else if (k === "Enter" || k === " ") { if (ev.target && ev.target.tagName === "BUTTON") return; toggleOpen(); }
+    else if (k === "/") { $("q").focus(); }
+    else if (k === "p") togglePause();
+    else if (k === "a") setFilter("allow");
+    else if (k === "r") setFilter("review");
+    else if (k === "b") setFilter("block");
+    else if (k === "0") setFilter("all");
+    else if (k >= "1" && k <= "5") setWindow(WINDOWS[Number(k) - 1]);
+    else handled = false;
+    if (handled) ev.preventDefault();
+  });
+
   var resizeTimer = null;
   window.addEventListener("resize", function () {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(function () { if (state.data) { renderTape(state.data); renderOver(state.data.timeline, state.data.window, state.data.totals.total); } }, 150);
+    resizeTimer = setTimeout(function () { if (state.data) { renderTape(state.data); renderPolicies(state.data.policies); renderOver(state.data.timeline, state.data.window, state.data.totals.total); } }, 150);
   });
-  setInterval(function () { if (!state.paused && !document.hidden) load(); }, 5000);
-  document.addEventListener("visibilitychange", function () { if (!document.hidden && !state.paused) load(); });
-  load();
+  setInterval(function () { if (!state.paused && !document.hidden) load(true); }, 5000);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden && !state.paused) load(true); });
+  load(false);
 })();
 </script>
 </body>

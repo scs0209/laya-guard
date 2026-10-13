@@ -90,7 +90,8 @@ def test_tape_is_the_latest_calls_oldest_first():
 
 
 def test_recent_is_newest_first_capped_and_has_no_command_text():
-    entries = [_entry(i, tool_call="SECRET COMMAND", tool_sha="ABCDEF0123456789") for i in range(1, 80)]
+    entries = [_entry(i, tool_call="SECRET COMMAND", tool_sha="ABCDEF0123456789")
+               for i in range(1, dashboard.RECENT_LIMIT + 30)]
     s = dashboard.build_stats(entries, NOW, "24h")
     assert len(s["recent"]) == dashboard.RECENT_LIMIT
     stamps = [r["ts"] for r in s["recent"]]

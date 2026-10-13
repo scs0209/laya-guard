@@ -16,7 +16,7 @@ ALLOWED_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 WINDOWS = {"1h": timedelta(hours=1), "24h": timedelta(hours=24), "7d": timedelta(days=7),
            "30d": timedelta(days=30), "all": None}
 ACTIONS = ("allow", "review", "block")
-RECENT_LIMIT = 50
+RECENT_LIMIT = 100
 POLICY_LIMIT = 10
 TAPE_LIMIT = 240                       # calls drawn on the verdict tape
 _LETTER = {"allow": "a", "review": "r", "block": "b"}
