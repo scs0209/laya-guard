@@ -2,8 +2,8 @@
 
 The hook lives in an agent's settings file, which is exactly what an attacker would want to
 change, so nothing here writes silently: every change is shown as a diff, the original is backed
-up, and `uninstall` removes only the entries laya-guard added. Only Claude Code is supported so
-far; `AGENTS` is where the next agents plug in.
+up, and `uninstall` removes only the entries laya-guard added. Claude Code and Cursor are
+supported; `SPECS` is where the next agents plug in.
 """
 from __future__ import annotations
 
@@ -23,8 +23,30 @@ from dataclasses import dataclass, field
 from importlib import resources
 from pathlib import Path
 
-AGENTS = ("claude-code",)              # the next agents plug in here
-SCRIPT_NAME = "guard-hook.sh"
+@dataclass(frozen=True)
+class AgentSpec:
+    """What differs between agents: where the settings live, which event runs the hook, and how
+    the entries are laid out in the file."""
+    id: str
+    name: str
+    script: str                        # file name of the hook script under laya_guard/hooks/; what marks an entry as ours
+    event: str                         # the hook event the entry goes under
+    grouped: bool                      # Claude Code nests hooks in {matcher, hooks: [...]} groups; Cursor lists them flat
+    scopes: tuple[str, ...]
+    lenient: bool = False              # accept trailing commas: Cursor's own hooks.json often has them
+    aliases: tuple[str, ...] = ()      # scripts people wired up by hand before `install` existed: reported, never duplicated
+
+
+SPECS = {
+    "claude-code": AgentSpec("claude-code", "Claude Code", "guard-hook.sh", "PreToolUse", True,
+                             ("user", "project", "local")),
+    # Cursor runs every matching hook (its own file, other tools' entries) and `deny` beats `ask` beats `allow`.
+    # The script's name is not cursor-hook.sh on purpose: other tools ship a hook with that name.
+    "cursor": AgentSpec("cursor", "Cursor", "guard-cursor-hook.sh", "beforeShellExecution", False,
+                        ("user", "project"), lenient=True, aliases=("laya-guard.py",)),     # integrations/cursor/
+}
+AGENTS = tuple(SPECS)
+SCRIPT_NAME = "guard-hook.sh"          # Claude Code's; kept for callers that don't name an agent
 MARKER = "LAYA_GUARD_MANAGED=1"       # in the command: the entry was written by `laya-guard install`
 SCOPES = ("user", "project", "local")
 DEFAULT_MATCHER = "Bash"
@@ -38,8 +60,8 @@ class InstallError(Exception):
 
 # --- locating things ----------------------------------------------------------------------------
 
-def hook_script() -> Path:
-    path = Path(str(resources.files("laya_guard").joinpath("hooks", SCRIPT_NAME)))
+def hook_script(name: str = SCRIPT_NAME) -> Path:
+    path = Path(str(resources.files("laya_guard").joinpath("hooks", name)))
     if not path.is_file():
         raise InstallError(f"the hook script is missing from this installation: {path}")
     return path
@@ -115,14 +137,25 @@ def detect_agents(home: Path) -> list[dict]:
     return found
 
 
-def settings_path(scope: str, home: Path, project_dir: Path) -> Path:
+def spec_for(agent: str) -> AgentSpec:
+    if agent not in SPECS:
+        raise InstallError(f"unsupported agent {agent!r}; supported: {', '.join(AGENTS)}")
+    return SPECS[agent]
+
+
+def settings_path(scope: str, home: Path, project_dir: Path, agent: str = "claude-code") -> Path:
+    spec = spec_for(agent)
+    if scope not in SCOPES:
+        raise InstallError(f"unknown scope {scope!r}; use one of: {', '.join(SCOPES)}")
+    if scope not in spec.scopes:
+        raise InstallError(f"{spec.name} has no {scope} scope; use one of: {', '.join(spec.scopes)}")
+    if agent == "cursor":
+        return (home if scope == "user" else project_dir) / ".cursor" / "hooks.json"
     if scope == "user":
         return home / ".claude" / "settings.json"
     if scope == "project":
         return project_dir / ".claude" / "settings.json"
-    if scope == "local":
-        return project_dir / ".claude" / "settings.local.json"
-    raise InstallError(f"unknown scope {scope!r}; use one of: {', '.join(SCOPES)}")
+    return project_dir / ".claude" / "settings.local.json"
 
 
 def hook_command(bin_path: Path, script: Path) -> str:
@@ -137,8 +170,8 @@ def _tokens(command: str) -> list[str]:
         return command.split()
 
 
-def is_ours(command: str) -> bool:
-    return any(Path(tok).name == SCRIPT_NAME for tok in _tokens(command))
+def is_ours(command: str, script: str = SCRIPT_NAME) -> bool:
+    return any(Path(tok).name == script for tok in _tokens(command))
 
 
 def is_managed(command: str) -> bool:
@@ -154,62 +187,123 @@ class Settings:
     raw: str = ""                       # the file as it was ("" if it doesn't exist)
     indent: str | int = 2
     exists: bool = False
+    repaired: bool = False              # the file had trailing commas; they are gone from the rewritten text
 
     def render(self, data: dict | None = None) -> str:
         text = json.dumps(self.data if data is None else data, indent=self.indent, ensure_ascii=False)
         return text + "\n"
 
 
-def load_settings(path: Path) -> Settings:
+def _drop_trailing_commas(raw: str) -> str:
+    """`raw` without the commas that sit right before a closing } or ] (outside strings)."""
+    out, i, n, in_str = [], 0, len(raw), False
+    while i < n:
+        ch = raw[i]
+        if in_str:
+            out.append(ch)
+            if ch == "\\" and i + 1 < n:
+                out.append(raw[i + 1])
+                i += 1
+            elif ch == '"':
+                in_str = False
+        elif ch == '"':
+            in_str = True
+            out.append(ch)
+        elif ch == ",":
+            j = i + 1
+            while j < n and raw[j] in " \t\r\n":
+                j += 1
+            if j >= n or raw[j] not in "}]":
+                out.append(ch)
+        else:
+            out.append(ch)
+        i += 1
+    return "".join(out)
+
+
+def load_settings(path: Path, lenient: bool = False) -> Settings:
     if not path.exists():
         return Settings(path=path)
     raw = path.read_text(encoding="utf-8")
     if not raw.strip():
         return Settings(path=path, raw=raw, exists=True)
+    repaired = False
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise InstallError(f"{path} is not valid JSON ({exc}); fix it first, nothing was changed") from exc
+        data = None
+        if lenient:
+            try:
+                data, repaired = json.loads(_drop_trailing_commas(raw)), True
+            except json.JSONDecodeError:
+                pass
+        if data is None:
+            raise InstallError(f"{path} is not valid JSON ({exc}); fix it first, nothing was changed") from exc
     if not isinstance(data, dict):
         raise InstallError(f"{path} doesn't hold a JSON object; nothing was changed")
     indent: str | int = "\t" if "\n\t" in raw else (4 if "\n    \"" in raw and "\n  \"" not in raw else 2)
-    return Settings(path=path, data=data, raw=raw, indent=indent, exists=True)
+    return Settings(path=path, data=data, raw=raw, indent=indent, exists=True, repaired=repaired)
 
 
-def _groups(data: dict) -> list:
+def _event_list(data: dict, spec: AgentSpec) -> list:
     hooks = data.get("hooks")
-    pre = hooks.get("PreToolUse") if isinstance(hooks, dict) else None
-    return pre if isinstance(pre, list) else []
+    entries = hooks.get(spec.event) if isinstance(hooks, dict) else None
+    return entries if isinstance(entries, list) else []
 
 
-def find_entries(data: dict) -> list[tuple[int, int, dict]]:
-    """(group index, hook index, hook) for every PreToolUse hook that runs our script."""
+def _is_ours_hook(hook, spec: AgentSpec) -> bool:
+    return (isinstance(hook, dict) and isinstance(hook.get("command"), str)
+            and any(is_ours(hook["command"], name) for name in (spec.script, *spec.aliases)))
+
+
+def find_entries(data: dict, spec: AgentSpec | None = None) -> list[tuple[int, int, dict]]:
+    """(group index, hook index, hook) for every hook of the agent's event that runs our script.
+    Agents that list hooks flat (Cursor) have no groups: the group index is -1."""
+    spec = spec or SPECS["claude-code"]
     found = []
-    for gi, group in enumerate(_groups(data)):
-        for hi, hook in enumerate(group.get("hooks", []) if isinstance(group, dict) else []):
-            if isinstance(hook, dict) and isinstance(hook.get("command"), str) and is_ours(hook["command"]):
+    for gi, item in enumerate(_event_list(data, spec)):
+        if not spec.grouped:
+            if _is_ours_hook(item, spec):
+                found.append((-1, gi, item))
+            continue
+        for hi, hook in enumerate(item.get("hooks", []) if isinstance(item, dict) else []):
+            if _is_ours_hook(hook, spec):
                 found.append((gi, hi, hook))
     return found
 
 
-def _remove_ours(data: dict, only_managed: bool) -> tuple[int, int]:
+def _remove_ours(data: dict, only_managed: bool, spec: AgentSpec | None = None) -> tuple[int, int]:
     """Drop our entries (only the ones laya-guard wrote, unless only_managed is False). Returns
     (removed, left_in_place). A group, list or `hooks` key that we emptied is removed with them;
     anything else, including groups that were already empty, is left exactly as it was."""
+    spec = spec or SPECS["claude-code"]
     removed = left = 0
     hooks = data.get("hooks")
-    pre = hooks.get("PreToolUse") if isinstance(hooks, dict) else None
-    if not isinstance(pre, list):
+    event_list = hooks.get(spec.event) if isinstance(hooks, dict) else None
+    if not isinstance(event_list, list):
         return 0, 0
-    kept_groups = []
-    for group in pre:
-        if not isinstance(group, dict) or not isinstance(group.get("hooks"), list):
-            kept_groups.append(group)
+
+    def ours_and_dropped(hook) -> tuple[bool, bool]:
+        ours = _is_ours_hook(hook, spec)
+        return ours, ours and (is_managed(hook["command"]) or not only_managed)
+
+    kept_items = []
+    for item in event_list:
+        if not spec.grouped:
+            ours, drop = ours_and_dropped(item)
+            if drop:
+                removed += 1
+                continue
+            left += 1 if ours else 0
+            kept_items.append(item)
+            continue
+        if not isinstance(item, dict) or not isinstance(item.get("hooks"), list):
+            kept_items.append(item)
             continue
         keep, dropped = [], 0
-        for hook in group["hooks"]:
-            ours = isinstance(hook, dict) and isinstance(hook.get("command"), str) and is_ours(hook["command"])
-            if ours and (is_managed(hook["command"]) or not only_managed):
+        for hook in item["hooks"]:
+            ours, drop = ours_and_dropped(hook)
+            if drop:
                 dropped += 1
             else:
                 left += 1 if ours else 0
@@ -217,47 +311,60 @@ def _remove_ours(data: dict, only_managed: bool) -> tuple[int, int]:
         removed += dropped
         if dropped and not keep:
             continue                       # we emptied this group
-        group["hooks"] = keep
-        kept_groups.append(group)
+        item["hooks"] = keep
+        kept_items.append(item)
     if removed:
-        hooks["PreToolUse"] = kept_groups
-        if not kept_groups:
-            del hooks["PreToolUse"]
-        if not hooks:
-            del data["hooks"]
+        hooks[spec.event] = kept_items
+        if not kept_items:
+            del hooks[spec.event]
+        if not hooks and spec.grouped:
+            del data["hooks"]              # Cursor's file keeps an empty `hooks` next to `version`
     return removed, left
 
 
-def plan_install(settings: Settings, command: str, matcher: str, force: bool = False) -> tuple[dict, str]:
+def plan_install(settings: Settings, command: str, matcher: str, force: bool = False,
+                 spec: AgentSpec | None = None) -> tuple[dict, str]:
     """(new settings data, outcome). outcome: added | updated | unchanged | manual."""
+    spec = spec or SPECS["claude-code"]
     data = copy.deepcopy(settings.data)
-    entries = find_entries(data)
-    desired = {"type": "command", "command": command, "timeout": HOOK_TIMEOUT}
+    if "hooks" in data and not isinstance(data["hooks"], dict):
+        raise InstallError(f"`hooks` in {settings.path} isn't an object; nothing was changed")
+    entries = find_entries(data, spec)
+    desired = {"type": "command", "command": command, "timeout": HOOK_TIMEOUT} if spec.grouped \
+        else {"command": command, "timeout": HOOK_TIMEOUT}
     if entries:
         gi, _, hook = entries[0]
-        group_matcher = _groups(data)[gi].get("matcher")
+        group_matcher = _event_list(data, spec)[gi].get("matcher") if spec.grouped else matcher
         if len(entries) == 1 and hook == desired and group_matcher == matcher:
             return data, "unchanged"
         if not force and not all(is_managed(h["command"]) for _, _, h in entries):
             return data, "manual"            # someone wired it by hand; don't rewrite it unasked
-        _remove_ours(data, only_managed=False)
+        _remove_ours(data, only_managed=False, spec=spec)
         outcome = "updated"
     else:
         outcome = "added"
+    if not spec.grouped and "version" not in data:
+        data = {"version": 1, **data}        # Cursor requires it
     hooks = data.setdefault("hooks", {})
-    pre = hooks.setdefault("PreToolUse", [])
-    for group in pre:
+    event_list = hooks.setdefault(spec.event, [])
+    if not isinstance(event_list, list):
+        raise InstallError(f"`hooks.{spec.event}` in {settings.path} isn't a list; nothing was changed")
+    if not spec.grouped:
+        event_list.append(desired)
+        return data, outcome
+    for group in event_list:
         if isinstance(group, dict) and group.get("matcher") == matcher and isinstance(group.get("hooks"), list):
             group["hooks"].append(desired)
             break
     else:
-        pre.append({"matcher": matcher, "hooks": [desired]})
+        event_list.append({"matcher": matcher, "hooks": [desired]})
     return data, outcome
 
 
-def plan_uninstall(settings: Settings, force: bool = False) -> tuple[dict, int, int]:
+def plan_uninstall(settings: Settings, force: bool = False,
+                   spec: AgentSpec | None = None) -> tuple[dict, int, int]:
     data = copy.deepcopy(settings.data)
-    removed, left = _remove_ours(data, only_managed=not force)
+    removed, left = _remove_ours(data, only_managed=not force, spec=spec)
     return data, removed, left
 
 
@@ -329,17 +436,16 @@ class Plan:
 def make_plan(action: str, agent: str, scope: str, home: Path, project_dir: Path,
               bin_override: str | None = None, matcher: str = DEFAULT_MATCHER, force: bool = False) -> Plan:
     """Work out a change without writing anything. Raises InstallError with advice."""
-    if agent not in AGENTS:
-        raise InstallError(f"unsupported agent {agent!r}; supported: {', '.join(AGENTS)}")
+    spec = spec_for(agent)
     if sys.platform == "win32":
         raise InstallError("the hook is a bash script, so Windows isn't supported yet")
-    settings = load_settings(settings_path(scope, home, project_dir))
+    settings = load_settings(settings_path(scope, home, project_dir, agent), spec.lenient)
     if action == "install":
-        command = hook_command(cli_path(bin_override), hook_script())
-        data, outcome = plan_install(settings, command, matcher, force)
+        command = hook_command(cli_path(bin_override), hook_script(spec.script))
+        data, outcome = plan_install(settings, command, matcher, force, spec)
         return Plan(action, agent, scope, settings, data, settings.render(data), outcome, command)
     if action == "uninstall":
-        data, removed, left = plan_uninstall(settings, force)
+        data, removed, left = plan_uninstall(settings, force, spec)
         return Plan(action, agent, scope, settings, data, settings.render(data),
                     "removed" if removed else "nothing", left=left)
     raise InstallError(f"unknown action {action!r}")
@@ -348,7 +454,7 @@ def make_plan(action: str, agent: str, scope: str, home: Path, project_dir: Path
 def apply_plan(plan: Plan, verify: bool = True) -> tuple[Path | None, list[tuple[str, int, int]]]:
     """Write the plan (backup first). After an install, send the test calls through the hook."""
     backup = write_settings(plan.settings, plan.new_text)
-    probes = run_probes(plan.command) if verify and plan.action == "install" else []
+    probes = run_probes(plan.command, plan.agent) if verify and plan.action == "install" else []
     return backup, probes
 
 
@@ -363,29 +469,30 @@ class Status:
     detail: str = ""
 
 
-def _missing_paths(command: str) -> list[str]:
+def _missing_paths(command: str, script: str = SCRIPT_NAME) -> list[str]:
     missing = []
     for tok in _tokens(command):
         if tok.startswith("LAYA_GUARD_BIN="):
             tok = tok.split("=", 1)[1]
-        elif Path(tok).name != SCRIPT_NAME:
+        elif Path(tok).name != script:
             continue
         if not Path(tok).exists():
             missing.append(tok)
     return missing
 
 
-def status(scope: str, home: Path, project_dir: Path) -> Status:
-    path = settings_path(scope, home, project_dir)
+def status(scope: str, home: Path, project_dir: Path, agent: str = "claude-code") -> Status:
+    spec = spec_for(agent)
+    path = settings_path(scope, home, project_dir, agent)
     try:
-        settings = load_settings(path)
+        settings = load_settings(path, spec.lenient)
     except InstallError as exc:
         return Status(scope, path, "invalid", detail=str(exc))
-    entries = find_entries(settings.data)
+    entries = find_entries(settings.data, spec)
     if not entries:
         return Status(scope, path, "not-installed")
     command = entries[0][2]["command"]
-    missing = _missing_paths(command)
+    missing = _missing_paths(command, spec.script)
     if missing:
         return Status(scope, path, "broken", command, "not found: " + ", ".join(missing))
     return Status(scope, path, "installed" if is_managed(command) else "manual", command)
@@ -407,13 +514,28 @@ PROBES = (
 )
 
 
-def run_probes(command: str) -> list[tuple[str, int, int]]:
-    """Feed the registered hook command two calls through its stdin and check the exit codes. The
-    server is forced down (the offline check), which also proves the executable path works."""
+def _cursor_decision(proc: subprocess.CompletedProcess) -> int:
+    """Cursor's answer as an exit-code-like number: 0 allow, 1 ask, 2 deny (exit 2 or `deny`), 9 not understood."""
+    if proc.returncode != 0:
+        return proc.returncode
+    try:
+        return {"allow": 0, "ask": 1, "deny": 2}.get(json.loads(proc.stdout).get("permission"), 9)
+    except (ValueError, AttributeError):
+        return 9                           # Cursor blocks a permission hook whose output isn't valid JSON
+
+
+def run_probes(command: str, agent: str = "claude-code") -> list[tuple[str, int, int]]:
+    """Feed the registered hook command two calls through its stdin, shaped like the agent's own input,
+    and check the answer. The server is forced down (the offline check), which also proves the
+    executable path works."""
     results = []
     for label, tool_call, expected in PROBES:
-        payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": tool_call}})
+        if agent == "cursor":
+            payload = json.dumps({"hook_event_name": "beforeShellExecution", "command": tool_call,
+                                  "cwd": os.getcwd(), "workspace_roots": [os.getcwd()]})
+        else:
+            payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": tool_call}})
         proc = subprocess.run(["bash", "-c", command], input=payload, capture_output=True, text=True,
                               env=dict(os.environ, LAYA_GUARD_URL=DEAD_URL), timeout=60)
-        results.append((label, expected, proc.returncode))
+        results.append((label, expected, _cursor_decision(proc) if agent == "cursor" else proc.returncode))
     return results

@@ -161,6 +161,27 @@ For the Bash tool only the command is judged, not the agent's description.
 If the server is unreachable or slower than 10s, it falls back to the offline
 check (see [Server down](#server-down)). Point it elsewhere with `LAYA_GUARD_URL`.
 
+### 1b. Guard Cursor (beforeShellExecution hook)
+
+```bash
+laya-guard install cursor              # ~/.cursor/hooks.json; shows a diff and asks first
+laya-guard install cursor --scope project   # ./.cursor/hooks.json (Cursor has no local scope)
+laya-guard status --agent cursor --check
+laya-guard uninstall cursor
+```
+
+Same safety as above (diff, backup, test calls, `--dry-run`, `--yes`, only its own entries are removed),
+with the differences that matter for Cursor. Cursor runs every hook that matches, so laya-guard's entry
+sits next to whatever other tools registered for `beforeShellExecution`, and Cursor takes the strictest
+answer (`deny` beats `ask` beats `allow`). The hook script answers in Cursor's format: `deny` with a
+message for you and one for the agent, `ask` for `review`, otherwise `allow`, and it always prints valid JSON
+because Cursor blocks a command when a permission hook's output isn't. Cursor's `hooks.json` is often not
+strict JSON (other tools leave trailing commas in it); `install` reads it anyway and says so before it
+rewrites the file without them. A hand-written adapter from [integrations/cursor/](integrations/cursor/) is
+reported and left alone unless you pass `--force`, so you don't end up with two judges. The test calls check
+the answer (`allow` / `deny`), not an exit code. These hooks apply to the Cursor app; whether the Cursor CLI
+runs `beforeShellExecution` hooks isn't something Cursor's docs state, so this isn't tested there.
+
 ### 2. Guard any agent loop (HTTP)
 
 Any framework that can make an HTTP call per step — OpenClaw, OpenCode,
@@ -244,9 +265,9 @@ rebinding) and loads nothing from the network. `--no-open` prints the URL instea
 **Agents** is the click version of `laya-guard install`, and the blue button pinned at the bottom of
 the sidebar does the same in one click. It finds the coding agents on this machine by itself (an
 executable on `PATH`, an app bundle or a config directory such as `~/.codex`; read-only, it never
-opens those files) and shows each as a tile. Claude Code is the one laya-guard can protect so far:
-its tile shows whether the hook is in `~/.claude/settings.json`, and **Install hook** / **Remove**
-open a sheet with the exact diff. The others (Codex CLI, Cursor, Gemini CLI) are listed as found
+opens those files) and shows each as a tile. Claude Code and Cursor are the ones laya-guard can protect so far:
+their tiles show whether the hook is in `~/.claude/settings.json` or `~/.cursor/hooks.json`, and
+**Install hook** / **Remove** open a sheet with the exact diff. Codex CLI and Gemini CLI are listed as found
 but not supported yet. The logos are the products' own marks (Claude Code, Cursor and Gemini from
 [Simple Icons](https://simpleicons.org), CC0; Codex from [Lobe Icons](https://github.com/lobehub/lobe-icons), MIT).
 They belong to their owners and are only there to say which product a tile is.

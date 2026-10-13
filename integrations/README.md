@@ -56,6 +56,9 @@ https://opencode.ai/docs/permissions/
 
 ## Cursor
 
+The quick way is `laya-guard install cursor`: it merges its own hook into `~/.cursor/hooks.json` (next to
+other tools' hooks), shows a diff first and checks the result (see the main README). The manual way:
+
 1. `cp cursor/laya-guard.py ~/.cursor/hooks/ && chmod +x ~/.cursor/hooks/laya-guard.py`
 2. Merge `cursor/hooks.json` into `~/.cursor/hooks.json` (user) or
    `<project>/.cursor/hooks.json` (project; change the command path to

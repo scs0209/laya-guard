@@ -443,18 +443,24 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
   var TOKEN = (document.querySelector('meta[name="laya-token"]') || {}).content || "";
   var agentsSig = "", agentList = [], pending = null;
   var STATES = {
-    "installed": { cls: "ok", pill: "Protected", head: "Claude Code is protected.", body: "Each Bash call is judged before Claude Code runs it. You can remove the hook any time; the settings file is backed up first.", btn: "Remove", action: "uninstall", cta: "ok", ctaText: "Protected" },
-    "not-installed": { cls: "warn", pill: "Not protected", head: "Claude Code isn't protected yet.", body: "Installing adds a hook that sends each Bash call to laya-guard before it runs. You see the exact change first, and the settings file is backed up.", btn: "Install hook", action: "install", primary: true, cta: "primary", ctaText: "Install hook" },
+    "installed": { cls: "ok", pill: "Protected", head: function (a) { return a.name + " is protected."; }, body: function (a) { return "Each shell command is judged before " + a.name + " runs it. You can remove the hook any time; the settings file is backed up first."; }, btn: "Remove", action: "uninstall", cta: "ok", ctaText: "Protected" },
+    "not-installed": { cls: "warn", pill: "Not protected", head: function (a) { return a.name + " isn't protected yet."; }, body: "Installing adds a hook that sends each shell command to laya-guard before it runs. You see the exact change first, and the settings file is backed up.", btn: "Install hook", action: "install", primary: true, cta: "primary", ctaText: "Install hook" },
     "manual": { cls: "", pill: "Hook added by hand", head: "A laya-guard hook is already in the file.", body: "It was written by hand, so laya-guard leaves it alone. Let laya-guard manage it to get backups and repairs.", btn: "Let laya-guard manage it", action: "install", force: true, cta: "quiet", ctaText: "Review hook" },
     "broken": { cls: "bad", pill: "Needs repair", head: "The hook points to a file that is gone.", body: "This happens after laya-guard is reinstalled or moved. Repair points the hook at the current install.", btn: "Repair hook", action: "install", primary: true, cta: "bad", ctaText: "Repair hook" },
     "unsupported": { cls: "", pill: "Found", btn: null, cta: "quiet", ctaText: "Not supported yet" },
     "invalid": { cls: "bad", pill: "Settings unreadable", head: "The settings file isn't valid JSON.", body: "Nothing was changed. Fix the file first, then reload this page.", btn: null, cta: "bad", ctaText: "Settings invalid" }
   };
   function stateOf(a) { return STATES[a.state] || STATES.invalid; }
+  function say(v, a) { return typeof v === "function" ? v(a) : v; }
   var MARKS = { "claude-code": "claudecode", "codex": "codex", "cursor": "cursor-logo", "gemini-cli": "gemini" };
   function agentIcon(id) { return MARKS[id] ? ic(MARKS[id], "mark") : ic("shield"); }
-  // the agent the sidebar button and the overview card talk about: the first one laya-guard can protect
-  function primary() { for (var i = 0; i < agentList.length; i++) if (agentList[i].supported) return agentList[i]; return null; }
+  // the agent the sidebar button talks about: the first protectable one that still needs the hook
+  function primary() {
+    var sup = agentList.filter(function (a) { return a.supported; });
+    for (var i = 0; i < sup.length; i++) if (sup[i].state === "not-installed" || sup[i].state === "broken") return sup[i];
+    for (var j = 0; j < sup.length; j++) if (sup[j].state !== "installed") return sup[j];
+    return sup[0] || null;
+  }
   function selected() {
     for (var i = 0; i < agentList.length; i++) if (agentList[i].id === state.agent) return agentList[i];
     return agentList[0] || null;
@@ -504,14 +510,14 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
       tiles.appendChild(el("div", { "class": "tilebox" }, tile, el("span", { "class": "tilelabel", text: ag.name })));
     });
     tiles.appendChild(el("div", { "class": "tilebox" },
-      el("span", { "class": "tile add", title: "laya-guard can only protect Claude Code so far", role: "img", "aria-label": "More agents are not supported yet" }, ic("plus")),
+      el("span", { "class": "tile add", title: "laya-guard can protect Claude Code and Cursor so far", role: "img", "aria-label": "More agents are not supported yet" }, ic("plus")),
       el("span", { "class": "tilelabel", text: "More later" })));
     box.appendChild(tiles);
 
-    var head = a.supported ? s.head : a.name + " is on this machine.";
-    var text = a.supported ? s.body : "laya-guard can't install a hook for it yet. Claude Code is the only agent it can protect so far.";
+    var head = a.supported ? say(s.head, a) : a.name + " is on this machine.";
+    var text = a.supported ? say(s.body, a) : "laya-guard can't install a hook for it yet. It can protect Claude Code and Cursor so far.";
     var body = el("div", { "class": "agent-body" }, el("h3", { text: head }), el("p", { text: text }));
-    if (a.supported && !a.found) body.appendChild(el("p", { text: "Claude Code wasn't found on this machine, but you can set the hook up now." }));
+    if (a.supported && !a.found) body.appendChild(el("p", { text: a.name + " wasn't found on this machine, but you can set the hook up now." }));
     if (a.state === "invalid" && a.detail) body.appendChild(el("p", { text: a.detail }));
     if (s.btn) {
       var b = el("button", { type: "button", "class": "btn" + (s.primary ? " primary" : ""), text: s.btn });
@@ -601,13 +607,13 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
   }
 
   function renderCards(d) {
-    var box = $("cards"), t = d.totals, a = primary();
+    var box = $("cards"), t = d.totals;
     clear(box);
-    if (a) {
+    agentList.filter(function (a) { return a.supported; }).forEach(function (a) {
       var s = stateOf(a);
       box.appendChild(attentionCard({ title: a.name, sub: s.pill + ", all projects", cls: a.state === "installed" ? "" : (s.cls === "warn" ? "warn" : s.cls === "bad" ? "bad" : ""),
-        go: function () { if (a.state === "not-installed" || a.state === "broken") startChange(a); else setView("agents"); } }));
-    }
+        go: function () { if (a.state === "not-installed" || a.state === "broken") startChange(a); else { state.agent = a.id; setView("agents"); } } }));
+    });
     box.appendChild(attentionCard({ title: "Blocked", sub: "Stopped before they ran", cls: t.block ? "bad" : "", badge: t.block, go: function () { setFilter("block"); setView("calls"); } }));
     box.appendChild(attentionCard({ title: "Held for review", sub: "Waiting for your answer", cls: t.review ? "warn" : "", badge: t.review, go: function () { setFilter("review"); setView("calls"); } }));
     box.appendChild(attentionCard({ title: "Allowed", sub: "Ran as usual", cls: "", go: function () { setFilter("allow"); setView("calls"); } }));
@@ -799,7 +805,7 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
   }
 
   function openSheet(a, action, force) {
-    pending = { agent: a.id, action: action, force: !!force, diffId: null };
+    pending = { agent: a.id, name: a.name, action: action, force: !!force, diffId: null };
     $("sheet-title").textContent = (action === "install" ? "Install the hook for " : "Remove the hook from ") + a.name;
     $("sheet-lead").textContent = "Checking what would change in " + a.path + ".";
     clear($("sheet-diff")); $("sheet-diff").hidden = true; clear($("sheet-checks")); $("sheet-err").textContent = "";
@@ -812,7 +818,7 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
         return;
       }
       pending.diffId = j.diff_id;
-      $("sheet-lead").textContent = (action === "install" ? "This adds a hook to " : "This removes the hook from ") + j.path + ". Your other settings stay as they are and the file is backed up first. The JSON is re-indented, so some lines may show as changed.";
+      $("sheet-lead").textContent = (action === "install" ? "This adds a hook to " : "This removes the hook from ") + j.path + ". Your other settings stay as they are and the file is backed up first. The JSON is re-indented, so some lines may show as changed." + ((j.notes || []).length ? " " + j.notes.join(" ") : "");
       paintDiff(j.diff);
       $("sheet-diff").hidden = false; $("sheet-apply").disabled = false; $("sheet-apply").focus();
     }).catch(function (e) {
@@ -835,7 +841,7 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
     api("POST", "/api/agents/" + p.agent + "/" + p.action, { scope: "user", mode: "apply", diff_id: p.diffId, force: p.force }).then(function (j) {
       $("sheet-title").textContent = p.action === "install" ? "Hook installed" : "Hook removed";
       $("sheet-lead").textContent = "Saved to " + j.path + (j.backup ? ". The previous file is at " + j.backup + "." : ".") +
-        (p.action === "install" ? " If Claude Code is already open, restart it so it picks the hook up." : "");
+        (p.action === "install" ? " If " + p.name + " is already open, restart it so it picks the hook up." : "");
       $("sheet-diff").hidden = true; btn.hidden = true; $("sheet-cancel").textContent = "Close";
       var list = $("sheet-checks");
       clear(list);

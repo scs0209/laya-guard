@@ -28,14 +28,22 @@ All notable changes to this project are documented here. Versions follow
 - Click-to-install in the dashboard: the **Agents** view shows whether the Claude Code hook is
   in `~/.claude/settings.json` (agent tiles with a status dot), and a button pinned at the bottom of
   the sidebar installs it in one click. The view finds the agents on the machine by itself (an
-  executable on `PATH`, an app bundle or a config directory; read-only) and lists Codex CLI, Cursor
-  and Gemini CLI as found but not supported yet. Each tile shows the product's own logo (inline, nothing
+  executable on `PATH`, an app bundle or a config directory; read-only) and lists Codex CLI and
+  Gemini CLI as found but not supported yet (Cursor is supported, see below). Each tile shows the product's own logo (inline, nothing
   is loaded from the network; Simple Icons CC0 and Lobe Icons MIT, trademarks of their owners). **Install**, **Remove** and **Repair** open a sheet with the exact
   diff, and nothing is written until *Apply change* (backup, atomic write, then the same two test
   calls as the CLI). User scope only; `GET /api/agents` and `POST /api/agents/{agent}/{action}`.
   The write endpoint needs a loopback `Host`, a same-origin `Origin`, a JSON body, a per-process
   token only the page carries, and the `diff_id` of the diff that was shown (409 if the file
   changed since). The dashboard is no longer read-only. Roadmap: #37.
+- `laya-guard install cursor` / `uninstall cursor` / `status --agent cursor`, and Cursor in the dashboard: registers a
+  `beforeShellExecution` hook in `~/.cursor/hooks.json` (or `./.cursor/hooks.json` with `--scope project`) with the same
+  diff, backup, atomic write and test calls as Claude Code. It merges next to the entries other tools put there
+  (Cursor runs all of them and takes the strictest answer), reads `hooks.json` even when it has trailing commas (and
+  says so before rewriting it without them), and reports a hand-written `integrations/cursor` adapter instead of adding a
+  second judge. The new `guard-cursor-hook.sh` answers in Cursor's format (`permission` allow, ask or deny with
+  `user_message` and `agent_message`) and always prints valid JSON, because Cursor blocks a command when a permission
+  hook's output isn't. `status` now covers every supported agent.
 
 ### Changed
 

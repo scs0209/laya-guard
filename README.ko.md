@@ -145,6 +145,27 @@ stdin으로 읽어 로컬 서버에 POST하고, `block`이면 exit 2로 해당 �
 `review`면 `permissionDecision: "ask"` JSON을 출력해 Claude Code가 정책과 사유가 담긴 권한 프롬프트로 사람에게 묻습니다(`LAYA_GUARD_REVIEW=pass`면 예전처럼 통과). `allow`는 조용히 통과합니다. 응답할 사람이 없는 비대화형(`claude -p`)에서는 ask가 거부됩니다. Bash 도구는 에이전트가 쓴 설명이 아니라 명령만 심판합니다. 서버에 닿지 않거나 10초 안에 답이 없으면 오프라인 검사로 대체합니다([서버 장애](#서버-장애) 참조).
 [한계](#한계)를 먼저 읽어주세요. 서버 주소는 `LAYA_GUARD_URL`로 바꿀 수 있습니다.
 
+### 1b. Cursor 가드 (beforeShellExecution 훅)
+
+```bash
+laya-guard install cursor              # ~/.cursor/hooks.json. diff를 보여주고 먼저 묻습니다
+laya-guard install cursor --scope project   # ./.cursor/hooks.json (Cursor에는 local 범위가 없음)
+laya-guard status --agent cursor --check
+laya-guard uninstall cursor
+```
+
+안전장치는 위와 같습니다(diff, 백업, 테스트 호출, `--dry-run`, `--yes`, 자기가 넣은 항목만 제거). Cursor에서
+다른 점은 이렇습니다. Cursor는 조건에 맞는 훅을 전부 실행하므로, laya-guard 항목은 다른 도구가
+`beforeShellExecution`에 등록한 항목 옆에 들어가고 Cursor는 가장 엄격한 답을 따릅니다(`deny`가 `ask`보다,
+`ask`가 `allow`보다 우선). 훅 스크립트는 Cursor 형식으로 답합니다. 차단은 사용자용과 에이전트용 메시지가 담긴
+`deny`, `review`는 `ask`, 나머지는 `allow`이고, 권한 훅의 출력이 유효한 JSON이 아니면 Cursor가 명령을 막기
+때문에 항상 유효한 JSON 하나만 출력합니다. Cursor의 `hooks.json`은 엄격한 JSON이 아닌 경우가 많은데(다른
+도구가 끝에 쉼표를 남김) `install`은 그래도 읽고, 쉼표를 없애고 다시 쓴다는 점을 먼저 알려줍니다.
+[integrations/cursor/](integrations/cursor/)의 어댑터를 직접 등록해 둔 경우는 알려주기만 하고
+`--force` 없이는 건드리지 않아 판정이 두 번 돌지 않습니다. 테스트 호출은 종료 코드가 아니라 답(`allow` /
+`deny`)을 확인합니다. 이 훅은 Cursor 앱에 적용되며, Cursor CLI가 `beforeShellExecution` 훅을 실행하는지는
+Cursor 문서에 명시돼 있지 않아 거기서는 확인하지 않았습니다.
+
 ### 2. 아무 에이전트 루프 가드 (HTTP)
 
 매 스텝 HTTP 호출이 되는 프레임워크(OpenClaw, OpenCode, LangChain/LlamaIndex

@@ -253,17 +253,49 @@ def test_agents_status_is_readable_and_reports_not_installed(agents):
     assert agents.client.get("/api/agents", headers={"host": "evil.example:8787"}).status_code == 403
 
 
-def test_agents_found_on_this_machine_are_listed_but_only_claude_code_can_change(agents):
+def test_agents_found_on_this_machine_are_listed_and_only_the_supported_ones_can_change(agents):
     (agents.home / ".codex").mkdir()
     (agents.home / ".cursor").mkdir()
     rows = agents.client.get("/api/agents").json()["agents"]
     assert [r["id"] for r in rows] == ["claude-code", "codex", "cursor"]       # gemini isn't here, so it isn't listed
-    claude, codex = rows[0], rows[1]
+    claude, codex, cursor = rows
     assert claude["supported"] and claude["found"] is False and claude["state"] == "not-installed"
+    assert cursor["supported"] and cursor["state"] == "not-installed" and cursor["path"] == "~/.cursor/hooks.json"
     assert codex["found"] and codex["how"] == "config" and codex["via"] == ["~/.codex"]
     assert codex["supported"] is False and codex["state"] == "unsupported" and codex["path"] is None
     assert str(agents.home) not in json.dumps(rows)                              # only ~/ paths, never the full home
     assert agents.post("install", {"mode": "preview"}, agent="codex").status_code == 404   # nothing to install for it
+
+
+# what another tool leaves in a real ~/.cursor/hooks.json, trailing commas included
+CURSOR_FILE = ('{\n  "hooks": {\n    "beforeShellExecution": [\n      {"command": "/bin/sh /x/cursor-hook.sh", "timeout": 10}\n    ],\n'
+               '    "stop": [\n      {"command": "echo stop"},\n    ],\n  },\n  "version": 1\n}\n')
+
+
+def test_cursor_hook_installs_and_uninstalls_through_the_dashboard(agents):
+    path = agents.home / ".cursor" / "hooks.json"
+    path.parent.mkdir()
+    path.write_text(CURSOR_FILE, encoding="utf-8")
+    preview = agents.post("install", {"mode": "preview"}, agent="cursor").json()
+    assert preview["changed"] and preview["outcome"] == "added" and preview["path"] == "~/.cursor/hooks.json"
+    assert any("trailing commas" in n for n in preview["notes"])               # the page tells the user the file is cleaned up
+    assert "guard-cursor-hook.sh" in preview["diff"] and str(agents.home) not in preview["diff"].split("\n@@")[0]
+    assert path.read_text() == CURSOR_FILE                                       # a preview writes nothing
+
+    assert agents.post("install", {"mode": "apply"}, agent="cursor").status_code == 409                  # needs the shown diff
+    done = agents.post("install", {"mode": "apply", "diff_id": preview["diff_id"]}, agent="cursor").json()
+    assert done["applied"] and done["backup"] and all(p["ok"] for p in done["probes"]) and len(done["probes"]) == 2
+    written = json.loads(path.read_text())
+    commands = [h["command"] for h in written["hooks"]["beforeShellExecution"]]
+    assert commands[0] == "/bin/sh /x/cursor-hook.sh" and "guard-cursor-hook.sh" in commands[1]      # the other tool's hook stays
+    assert written["hooks"]["stop"] == [{"command": "echo stop"}] and written["version"] == 1
+    row = [r for r in agents.client.get("/api/agents").json()["agents"] if r["id"] == "cursor"][0]
+    assert row["state"] == "installed" and row["managed"] is True
+
+    p = agents.post("uninstall", {"mode": "preview"}, agent="cursor").json()
+    agents.post("uninstall", {"mode": "apply", "diff_id": p["diff_id"]}, agent="cursor")
+    after = json.loads(path.read_text())
+    assert [h["command"] for h in after["hooks"]["beforeShellExecution"]] == ["/bin/sh /x/cursor-hook.sh"]
 
 
 def test_changing_settings_needs_every_check(agents):
@@ -336,7 +368,7 @@ def test_a_hand_written_entry_needs_force_and_bad_requests_are_refused(agents):
     assert agents.post("install", {"scope": "project"}).status_code == 400                   # user scope only
     assert agents.post("install", {"mode": "dance"}).status_code == 400
     assert agents.post("frobnicate", {}).status_code == 404
-    r = agents.client.post("/api/agents/cursor/install", content="{}",
+    r = agents.client.post("/api/agents/codex/install", content="{}",
                            headers={"Content-Type": "application/json", "Origin": "http://127.0.0.1:8787",
                                     "X-Laya-Token": agents.token})
     assert r.status_code == 404

@@ -107,7 +107,7 @@ def api_agents(request: Request):
             continue                      # not here and nothing to install: don't list it
         row = dict(found, state="unsupported", scope=None, path=None, detail="", managed=None)
         if found["supported"]:
-            st = install.status("user", home, Path.cwd())
+            st = install.status("user", home, Path.cwd(), found["id"])
             row.update(scope="user", path=dashboard.display_path(st.path), state=st.state, detail=st.detail,
                        managed=install.is_managed(st.command) if st.command else None)
         agents.append(row)
@@ -136,7 +136,9 @@ def api_agent_action(agent: str, action: str, req: AgentReq):
     shown = dashboard.display_path(plan.settings.path)
     head, _, rest = plan.diff.partition("\n@@")                        # only the ---/+++ header lines carry the path
     diff = head.replace(str(plan.settings.path), shown) + (("\n@@" + rest) if rest else "")
-    body = {"outcome": plan.outcome, "path": shown, "changed": plan.changed,
+    notes = ["The file has trailing commas. The agent accepts them, strict JSON doesn't, and they are dropped "
+             "when the file is rewritten."] if plan.settings.repaired else []
+    body = {"outcome": plan.outcome, "path": shown, "changed": plan.changed, "notes": notes,
             "diff": diff, "diff_id": plan.diff_id if plan.changed else None, "left": plan.left}
     if req.mode == "preview" or not plan.changed:
         return JSONResponse({**body, "applied": False}, headers=dashboard.api_headers())
