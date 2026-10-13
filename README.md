@@ -275,7 +275,7 @@ All patterns live in [policy.yaml](src/laya_guard/policy.yaml) — edit, add you
 | `LAYA_GUARD_MOCK=1` | env | off — heuristics only, no model (for CI/demo) |
 | `LAYA_GUARD_DEVICE` | env | `cpu` (deterministic; set `mps` for speed at the cost of reproducibility) |
 | `LAYA_GUARD_URL` | env (hooks/adapters) | `http://localhost:8787/guard` |
-| `LAYA_GUARD_FAIL` | env (hooks/adapters) | `open` — with the server down, unjudged calls pass; `closed` blocks them |
+| `LAYA_GUARD_FAIL` | env (hooks/adapters) | `open` — with the server down, unjudged calls pass; `closed` blocks them; `ask` sends them to a human (see [Server down](#server-down)) |
 | `LAYA_GUARD_REVIEW` | env (Claude Code hook) | `ask` — `review` becomes a permission prompt; `pass` lets it through without asking |
 | `LAYA_GUARD_BIN` | env (hooks/adapters) | `laya-guard` — CLI used for the offline check |
 | `--no-warmup` | `laya-guard serve` | off — the model loads before the server listens |
@@ -293,10 +293,22 @@ no model) instead:
 | matches any regex policy (block or review level) | block |
 | package.json script of a safe command matches a regex policy | block |
 | safe command, or a chain of only safe commands | allow |
-| anything else | allow with a stderr warning; block with `LAYA_GUARD_FAIL=closed` |
+| anything else (it can't be judged without the model) | allow with a stderr warning; `LAYA_GUARD_FAIL=closed` blocks it; `LAYA_GUARD_FAIL=ask` makes it `review` |
 
 If the CLI isn't on the agent's `PATH` either, `LAYA_GUARD_FAIL` alone decides
 (set `LAYA_GUARD_BIN` to its full path, e.g. `~/.venv/bin/laya-guard`).
+
+Which mode to pick depends on who is watching. **`closed`** is for unattended runs (CI, scheduled agents): an
+unchecked call is never run. **`ask`** is for a person at the keyboard: Claude Code, Cursor, Qwen Code and Copilot CLI
+put the question to you, and when nobody can answer (a headless run) the ask is denied, so it is closed there too.
+The agents with no ask lane (Gemini CLI, Codex, Windsurf, Cline, OpenCode, Kilo, Amp) pass a `review` with a note, so
+use `closed` for them. `open` stays the default.
+
+An outage is not a verdict, so it is recorded as one of its own: every offline check is appended to the verdict log
+with `via: "offline"` (hash and length only, like every entry), the server records how it judged
+(`via: "model"`, `"regex"`, `"allowlist"`, `"heuristic"` after a model error, `"limit"`), and `laya-guard stats`
+prints how many calls were judged without the model, with the server down or after a model error. Mock mode doesn't
+count: that is a choice, not an outage.
 
 Inputs over 256K characters, or with a line over 16K, are blocked without being
 read: some regexes are quadratic in line length, and a 200KB line used to take
@@ -314,7 +326,7 @@ the same as one model call, so a 6-window input takes a few seconds.
 
 - With the server down, calls that are neither regex-flagged nor safe commands
   **pass by default** ([Server down](#server-down)). Set `LAYA_GUARD_FAIL=closed`
-  if you'd rather have them blocked.
+  if you'd rather have them blocked, or `ask` to be asked.
 - If the model fails at runtime, verdicts fall back to regex+heuristics. They are
   marked `verdict_source: "heuristic"` and a warning is logged — check it if you
   rely on model judgments.

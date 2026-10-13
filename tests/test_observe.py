@@ -54,7 +54,9 @@ def _stub_url():
 
 
 def _env(home: Path, **extra) -> dict:
-    env = {k: v for k, v in os.environ.items() if not k.startswith("LAYA_GUARD_") or k == "LAYA_GUARD_MOCK"}
+    # keep the mock switch and the log path (tests/conftest.py points it away from the real verdict log)
+    env = {k: v for k, v in os.environ.items()
+           if not k.startswith("LAYA_GUARD_") or k in ("LAYA_GUARD_MOCK", "LAYA_GUARD_LOG_PATH")}
     env.update(LAYA_GUARD_HOME=str(home), LAYA_GUARD_BIN=str(GUARD_BIN), LAYA_GUARD_URL=DEAD)
     env.update(extra)
     return env

@@ -5,6 +5,22 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- `LAYA_GUARD_FAIL=ask`: with the server down, a call the offline check can't judge (neither regex-flagged nor on the
+  safe list) becomes `review` instead of passing. Agents with an ask lane (Claude Code, Cursor, Qwen Code, Copilot CLI)
+  put it to you, and a headless run denies it, so it is closed when nobody is there. `open` stays the default and
+  `closed` still blocks; known destructive patterns block and safe commands pass in every mode.
+- An outage is recorded as its own kind of event. Every `laya-guard check --offline` (what hooks fall back to) is now
+  appended to the verdict log with `via: "offline"`, the server records how it judged (`via`: `model`, `regex`,
+  `allowlist`, `heuristic`, `limit`), and `laya-guard stats` prints how many calls were judged without the model, with the
+  server down or after a model error. Still hash and length only; mock mode isn't counted.
+
+### Changed
+
+- The tests no longer write to the developer's own verdict log: `tests/conftest.py` points `LAYA_GUARD_LOG_PATH` at a
+  temporary file for the whole run.
+
 ## [0.2.6] - 2026-10-13
 
 ### Security

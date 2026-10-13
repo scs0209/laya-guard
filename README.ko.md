@@ -258,7 +258,7 @@ laya-guard stats   # 판정 분포, block/review율, 상위 정책, 지연시간
 | `LAYA_GUARD_MOCK=1` | 환경변수 | off — 휴리스틱만, 모델 없음 (CI/데모용) |
 | `LAYA_GUARD_DEVICE` | 환경변수 | `cpu` (결정적. `mps`는 빠르지만 재현성 포기) |
 | `LAYA_GUARD_URL` | 환경변수 (훅/어댑터) | `http://localhost:8787/guard` |
-| `LAYA_GUARD_FAIL` | 환경변수 (훅/어댑터) | `open` — 서버 장애 시 판정 못 한 호출은 통과, `closed`면 차단 |
+| `LAYA_GUARD_FAIL` | 환경변수 (훅/어댑터) | `open` — 서버 장애 시 판정 못 한 호출은 통과, `closed`면 차단, `ask`면 사람에게 확인([서버 장애](#서버-장애) 참고) |
 | `LAYA_GUARD_REVIEW` | 환경변수 (Claude Code 훅) | `ask` — `review`를 권한 프롬프트로 사람에게 묻기, `pass`면 묻지 않고 통과 |
 | `LAYA_GUARD_BIN` | 환경변수 (훅/어댑터) | `laya-guard` — 오프라인 검사에 쓰는 CLI |
 | `--no-warmup` | `laya-guard serve` | off — 서버가 대기하기 전에 모델을 먼저 올림 |
@@ -275,10 +275,21 @@ laya-guard stats   # 판정 분포, block/review율, 상위 정책, 지연시간
 | 정규식 정책에 적중 (block·review 등급 모두) | block |
 | 안전 명령이 실행할 package.json 스크립트가 정규식 정책에 적중 | block |
 | 안전 명령, 또는 안전 명령만으로 된 체인 | allow |
-| 그 외 | stderr 경고 후 allow. `LAYA_GUARD_FAIL=closed`면 block |
+| 그 외 (모델 없이는 판정 불가) | stderr 경고 후 allow. `LAYA_GUARD_FAIL=closed`면 block, `LAYA_GUARD_FAIL=ask`면 review |
 
 에이전트의 `PATH`에 CLI도 없으면 `LAYA_GUARD_FAIL`만으로 결정합니다
 (`LAYA_GUARD_BIN`에 전체 경로를 지정하세요. 예: `~/.venv/bin/laya-guard`).
+
+어느 모드를 고를지는 누가 지켜보고 있느냐에 달려 있습니다. **`closed`**는 무인 실행(CI, 예약된 에이전트)용으로, 확인되지
+않은 호출은 절대 실행하지 않습니다. **`ask`**는 사람이 앞에 있을 때용으로, Claude Code, Cursor, Qwen Code, Copilot CLI는
+사용자에게 묻고, 답할 사람이 없으면(헤드리스 실행) ask가 거부되어 거기서는 닫힌 것과 같습니다. 승인 레인이 없는
+에이전트(Gemini CLI, Codex, Windsurf, Cline, OpenCode, Kilo, Amp)는 `review`를 메모만 남기고 통과시키므로 `closed`를
+쓰세요. 기본값은 계속 `open`입니다.
+
+장애는 판정이 아니므로 따로 기록합니다. 오프라인 검사는 모두 판정 로그에 `via: "offline"`으로 남고(다른 항목처럼 해시와
+길이만), 서버는 어떻게 판정했는지(`via: "model"`, `"regex"`, `"allowlist"`, 모델 오류 뒤의 `"heuristic"`, `"limit"`)를
+기록하며, `laya-guard stats`는 서버가 꺼져 있거나 모델이 오류를 낸 상태에서 모델 없이 판정한 호출 수를 보여줍니다. MOCK
+모드는 장애가 아니라 선택이므로 세지 않습니다.
 
 전체 256K자 또는 한 줄 16K자를 넘는 입력은 읽지 않고 차단합니다. 일부 정규식은 한 줄
 길이에 대해 제곱 시간이라, 200KB 한 줄이 48초 걸려 훅 타임아웃을 넘길 수 있었습니다.
@@ -286,7 +297,7 @@ laya-guard stats   # 판정 분포, block/review율, 상위 정책, 지연시간
 ## 한계 (신뢰하기 전에 읽어주세요)
 
 - 서버 장애 시 정규식에도, 안전 명령에도 해당하지 않는 호출은 **기본적으로 통과**합니다
-  ([서버 장애](#서버-장애)). 차단하려면 `LAYA_GUARD_FAIL=closed`를 설정하세요.
+  ([서버 장애](#서버-장애)). 차단하려면 `LAYA_GUARD_FAIL=closed`, 확인을 받으려면 `ask`를 설정하세요.
 - 실행 중 모델이 실패하면 판정은 정규식+휴리스틱으로 대체됩니다. 이때
   `verdict_source: "heuristic"`으로 표시되고 경고가 로그에 남으니, 모델 판정에
   의존한다면 확인하세요.

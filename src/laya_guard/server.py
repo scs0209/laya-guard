@@ -16,7 +16,7 @@ def _judge_and_log(text: str, source: str, cwd: str | None = None):
     log_verdict(
         action=v.action, risk=v.risk, policy_id=v.policy_id, reason=v.reason,
         mock=v.mock, source=source,
-        latency_ms=(time.perf_counter() - t0) * 1000.0, tool_call=text,
+        latency_ms=(time.perf_counter() - t0) * 1000.0, tool_call=text, via=v.verdict_source,
     )
     return v
 

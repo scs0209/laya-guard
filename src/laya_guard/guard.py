@@ -588,13 +588,19 @@ def _script_reason(f: _ScriptFinding, ko: bool) -> str:
         msg = f.unresolved or ""
     return f"package.json scripts.{f.key}: {msg}"
 
-def judge_offline(tool_call: str, fail_closed: bool = False, cwd: str | None = None) -> Verdict:
+def judge_offline(tool_call: str, fail_closed: bool = False, cwd: str | None = None,
+                  unknown: str | None = None) -> Verdict:
     """Regex + safe-command check without the model, for hooks whose server is down.
 
     Regex-flagged calls are blocked and safe commands allowed. Anything else
-    can't be judged without the model: allowed, or blocked with fail_closed.
-    With cwd, the package.json scripts a safe command runs are checked too.
+    can't be judged without the model, and `unknown` says what happens to it:
+    "allow" (the default), "block" (what fail_closed means), or "review", which
+    sends it to the human lane of agents that have one (a headless run has nobody
+    to answer, so there it is denied). With cwd, the package.json scripts a safe
+    command runs are checked too.
     """
+    if unknown is None:
+        unknown = "block" if fail_closed else "allow"
     if _oversized(tool_call):
         return _oversized_verdict(tool_call, mock=False)
     ko = _is_korean(tool_call)
@@ -621,12 +627,12 @@ def judge_offline(tool_call: str, fail_closed: bool = False, cwd: str | None = N
         reason = "안전 명령 목록 (서버 오프라인)" if ko else "Safe command list (server offline)"
         return Verdict(action="allow", risk=0.05, policy_id="general", reason=reason,
                        verdict_source="offline")
-    action = "block" if fail_closed else "allow"
+    action = unknown
     if ko:
-        reason = "서버 오프라인 — 모델 심판 없이 " + ("차단" if fail_closed else "통과")
+        reason = "서버 오프라인 — 모델 심판 없이 " + {"block": "차단", "review": "확인 요청"}.get(action, "통과")
     else:
-        reason = "Server offline — not judged by the model, " + (
-            "blocked" if fail_closed else "allowed")
+        reason = "Server offline — not judged by the model, " + {
+            "block": "blocked", "review": "asking you"}.get(action, "allowed")
     return Verdict(action=action, risk=0.5, policy_id="offline", reason=reason,
                    verdict_source="offline")
 

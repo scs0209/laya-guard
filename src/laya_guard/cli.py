@@ -1,14 +1,17 @@
 """CLI: laya-guard check / serve / eval."""
 from __future__ import annotations
-import argparse, dataclasses, json, os, sys
+import argparse, dataclasses, json, os, sys, time
 from .guard import judge, judge_offline, is_mock, warmup
 
 def cmd_check(args):
     text = " ".join(args.text) if args.text else sys.stdin.read()
     cwd = os.path.abspath(args.cwd)
     if args.offline:
-        v = judge_offline(text, fail_closed=os.environ.get("LAYA_GUARD_FAIL") == "closed",
-                          cwd=cwd)
+        # LAYA_GUARD_FAIL: open (default) passes what it can't judge, closed blocks it, ask sends it to a human
+        unknown = {"closed": "block", "ask": "review"}.get(os.environ.get("LAYA_GUARD_FAIL", ""), "allow")
+        t0 = time.perf_counter()
+        v = judge_offline(text, unknown=unknown, cwd=cwd)
+        _log_offline(v, text, (time.perf_counter() - t0) * 1000.0)
     else:
         v = judge(text, cwd=cwd)
     if args.json:
@@ -18,6 +21,16 @@ def cmd_check(args):
     print(f"[{icon}] {v.action} risk={v.risk} policy={v.policy_id} mock={v.mock}")
     print(f"reason: {v.reason}")
     return 0 if v.action != "block" else 2
+
+def _log_offline(v, text: str, latency_ms: float) -> None:
+    """An offline verdict is an outage, not a real judgment: record it (hash and length only, like every
+    entry) so it can be counted. A log that can't be written must never stop a hook."""
+    from .log import log_verdict
+    try:
+        log_verdict(action=v.action, risk=v.risk, policy_id=v.policy_id, reason=v.reason, mock=False,
+                    source="tool", latency_ms=latency_ms, tool_call=text, via="offline")
+    except OSError:
+        pass
 
 def cmd_serve(args):
     from .server import run
@@ -43,6 +56,10 @@ def cmd_stats(args):
     print(f"by_action: {s['by_action']}")
     print(f"block_rate={s['block_rate']} review_rate={s['review_rate']} mock_share={s['mock_share']}")
     print(f"avg_latency_ms={s['avg_latency_ms']}")
+    d = s["degraded"]
+    if d["total"]:
+        print(f"judged without the model: {d['total']} ({d['offline']} with the server down, "
+              f"{d['model_error']} after a model error), {d['share']:.1%} of all")
     for p in s["top_policies"]:
         print(f"  {p['policy_id']}: {p['count']}")
     return 0
@@ -52,8 +69,8 @@ def main(argv=None):
     sub = ap.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("check"); c.add_argument("text", nargs="*")
     c.add_argument("--offline", action="store_true",
-                   help="regex + safe-command check only, no model (what hooks fall back to "
-                        "when the server is down; LAYA_GUARD_FAIL=closed blocks unjudged calls)")
+                   help="regex + safe-command check only, no model (what hooks fall back to when the "
+                        "server is down; LAYA_GUARD_FAIL=closed blocks unjudged calls, =ask asks a human)")
     c.add_argument("--json", action="store_true", help="print the verdict as JSON")
     c.add_argument("--cwd", default=".",
                    help="directory the command runs in; package.json scripts that `npm test` "
