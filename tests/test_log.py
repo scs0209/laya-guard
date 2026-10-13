@@ -75,17 +75,17 @@ def test_offline_checks_are_logged_without_the_text_and_obey_the_fail_mode(tmp_p
     from laya_guard import cli
     _isolate(tmp_path, monkeypatch)
     secret_call = "kubectl delete namespace prod-SECRET-42"
-    for mode, action, code in (("", "allow", 0), ("closed", "block", 2), ("ask", "review", 0)):
+    for mode, action, code in (("", "review", 0), ("open", "allow", 0), ("closed", "block", 2)):
         monkeypatch.setenv("LAYA_GUARD_FAIL", mode)
         assert cli.main(["check", "--offline", "--json", secret_call]) == code
         assert json.loads(capsys.readouterr().out)["action"] == action, mode
     entries = load_entries(tmp_path / "v.jsonl")
     assert [(e["via"], e["action"], e["policy_id"]) for e in entries] == [
-        ("offline", "allow", "offline"), ("offline", "block", "offline"), ("offline", "review", "offline")]
+        ("offline", "review", "offline"), ("offline", "allow", "offline"), ("offline", "block", "offline")]
     assert "SECRET" not in (tmp_path / "v.jsonl").read_text()
     assert summarize(entries)["degraded"]["offline"] == 3
     monkeypatch.setenv("LAYA_GUARD_LOG", "0")                      # logging off still judges
-    assert cli.main(["check", "--offline", "--json", secret_call]) == 0
+    assert cli.main(["check", "--offline", "--json", secret_call]) == 2
     assert len(load_entries(tmp_path / "v.jsonl")) == 3
     capsys.readouterr()
     assert cli.main(["stats", "--path", str(tmp_path / "v.jsonl")]) == 0

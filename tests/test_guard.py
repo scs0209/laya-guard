@@ -247,7 +247,8 @@ def test_judge_offline():
     assert (v.action, v.policy_id, v.verdict_source) == ("block", "pipe-to-shell", "offline")
     assert off("git push --force origin main").action == "block"  # review 정책도 오프라인에선 차단
     assert off("cd app && npm test").action == "allow"
-    assert (off("npx some-pkg").action, off("npx some-pkg", fail_closed=True).action) == ("allow", "block")
+    assert (off("npx some-pkg").action, off("npx some-pkg", fail_closed=True).action) == ("review", "block")
+    assert off("npx some-pkg", unknown="allow").action == "allow"
     assert off("git status", fail_closed=True).action == "allow"
 
 
@@ -535,7 +536,8 @@ def test_offline_judge_strips_comments_for_the_safe_lane():
 def test_offline_unknown_calls_can_be_allowed_blocked_or_sent_to_a_human():
     unknown = "kubectl delete namespace prod"                    # neither regex-flagged nor on the safe list
     off = guard.judge_offline
-    assert off(unknown).action == "allow"                         # the default: not judged, so it passes
+    assert off(unknown).action == "review"                        # the default: not judged, so a human decides
+    assert off(unknown, unknown="allow").action == "allow"
     assert off(unknown, fail_closed=True).action == "block"       # the old switch still means block
     v = off(unknown, unknown="review")
     assert v.action == "review" and v.policy_id == "offline" and v.verdict_source == "offline"

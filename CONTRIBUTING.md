@@ -82,7 +82,9 @@ PYTHONPATH=src .venv/bin/python eval/run_agentdojo.py     # needs: pip install a
 - **Adapters** in `integrations/` are standalone, standard-library-only
   scripts users copy into place. Keep the contract of the existing ones: 10s
   server timeout, `laya-guard check --offline` fallback, `LAYA_GUARD_FAIL` and
-  `LAYA_GUARD_BIN` support, and a contract test in `tests/test_integrations.py`.
+  `LAYA_GUARD_BIN` support (an unjudged call is asked about where the agent
+  can ask and blocked where it can't, unless `LAYA_GUARD_FAIL=open`), and a
+  contract test in `tests/test_integrations.py`.
 - Keep PRs small and focused. Add a line under `## [Unreleased]` in
   [CHANGELOG.md](CHANGELOG.md).
 - Commit messages, PR titles, and PR descriptions in English.

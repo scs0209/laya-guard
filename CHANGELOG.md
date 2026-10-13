@@ -5,6 +5,22 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+### Changed
+
+- **`LAYA_GUARD_FAIL` now defaults to `ask`, not `open`.** With the server down, a call the offline check can't judge
+  (neither regex-flagged nor on the safe list) no longer passes. Claude Code, Cursor, Qwen Code, Copilot CLI and Amp's
+  permissions helper ask you about it; Gemini CLI, Codex, Windsurf, Cline, OpenCode, Kilo and the Amp plugin have no
+  ask lane, so they block it and say so. Hook input an adapter can't read, and a call made when the CLI can't be found
+  either, follow the same rule. With `LAYA_GUARD_REVIEW=pass` nobody is asked, so an offline `review` is blocked.
+  `LAYA_GUARD_FAIL=open` brings back the old behaviour; `closed` is unchanged. A model `review` with the server up is
+  unchanged too. Raised in a Reddit thread: an outage shouldn't quietly turn the guard off.
+
+### Fixed
+
+- The Gemini CLI, Qwen Code, Cline and Kilo Code adapters sent the offline check the whole tool call
+  (`run_shell_command({"command": ...})`), which never matches the safe-command list, so with the server down even
+  `git status` counted as unjudged. They now give it the bare shell command (what the model sees is unchanged).
+
 ## [0.3.0] - 2026-10-13
 
 A local dashboard, one-command setup for all eleven supported agents, and failure modes that tell an outage from

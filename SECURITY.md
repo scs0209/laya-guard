@@ -31,7 +31,9 @@ Expect an acknowledgement within 7 days. Please include a minimal reproduction
 - A single input judged wrongly (missed attack or false positive). These are
   quality bugs — please open an issue with the input and the verdict so it
   can become an eval case.
-- With the server unreachable, calls that are neither regex-flagged nor safe
-  commands pass unless `LAYA_GUARD_FAIL=closed` — documented and intentional.
+- With the server unreachable and `LAYA_GUARD_FAIL=open` set, calls that are
+  neither regex-flagged nor safe commands pass unjudged — documented and
+  intentional. (By default they are asked about, or blocked where the agent
+  can't ask; a call that passes anyway in that mode is in scope.)
 - Exposing the server beyond localhost with `--host 0.0.0.0` — it has no
   authentication by design.

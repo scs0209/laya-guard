@@ -8,7 +8,8 @@
 // Semantics: block -> the call is rejected with the reason (Amp tells the model, the command never runs).
 // review -> allowed with a stderr note: a plugin has no ask lane of its own. Only shell commands are
 // judged; every other tool call passes. Guard unreachable or slower than 10s -> `laya-guard check --offline`
-// (regex-flagged blocks, safe commands pass, the rest passes unless LAYA_GUARD_FAIL=closed).
+// (regex-flagged blocks, safe commands pass). A command it can't judge has nobody to ask here, so it is
+// rejected unless LAYA_GUARD_FAIL=open.
 // Override the CLI path with LAYA_GUARD_BIN.
 //
 // Amp's older `delegate` permissions helper (amp/permissions-helper) still exists for people on the
@@ -21,7 +22,8 @@ type Verdict = { action: string; risk: number; policy_id: string; reason: string
 
 const GUARD_URL = process.env.LAYA_GUARD_URL ?? 'http://localhost:8787/guard'
 const GUARD_BIN = process.env.LAYA_GUARD_BIN ?? 'laya-guard'
-const FAIL_CLOSED = process.env.LAYA_GUARD_FAIL === 'closed'
+const FAIL_MODE = process.env.LAYA_GUARD_FAIL ?? 'ask'
+const NO_PROMPT = 'this agent has no approval prompt, so it is blocked (LAYA_GUARD_FAIL=open lets it through)'
 
 async function judge(text: string, cwd: string): Promise<Verdict | null> {
   const ctrl = new AbortController()
@@ -46,12 +48,17 @@ async function judge(text: string, cwd: string): Promise<Verdict | null> {
 function judgeOffline(text: string, cwd: string): Verdict {
   let v: Verdict | null = null
   try {
-    const r = spawnSync(GUARD_BIN, ['check', '--offline', '--json', '--cwd', cwd], { input: text, encoding: 'utf8', timeout: 10000 })
+    const r = spawnSync(GUARD_BIN, ['check', '--offline', '--json', '--cwd', cwd], {
+      input: text, encoding: 'utf8', timeout: 10000, env: { ...process.env, LAYA_GUARD_FAIL: FAIL_MODE },
+    })
     if (r.stdout) v = JSON.parse(r.stdout) as Verdict
   } catch {
     v = null
   }
-  v ??= { action: FAIL_CLOSED ? 'block' : 'allow', risk: 0.5, policy_id: 'offline', reason: 'guard server and CLI unavailable; not judged' }
+  v ??= FAIL_MODE === 'open'
+    ? { action: 'allow', risk: 0.5, policy_id: 'offline', reason: 'guard server and CLI unavailable; not judged' }
+    : { action: 'block', risk: 0.5, policy_id: 'offline', reason: `guard server and CLI unavailable; not judged, ${NO_PROMPT}` }
+  if (v.action === 'review') v = { ...v, action: 'block', reason: `server offline, not judged by the model; ${NO_PROMPT}` }
   console.error(`laya-guard: server unreachable, offline check -> ${v.action}`)
   return v
 }

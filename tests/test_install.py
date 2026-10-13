@@ -197,7 +197,12 @@ def test_hook_applies_the_fail_mode_when_it_cannot_read_its_input():
         assert closed.returncode == 2 and "could not parse" in closed.stderr, script
         opened = subprocess.run(["bash", str(script)], input="this is not json", capture_output=True, text=True,
                                 env=dict(base, LAYA_GUARD_FAIL="open"), timeout=60)
-        assert opened.returncode == 0, script
+        assert opened.returncode == 0 and opened.stdout.strip() == "", script
+        asked = subprocess.run(["bash", str(script)], input="this is not json", capture_output=True, text=True,
+                               env=dict(base, LAYA_GUARD_FAIL=""), timeout=60)
+        out = json.loads(asked.stdout)["hookSpecificOutput"]
+        assert asked.returncode == 0 and out["permissionDecision"] == "ask" and "could not parse" in \
+            out["permissionDecisionReason"], script
 
 
 # --- end to end ---------------------------------------------------------------------------------
@@ -348,9 +353,13 @@ def test_cursor_hook_answers_in_cursors_format():
 def test_cursor_hook_always_prints_valid_json():
     for raw in ("not json at all", "{}", json.dumps({"command": 7}), ""):
         proc, out = _run_cursor_hook("", raw=raw)
-        assert proc.returncode == 0 and out == {"permission": "allow"}, raw      # nothing to judge: fail open by default
+        assert proc.returncode == 0 and out["permission"] == "ask", raw          # nothing to judge: asked by default
+        proc, out = _run_cursor_hook("", extra_env={"LAYA_GUARD_FAIL": "open"}, raw=raw)
+        assert proc.returncode == 0 and out == {"permission": "allow"}, raw
     proc, out = _run_cursor_hook("", extra_env={"LAYA_GUARD_FAIL": "closed"}, raw="{}")
     assert proc.returncode == 0 and out["permission"] == "deny"
+    proc, out = _run_cursor_hook("", extra_env={"LAYA_GUARD_REVIEW": "pass"}, raw="{}")
+    assert proc.returncode == 0 and out["permission"] == "deny"                   # nobody to ask, so not let through
 
 
 def test_cursor_hook_asks_for_review_and_can_be_told_to_pass():
