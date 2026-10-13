@@ -7,7 +7,7 @@ All notable changes to this project are documented here. Versions follow
 
 ### Added
 
-- `laya-guard dashboard`: a read-only local dashboard at `http://127.0.0.1:8787/dashboard`
+- `laya-guard dashboard`: a local dashboard at `http://127.0.0.1:8787/dashboard`
   (starts the server if it isn't running, `--no-open` prints the URL). A calm one-column page:
   a sentence with the verdict counts for a 1h to all-time window, a tape with one fine line per
   judged call (linked to the list: point at one and the other lights up), the most recent calls
@@ -16,6 +16,20 @@ All notable changes to this project are documented here. Versions follow
   `GET /dashboard` and `GET /api/stats`; both answer 403 unless the `Host` header is loopback
   (DNS rebinding), the page is self-contained under a nonce-only CSP, and it loads nothing
   from the network. The HTML ships as package data. Roadmap: #37.
+- `laya-guard install claude-code` / `uninstall claude-code` / `status`: registers (and removes,
+  and inspects) the Claude Code hook without editing JSON by hand. It writes absolute paths,
+  merges into existing hooks instead of overwriting them, prints a diff, backs up the settings
+  file and asks before writing (`--dry-run`, `--yes`, `--scope user|project|local`, `--matcher`,
+  `--force`). `uninstall` removes only entries it added (marked `LAYA_GUARD_MANAGED=1`); a
+  hand-written `guard-hook.sh` entry is reported and left alone unless `--force`. After installing
+  it sends two test calls through the hook and checks the exit codes; `status --check` repeats that.
+  Claude Code only for now.
+
+### Changed
+
+- The hook script now ships inside the package (`laya_guard/hooks/guard-hook.sh`, so a plain
+  `pip install` has it). `guard-hook.sh` in the repo root is a thin wrapper around it, so settings
+  that point at the old path keep working.
 
 ## [0.2.6] - 2026-10-13
 
