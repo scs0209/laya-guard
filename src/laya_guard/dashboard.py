@@ -18,6 +18,8 @@ WINDOWS = {"1h": timedelta(hours=1), "24h": timedelta(hours=24), "7d": timedelta
 ACTIONS = ("allow", "review", "block")
 RECENT_LIMIT = 50
 POLICY_LIMIT = 10
+TAPE_LIMIT = 240                       # calls drawn on the verdict tape
+_LETTER = {"allow": "a", "review": "r", "block": "b"}
 MAX_BUCKETS = 90
 # window -> bucket size
 _BUCKET = {"1h": timedelta(minutes=5), "24h": timedelta(hours=1), "7d": timedelta(hours=6),
@@ -127,6 +129,10 @@ def build_stats(entries: list[dict], now: datetime, window: str = "24h") -> dict
         "tool_sha": str(e.get("tool_sha", ""))[:8],
     } for ts, e in recent_rows]
 
+    # the verdict tape: the latest calls in order, oldest first, as [letter, time]
+    tape = [[_LETTER.get(e.get("action"), "?"), _iso(ts)]
+            for ts, e in sorted(timed, key=lambda r: r[0])[-TAPE_LIMIT:]]
+
     top = sorted(policies.items(), key=lambda kv: (-kv[1]["count"], kv[0]))
     return {
         "window": window,
@@ -140,6 +146,7 @@ def build_stats(entries: list[dict], now: datetime, window: str = "24h") -> dict
             "mock_share": rate(mocks),
         },
         "timeline": timeline,
+        "tape": tape,
         "policies": [{"policy_id": k, **v} for k, v in top[:POLICY_LIMIT]],
         "sources": [{"source": k, "count": v} for k, v in sorted(sources.items(), key=lambda kv: -kv[1])],
         "recent": recent,

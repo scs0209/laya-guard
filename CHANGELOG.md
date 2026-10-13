@@ -8,9 +8,10 @@ All notable changes to this project are documented here. Versions follow
 ### Added
 
 - `laya-guard dashboard`: a read-only local dashboard at `http://127.0.0.1:8787/dashboard`
-  (starts the server if it isn't running, `--no-open` prints the URL). Verdict counts for a
-  1h to all-time window, a timeline, per-policy counts and the most recent verdicts as policy
-  reason, short hash and length, never command text. Served by the existing server as
+  (starts the server if it isn't running, `--no-open` prints the URL). A one-sentence summary
+  of the verdicts for a 1h to all-time window, a tape with one tick per judged call, per-policy
+  counts, calls over time and the most recent calls as policy reason, short hash and length,
+  never command text. Served by the existing server as
   `GET /dashboard` and `GET /api/stats`; both answer 403 unless the `Host` header is loopback
   (DNS rebinding), the page is self-contained under a nonce-only CSP, and it loads nothing
   from the network. The HTML ships as package data. Roadmap: #37.

@@ -3,185 +3,180 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>laya-guard dashboard</title>
+<title>laya-guard</title>
+<!--
+Design plan (kept here so the next change starts from it)
+- Job: glance at what the agent tried and what the guard decided; spot blocks and reviews and why.
+- One bold thing: the verdict tape. Each judged call is one tick; block ticks stand tall. Everything else is quiet.
+- Palette, derived from the verdicts themselves: ink #14181c on cool paper #f5f6f7; allow sage #4f7a62,
+  review amber #b97a0c, block vermilion #c3322a. The controls use ink, not a brand blue.
+- Type: one system sans, tabular figures, sentence case. No web fonts: this page may not load anything.
+- No cards. Structure is whitespace plus hairlines where they separate rows of data.
+-->
 <style nonce="{{NONCE}}">
 :root {
   color-scheme: light dark;
-  --bg: #f4f6f8; --surface: #ffffff; --text: #151a21; --muted: #596473; --line: #dfe4ea;
-  --accent: #2158d6; --hover: #eef1f5;
-  --allow: #17724a; --allow-bg: #e2f4ea; --bar-allow: #2fa971;
-  --review: #8f5400; --review-bg: #fbeed3; --bar-review: #e5a02d;
-  --block: #b3261e; --block-bg: #fce6e4; --bar-block: #dc4b43;
-  --radius: 10px; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --paper: #f5f6f7; --ink: #14181c; --ink2: #4a525a; --ink3: #6b737b; --rule: #d6dade; --soft: #e6e9ec;
+  --allow: #3f6b52; --review: #8f5b08; --block: #b02a22;
+  --t-allow: #b3c4ba; --t-review: #d99a1e; --t-block: #c3322a;
+  --sans: "Avenir Next", "Segoe UI Variable Text", "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0e1218; --surface: #161c24; --text: #e7edf4; --muted: #93a0b0; --line: #2a323d;
-    --accent: #6ea8ff; --hover: #1d2530;
-    --allow: #5fd38b; --allow-bg: #12281d; --bar-allow: #36b97d;
-    --review: #e8b445; --review-bg: #2d2409; --bar-review: #e0a331;
-    --block: #ff8a82; --block-bg: #301618; --bar-block: #ea5a52;
+    --paper: #0c0d0e; --ink: #ebecee; --ink2: #aab0b6; --ink3: #858c93; --rule: #2c3034; --soft: #1c1f22;
+    --allow: #86b799; --review: #e2a93a; --block: #ff6a5d;
+    --t-allow: #34423a; --t-review: #d99a1e; --t-block: #ff5a4d;
   }
 }
 * { box-sizing: border-box; }
-html { background: var(--bg); }
-body { margin: 0; color: var(--text); background: var(--bg); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-.wrap { max-width: 1120px; margin: 0 auto; padding: 20px 16px 40px; }
-header { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-.brand { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 650; letter-spacing: -0.01em; }
-.dots { display: inline-flex; gap: 4px; }
-.dots i { width: 9px; height: 9px; border-radius: 50%; display: block; }
-.dots i:nth-child(1) { background: var(--bar-allow); }
-.dots i:nth-child(2) { background: var(--bar-review); }
-.dots i:nth-child(3) { background: var(--bar-block); }
-.controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
-.seg button { border: 0; background: transparent; color: var(--muted); padding: 6px 12px; font: inherit; cursor: pointer; }
-.seg button + button { border-left: 1px solid var(--line); }
-.seg button:hover { background: var(--hover); color: var(--text); }
-.seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
-button.ghost { border: 1px solid var(--line); background: var(--surface); color: var(--text); border-radius: 8px; padding: 6px 12px; font: inherit; cursor: pointer; }
-button.ghost:hover { background: var(--hover); }
-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.updated { color: var(--muted); font-size: 12px; }
-.status { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
-.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); }
-.pill b { color: var(--text); font-weight: 600; }
-.pill .led { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
-.pill.ok .led { background: var(--bar-allow); }
-.pill.warn { background: var(--review-bg); color: var(--review); border-color: transparent; }
-.pill.warn .led { background: var(--bar-review); }
-.pill.bad { background: var(--block-bg); color: var(--block); border-color: transparent; }
-.pill.bad .led { background: var(--bar-block); }
-.banner { display: none; margin-bottom: 14px; padding: 10px 14px; border-radius: var(--radius); background: var(--review-bg); color: var(--review); }
-.banner.show { display: block; }
-.banner.bad { background: var(--block-bg); color: var(--block); }
-.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
-.tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
-.tile h2 { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
-.tile .num { font-size: 28px; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-.tile .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
-.tile.allow .num { color: var(--allow); }
-.tile.review .num { color: var(--review); }
-.tile.block .num { color: var(--block); }
-.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; }
-.card h2 { margin: 0 0 12px; font-size: 14px; font-weight: 650; }
-.card-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.card-head h2 { margin: 0; }
-.legend { display: flex; gap: 14px; color: var(--muted); font-size: 12px; }
-.legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
-.legend .a::before { background: var(--bar-allow); }
-.legend .r::before { background: var(--bar-review); }
-.legend .b::before { background: var(--bar-block); }
-svg.chart { width: 100%; height: 170px; display: block; }
-svg.chart text { fill: var(--muted); font-size: 11px; font-family: inherit; }
-svg.chart .grid { stroke: var(--line); stroke-width: 1; }
-svg.chart .allow { fill: var(--bar-allow); }
-svg.chart .review { fill: var(--bar-review); }
-svg.chart .block { fill: var(--bar-block); }
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
-tr:last-child td { border-bottom: 0; }
-td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-.mono { font-family: var(--mono); font-size: 12px; }
-.muted { color: var(--muted); }
-.nowrap { white-space: nowrap; }
-.badge { display: inline-block; min-width: 62px; text-align: center; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; }
-.badge.allow { background: var(--allow-bg); color: var(--allow); }
-.badge.review { background: var(--review-bg); color: var(--review); }
-.badge.block { background: var(--block-bg); color: var(--block); }
-.risk { display: inline-flex; align-items: center; gap: 8px; }
-.risk .track { width: 56px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
-.risk .fill { height: 100%; display: block; background: var(--bar-allow); }
-.risk .fill.review { background: var(--bar-review); }
-.risk .fill.block { background: var(--bar-block); }
-.split { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--line); min-width: 120px; }
-.split i { display: block; height: 100%; }
-.split .a { background: var(--bar-allow); }
-.split .r { background: var(--bar-review); }
-.split .b { background: var(--bar-block); }
+html { background: var(--paper); }
+body { margin: 0; color: var(--ink); background: var(--paper); font: 15px/1.5 var(--sans); font-variant-numeric: tabular-nums; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 28px 24px 56px; }
+header { display: flex; flex-wrap: wrap; gap: 12px 32px; align-items: baseline; justify-content: space-between; padding-bottom: 14px; border-bottom: 1px solid var(--rule); }
+.wordmark { font-size: 17px; font-weight: 650; letter-spacing: -0.01em; }
+nav { display: flex; flex-wrap: wrap; gap: 4px 22px; align-items: baseline; }
+.tabs { display: flex; gap: 20px; }
+.tab { border: 0; background: none; padding: 4px 0; margin: 0; font: inherit; color: var(--ink3); cursor: pointer; border-bottom: 2px solid transparent; }
+.tab:hover { color: var(--ink); }
+.tab[aria-pressed="true"] { color: var(--ink); border-bottom-color: var(--ink); font-weight: 600; }
+.tab:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.quiet { color: var(--ink3); }
+button.quiet { border: 0; background: none; font: inherit; padding: 4px 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+button.quiet:hover { color: var(--ink); }
+
+.lede { margin: 40px 0 6px; font-size: clamp(24px, 3.6vw, 34px); line-height: 1.25; font-weight: 450; letter-spacing: -0.02em; max-width: 30em; }
+.lede b { font-weight: 700; }
+.lede .a { color: var(--allow); }
+.lede .r { color: var(--review); }
+.lede .b { color: var(--block); }
+.note { margin: 0 0 28px; color: var(--ink2); max-width: 46em; }
+.note .warn { color: var(--review); font-weight: 600; }
+.note .bad { color: var(--block); font-weight: 600; }
+
+.tape { margin: 0 0 8px; }
+.tape svg { display: block; width: 100%; height: 52px; }
+.tape .allow { fill: var(--t-allow); }
+.tape .review { fill: var(--t-review); }
+.tape .block { fill: var(--t-block); }
+.tape .unknown { fill: var(--rule); }
+.axis { display: flex; justify-content: space-between; color: var(--ink3); font-size: 13px; margin-bottom: 44px; }
+
+.cols { display: grid; grid-template-columns: minmax(0, 2.3fr) minmax(250px, 1fr); gap: 56px; align-items: start; }
+h2 { margin: 0 0 14px; font-size: 17px; font-weight: 650; letter-spacing: -0.01em; }
+.head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 20px; margin-bottom: 4px; }
+.head h2 { margin: 0; }
 .scroll { overflow-x: auto; }
-.empty { padding: 28px 12px; text-align: center; color: var(--muted); }
-.empty code { font-family: var(--mono); background: var(--hover); padding: 2px 6px; border-radius: 5px; color: var(--text); }
-footer { color: var(--muted); font-size: 12px; margin-top: 8px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; font-weight: 500; color: var(--ink3); padding: 8px 14px 8px 0; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+td { padding: 11px 14px 11px 0; border-bottom: 1px solid var(--soft); vertical-align: baseline; }
+td.num, th.num { text-align: right; padding-right: 0; }
+.when { color: var(--ink3); white-space: nowrap; }
+.why { color: var(--ink2); }
+.hash { font-family: var(--mono); font-size: 12px; color: var(--ink3); }
+.v { display: inline-flex; align-items: baseline; gap: 7px; font-weight: 600; white-space: nowrap; }
+.v i { width: 7px; height: 7px; display: inline-block; background: currentColor; transform: translateY(-1px); }
+.v.allow { color: var(--allow); }
+.v.review { color: var(--review); }
+.v.block { color: var(--block); }
+.risk { white-space: nowrap; }
+.risk .bar { display: inline-block; width: 34px; height: 3px; margin-left: 8px; background: var(--soft); vertical-align: middle; }
+.risk .bar i { display: block; height: 100%; background: var(--ink2); }
+.empty { padding: 36px 0; color: var(--ink2); }
+.empty code { font-family: var(--mono); font-size: 13px; }
+.more { margin-top: 12px; color: var(--ink3); font-size: 13px; }
+
+.side section + section { margin-top: 44px; }
+.pol { display: block; padding: 10px 0 11px; border-bottom: 1px solid var(--soft); }
+.pol .row { display: flex; justify-content: space-between; gap: 12px; }
+.pol .name { overflow-wrap: anywhere; }
+.pol .split { display: flex; height: 3px; margin-top: 7px; background: var(--soft); }
+.pol .split i { display: block; height: 100%; }
+.pol .split .a { background: var(--t-allow); }
+.pol .split .r { background: var(--t-review); }
+.pol .split .b { background: var(--t-block); }
+.over svg { display: block; width: 100%; height: 92px; }
+.over .allow { fill: var(--t-allow); }
+.over .review { fill: var(--t-review); }
+.over .block { fill: var(--t-block); }
+.over text { fill: var(--ink3); font-size: 12px; font-family: inherit; }
+footer { margin-top: 56px; padding-top: 14px; border-top: 1px solid var(--rule); color: var(--ink3); font-size: 13px; max-width: 52em; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-@media (max-width: 760px) {
-  .tiles { grid-template-columns: repeat(2, 1fr); }
+.nowrap { white-space: nowrap; }
+@media (max-width: 1100px) { .hide-md { display: none; } }
+@media (max-width: 900px) {
+  .cols { grid-template-columns: minmax(0, 1fr); gap: 48px; }
   .hide-sm { display: none; }
+  .wrap { padding: 20px 16px 40px; }
+}
+@media (max-width: 600px) {
+  .hide-xs, .risk .bar { display: none; }
+  th, td { padding-right: 10px; }
 }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <div class="brand"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span> laya-guard</div>
-    <div class="controls">
-      <div class="seg" role="group" aria-label="Time window" id="windows">
-        <button type="button" data-window="1h" aria-pressed="false">1h</button>
-        <button type="button" data-window="24h" aria-pressed="true">24h</button>
-        <button type="button" data-window="7d" aria-pressed="false">7d</button>
-        <button type="button" data-window="30d" aria-pressed="false">30d</button>
-        <button type="button" data-window="all" aria-pressed="false">All</button>
+    <div class="wordmark">laya-guard</div>
+    <nav aria-label="Controls">
+      <div class="tabs" role="group" aria-label="Time window" id="windows">
+        <button type="button" class="tab" data-window="1h" aria-pressed="false">1 hour</button>
+        <button type="button" class="tab" data-window="24h" aria-pressed="true">24 hours</button>
+        <button type="button" class="tab" data-window="7d" aria-pressed="false">7 days</button>
+        <button type="button" class="tab" data-window="30d" aria-pressed="false">30 days</button>
+        <button type="button" class="tab" data-window="all" aria-pressed="false">All time</button>
       </div>
-      <button type="button" class="ghost" id="pause" aria-pressed="false">Pause</button>
-      <span class="updated" id="updated" role="status" aria-live="polite">Loading…</span>
-    </div>
+      <button type="button" class="quiet" id="pause" aria-pressed="false">Pause updates</button>
+    </nav>
   </header>
 
-  <div class="status" id="status"></div>
-  <div class="banner" id="banner" role="alert"></div>
+  <main>
+    <p class="lede" id="lede" aria-live="polite">Loading the verdict log.</p>
+    <p class="note" id="note"></p>
 
-  <section class="tiles" aria-label="Summary">
-    <div class="tile"><h2>Verdicts</h2><div class="num" id="t-total">–</div><div class="sub" id="t-latency">&nbsp;</div></div>
-    <div class="tile allow"><h2>Allow</h2><div class="num" id="t-allow">–</div><div class="sub" id="t-allow-rate">&nbsp;</div></div>
-    <div class="tile review"><h2>Review</h2><div class="num" id="t-review">–</div><div class="sub" id="t-review-rate">&nbsp;</div></div>
-    <div class="tile block"><h2>Block</h2><div class="num" id="t-block">–</div><div class="sub" id="t-block-rate">&nbsp;</div></div>
-  </section>
+    <div class="tape" id="tape"></div>
+    <div class="axis"><span id="tape-from"></span><span id="tape-to"></span></div>
 
-  <section class="card" aria-labelledby="h-timeline">
-    <div class="card-head">
-      <h2 id="h-timeline">Verdicts over time</h2>
-      <div class="legend" aria-hidden="true"><span class="a">allow</span><span class="r">review</span><span class="b">block</span></div>
-    </div>
-    <div id="timeline"></div>
-  </section>
+    <div class="cols">
+      <section aria-labelledby="h-recent">
+        <div class="head">
+          <h2 id="h-recent">Recent calls</h2>
+          <div class="tabs" role="group" aria-label="Filter by verdict" id="filters">
+            <button type="button" class="tab" data-filter="all" aria-pressed="true">All</button>
+            <button type="button" class="tab" data-filter="allow" aria-pressed="false">Allowed</button>
+            <button type="button" class="tab" data-filter="review" aria-pressed="false">Review</button>
+            <button type="button" class="tab" data-filter="block" aria-pressed="false">Blocked</button>
+          </div>
+        </div>
+        <div class="scroll"><table>
+          <thead><tr><th>Time</th><th>Verdict</th><th>Risk</th><th class="hide-xs">Policy</th><th>Reason</th><th class="hide-md">Source</th><th class="num hide-md">Took</th><th class="hide-sm">Call</th></tr></thead>
+          <tbody id="recent"></tbody>
+        </table></div>
+        <p class="more" id="recent-note"></p>
+      </section>
 
-  <section class="card" aria-labelledby="h-policies">
-    <h2 id="h-policies">Policies</h2>
-    <div class="scroll"><table>
-      <thead><tr><th>Policy</th><th class="num">Calls</th><th class="num">Allow</th><th class="num">Review</th><th class="num">Block</th><th class="hide-sm">Split</th></tr></thead>
-      <tbody id="policies"></tbody>
-    </table></div>
-  </section>
-
-  <section class="card" aria-labelledby="h-recent">
-    <div class="card-head">
-      <h2 id="h-recent">Recent verdicts</h2>
-      <div class="seg" role="group" aria-label="Filter by verdict" id="filters">
-        <button type="button" data-filter="all" aria-pressed="true">All</button>
-        <button type="button" data-filter="allow" aria-pressed="false">Allow</button>
-        <button type="button" data-filter="review" aria-pressed="false">Review</button>
-        <button type="button" data-filter="block" aria-pressed="false">Block</button>
+      <div class="side">
+        <section aria-labelledby="h-policies">
+          <h2 id="h-policies">Policies</h2>
+          <div id="policies"></div>
+        </section>
+        <section aria-labelledby="h-over">
+          <h2 id="h-over">Calls over time</h2>
+          <div class="over" id="over"></div>
+        </section>
       </div>
     </div>
-    <div class="scroll"><table>
-      <thead><tr><th>Time</th><th>Verdict</th><th>Risk</th><th>Policy</th><th>Reason</th><th class="hide-sm">Source</th><th class="num hide-sm">Latency</th><th class="hide-sm">Call</th></tr></thead>
-      <tbody id="recent"></tbody>
-    </table></div>
-    <div class="muted" id="recent-note"></div>
-  </section>
+  </main>
 
-  <footer>
-    Served from this machine only. The log stores a hash and the length of each call, never the command text
-    (<span class="mono" id="log-path"></span>).
-  </footer>
+  <footer id="footer"></footer>
 </div>
 
 <script nonce="{{NONCE}}">
 (function () {
   "use strict";
   var state = { window: "24h", filter: "all", paused: false, data: null };
+  var WINDOW_TEXT = { "1h": "in the last hour", "24h": "in the last 24 hours", "7d": "in the last 7 days", "30d": "in the last 30 days", "all": "in total" };
 
   function $(id) { return document.getElementById(id); }
   function el(tag, props) {
@@ -206,116 +201,120 @@ footer { color: var(--muted); font-size: 12px; margin-top: 8px; }
   }
   function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
   function fmtInt(n) { return Number(n || 0).toLocaleString(); }
-  function fmtPct(r) { return (Number(r || 0) * 100).toFixed(1) + "%"; }
   function fmtTime(iso, withDate) {
     var d = new Date(iso);
     var t = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
     return withDate ? d.toLocaleDateString([], { month: "short", day: "numeric" }) + " " + t : t;
   }
+  function fmtStamp(iso) { return new Date(iso).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }); }
   function fmtBucket(iso, win) {
     var d = new Date(iso);
     if (win === "1h") return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     if (win === "24h") return d.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
     return d.toLocaleDateString([], { month: "short", day: "numeric" });
   }
+  function plural(n, one, many) { return fmtInt(n) + " " + (n === 1 ? one : many); }
 
-  function pill(cls, label, value) {
-    return el("span", { "class": "pill " + cls }, el("span", { "class": "led" }), label ? el("span", { text: label }) : null, value ? el("b", { text: value }) : null);
-  }
-
-  function renderStatus(h, ok) {
-    var box = $("status");
+  function renderLede(d) {
+    var t = d.totals, box = $("lede");
     clear(box);
-    if (!ok) { box.appendChild(pill("bad", "Server", "unreachable")); return; }
-    box.appendChild(pill("ok", "Server", "running"));
-    box.appendChild(h.mock ? pill("warn", "Mode", "MOCK (regex + heuristics)") : pill("ok", "Mode", "real model"));
-    box.appendChild(h.logging ? pill("ok", "Logging", "on") : pill("warn", "Logging", "off"));
-    box.appendChild(pill("", "Version", h.version || "unknown"));
+    if (!t.total) { box.textContent = "No calls were judged " + WINDOW_TEXT[d.window] + "."; return; }
+    box.appendChild(el("b", { text: plural(t.total, "call was", "calls were") }));
+    box.appendChild(document.createTextNode(" judged " + WINDOW_TEXT[d.window] + ". "));
+    box.appendChild(el("span", { "class": "a", text: fmtInt(t.allow) + " allowed" }));
+    box.appendChild(document.createTextNode(", "));
+    box.appendChild(el("span", { "class": "r", text: fmtInt(t.review) + " held for review" }));
+    box.appendChild(document.createTextNode(", "));
+    box.appendChild(el("span", { "class": "b", text: fmtInt(t.block) + " blocked" }));
+    box.appendChild(document.createTextNode("."));
   }
 
-  function renderBanner(h, ok) {
-    var b = $("banner");
-    b.className = "banner";
-    var msg = "";
-    if (!ok) { msg = "Can't reach the laya-guard server. If the guard is down, hooks fall back to the offline check and unjudged calls are allowed."; b.className = "banner bad show"; }
-    else if (!h.logging) { msg = "Verdict logging is off (LAYA_GUARD_LOG=0), so there is nothing to show here."; b.className = "banner show"; }
-    else if (h.mock) { msg = "Mock mode: verdicts come from regexes and heuristics, not the Laya model."; b.className = "banner show"; }
-    b.textContent = msg;
+  function renderNote(d, ok) {
+    var note = $("note"), h = d.health;
+    clear(note);
+    if (!ok) {
+      note.appendChild(el("span", { "class": "bad", text: "Can't reach the laya-guard server." }));
+      note.appendChild(document.createTextNode(" If the guard is down, hooks fall back to the offline check and calls it can't judge are let through."));
+      return;
+    }
+    var parts = [];
+    parts.push(h.mock ? ["warn", "The guard is in mock mode"] : [null, "The guard is running on the real model"]);
+    note.appendChild(parts[0][0] ? el("span", { "class": parts[0][0], text: parts[0][1] }) : document.createTextNode(parts[0][1]));
+    note.appendChild(document.createTextNode(h.mock ? ": verdicts come from regexes and heuristics, not the Laya model." : "."));
+    if (!h.logging) {
+      note.appendChild(document.createTextNode(" "));
+      note.appendChild(el("span", { "class": "warn", text: "Logging is off (LAYA_GUARD_LOG=0)" }));
+      note.appendChild(document.createTextNode(", so there is nothing to show."));
+    } else if (d.totals.total) {
+      note.appendChild(document.createTextNode(" Judging takes " + fmtInt(Math.round(d.totals.avg_latency_ms)) + " ms on average, " + fmtInt(Math.round(d.totals.p95_latency_ms)) + " ms for the slowest 5%."));
+    }
   }
 
-  function renderTiles(t) {
-    $("t-total").textContent = fmtInt(t.total);
-    $("t-latency").textContent = t.total ? "avg " + t.avg_latency_ms + " ms · p95 " + t.p95_latency_ms + " ms" : " ";
-    ["allow", "review", "block"].forEach(function (a) {
-      $("t-" + a).textContent = fmtInt(t[a]);
-      $("t-" + a + "-rate").textContent = t.total ? fmtPct(t[a + "_rate"]) + " of calls" : " ";
-    });
-  }
-
-  function renderTimeline(rows, win, total) {
-    var box = $("timeline");
+  function renderTape(d) {
+    var box = $("tape");
     clear(box);
-    if (!total || !rows.length) { box.appendChild(el("div", { "class": "empty", text: "No verdicts in this window." })); return; }
-    var W = Math.max(box.clientWidth || 640, 280), H = 170, padL = 34, padR = 8, padT = 8, padB = 22;   // 1 unit = 1 px, so labels stay readable on a phone
-    var max = 1;
-    rows.forEach(function (r) { max = Math.max(max, r.allow + r.review + r.block); });
-    var plotW = W - padL - padR, plotH = H - padT - padB, slot = plotW / rows.length, bw = Math.max(Math.min(slot * 0.78, 28), 2);
-    var s = svg("svg", { "class": "chart", viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": "Verdicts per interval, " + total + " in total" });
-    [0, 0.5, 1].forEach(function (f) {
-      var y = padT + plotH - plotH * f;
-      s.appendChild(svg("line", { "class": "grid", x1: padL, x2: W - padR, y1: y, y2: y }));
-      var label = svg("text", { x: padL - 6, y: y + 4, "text-anchor": "end" });
-      label.textContent = String(Math.round(max * f));
-      s.appendChild(label);
-    });
-    rows.forEach(function (r, i) {
-      var x = padL + i * slot + (slot - bw) / 2, y = padT + plotH;
-      var g = svg("g", {});
+    var tape = d.tape || [];
+    $("tape-from").textContent = tape.length ? fmtStamp(tape[0][1]) : "";
+    $("tape-to").textContent = tape.length ? fmtStamp(tape[tape.length - 1][1]) : "";
+    if (!tape.length) return;
+    var W = Math.max(box.clientWidth || 800, 240), H = 52, step = Math.min(W / tape.length, 8), w = Math.max(step - 1.5, 1);
+    var heights = { a: 12, r: 28, b: 52 }, names = { a: "allow", r: "review", b: "block" };
+    var s = svg("svg", { viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": "The last " + tape.length + " calls, oldest on the left. Tall marks are blocks, medium are reviews, short are allowed calls." });
+    tape.forEach(function (c, i) {
+      var h = heights[c[0]] || 6, name = names[c[0]] || "unknown";
+      var x = W - (tape.length - i) * step;
+      var r = svg("rect", { "class": name, x: x, y: H - h, width: w, height: h });
       var tip = svg("title", {});
-      tip.textContent = fmtBucket(r.t, win) + ": allow " + r.allow + ", review " + r.review + ", block " + r.block;
+      tip.textContent = name + ", " + fmtTime(c[1], true);
+      r.appendChild(tip);
+      s.appendChild(r);
+    });
+    box.appendChild(s);
+  }
+
+  function renderOver(rows, win, total) {
+    var box = $("over");
+    clear(box);
+    if (!total || !rows.length) { box.appendChild(el("p", { "class": "quiet", text: "Nothing to plot." })); return; }
+    var W = Math.max(box.clientWidth || 260, 200), H = 92, padB = 18, plotH = H - padB, max = 1;
+    rows.forEach(function (r) { max = Math.max(max, r.allow + r.review + r.block); });
+    var slot = W / rows.length, bw = Math.max(slot - 2, 1);
+    var s = svg("svg", { viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": "Calls per interval, " + total + " in total, busiest interval " + max });
+    rows.forEach(function (r, i) {
+      var x = i * slot + (slot - bw) / 2, y = plotH, g = svg("g", {});
+      var tip = svg("title", {});
+      tip.textContent = fmtBucket(r.t, win) + ": " + r.allow + " allowed, " + r.review + " review, " + r.block + " blocked";
       g.appendChild(tip);
       ["allow", "review", "block"].forEach(function (a) {
         var h = plotH * r[a] / max;
         if (h <= 0) return;
         y -= h;
-        g.appendChild(svg("rect", { "class": a, x: x, y: y, width: bw, height: h, rx: 1.5 }));
+        g.appendChild(svg("rect", { "class": a, x: x, y: y, width: bw, height: h }));
       });
       s.appendChild(g);
     });
-    [0, rows.length - 1].forEach(function (i, n) {
-      var t = svg("text", { x: n === 0 ? padL : W - padR, y: H - 4, "text-anchor": n === 0 ? "start" : "end" });
-      t.textContent = fmtBucket(rows[i].t, win);
+    [[0, "start"], [rows.length - 1, "end"]].forEach(function (p) {
+      var t = svg("text", { x: p[1] === "start" ? 0 : W, y: H - 3, "text-anchor": p[1] });
+      t.textContent = fmtBucket(rows[p[0]].t, win);
       s.appendChild(t);
     });
     box.appendChild(s);
   }
 
-  function splitBar(p) {
-    var wrap = el("div", { "class": "split", "aria-hidden": "true" });
-    [["a", p.allow], ["r", p.review], ["b", p.block]].forEach(function (pair) {
-      if (!p.count || !pair[1]) return;
-      var seg = el("i", { "class": pair[0] });
-      seg.style.width = (pair[1] / p.count * 100) + "%";
-      wrap.appendChild(seg);
-    });
-    return wrap;
-  }
-
   function renderPolicies(rows) {
-    var body = $("policies");
-    clear(body);
-    if (!rows.length) {
-      body.appendChild(el("tr", null, el("td", { colspan: "6", "class": "empty", text: "No verdicts in this window." })));
-      return;
-    }
+    var box = $("policies");
+    clear(box);
+    if (!rows.length) { box.appendChild(el("p", { "class": "quiet", text: "No policies in this window." })); return; }
     rows.forEach(function (p) {
-      body.appendChild(el("tr", null,
-        el("td", { "class": "mono nowrap", text: p.policy_id }),
-        el("td", { "class": "num", text: fmtInt(p.count) }),
-        el("td", { "class": "num", text: fmtInt(p.allow) }),
-        el("td", { "class": "num", text: fmtInt(p.review) }),
-        el("td", { "class": "num", text: fmtInt(p.block) }),
-        el("td", { "class": "hide-sm" }, splitBar(p))));
+      var split = el("div", { "class": "split", "aria-hidden": "true" });
+      [["a", p.allow], ["r", p.review], ["b", p.block]].forEach(function (pair) {
+        if (!p.count || !pair[1]) return;
+        var seg = el("i", { "class": pair[0] });
+        seg.style.width = (pair[1] / p.count * 100) + "%";
+        split.appendChild(seg);
+      });
+      box.appendChild(el("div", { "class": "pol", title: p.allow + " allowed, " + p.review + " review, " + p.block + " blocked" },
+        el("div", { "class": "row" }, el("span", { "class": "name", text: p.policy_id }), el("span", { text: fmtInt(p.count) })), split));
     });
   }
 
@@ -324,41 +323,46 @@ footer { color: var(--muted); font-size: 12px; margin-top: 8px; }
     clear(body);
     var shown = rows.filter(function (r) { return state.filter === "all" || r.action === state.filter; });
     if (!shown.length) {
-      var hint = totalInWindow
-        ? "No " + (state.filter === "all" ? "" : state.filter + " ") + "verdicts among the most recent calls."
-        : "No verdicts yet. Run a tool call through a hook, or try ";
-      var td = el("td", { colspan: "8", "class": "empty" }, hint, totalInWindow ? null : el("code", { text: "laya-guard check \"ls -la\"" }));
+      var td = el("td", { colspan: "8", "class": "empty" });
+      if (totalInWindow) td.textContent = "None of the most recent calls were " + ({ allow: "allowed", review: "held for review", block: "blocked" }[state.filter] || "judged") + ".";
+      else { td.appendChild(document.createTextNode("Nothing has been judged yet. Try ")); td.appendChild(el("code", { text: "laya-guard check \"ls -la\"" })); td.appendChild(document.createTextNode(".")); }
       body.appendChild(el("tr", null, td));
     }
-    var oldest = Date.now() - 24 * 3600 * 1000;
+    var dayAgo = Date.now() - 24 * 3600 * 1000;
+    var word = { allow: "allowed", review: "review", block: "blocked" };
     shown.forEach(function (r) {
-      var pct = Math.max(0, Math.min(1, Number(r.risk) || 0)) * 100;
-      var fill = el("span", { "class": "fill " + r.action });
-      fill.style.width = pct + "%";
+      var risk = Math.max(0, Math.min(1, Number(r.risk) || 0)), fill = el("i", {});
+      fill.style.width = (risk * 100) + "%";
       body.appendChild(el("tr", null,
-        el("td", { "class": "mono muted", text: fmtTime(r.ts, new Date(r.ts).getTime() < oldest) }),
-        el("td", null, el("span", { "class": "badge " + r.action, text: r.action })),
-        el("td", null, el("span", { "class": "risk" }, el("span", { "class": "track" }, fill), el("span", { "class": "mono", text: (Number(r.risk) || 0).toFixed(2) }))),
-        el("td", { "class": "mono", text: r.policy_id || "" }),
-        el("td", { text: r.reason || "" }),
-        el("td", { "class": "hide-sm muted", text: r.source || "" }),
-        el("td", { "class": "num hide-sm muted", text: r.latency_ms != null ? Math.round(r.latency_ms) + " ms" : "" }),
-        el("td", { "class": "hide-sm mono muted", title: (r.tool_len != null ? r.tool_len + " chars" : ""), text: r.tool_sha || "" })));
+        el("td", { "class": "when", text: fmtTime(r.ts, new Date(r.ts).getTime() < dayAgo) }),
+        el("td", null, el("span", { "class": "v " + r.action }, el("i", {}), word[r.action] || String(r.action))),
+        el("td", { "class": "risk" }, risk.toFixed(2), el("span", { "class": "bar", "aria-hidden": "true" }, fill)),
+        el("td", { "class": "hide-xs", text: r.policy_id || "" }),
+        el("td", { "class": "why", text: r.reason || "" }),
+        el("td", { "class": "hide-md quiet", text: r.source || "" }),
+        el("td", { "class": "num hide-md quiet nowrap", text: r.latency_ms != null ? Math.round(r.latency_ms) + " ms" : "" }),
+        el("td", { "class": "hide-sm hash nowrap", title: (r.tool_len != null ? r.tool_len + " characters" : ""), text: r.tool_sha || "" })));
     });
-    $("recent-note").textContent = rows.length && totalInWindow > rows.length ? "Showing the " + rows.length + " most recent of " + fmtInt(totalInWindow) + " verdicts." : "";
+    $("recent-note").textContent = rows.length && totalInWindow > rows.length ? "The " + rows.length + " most recent of " + fmtInt(totalInWindow) + " calls." : "";
+  }
+
+  function renderFooter(d, ok) {
+    var f = $("footer");
+    f.textContent = ok
+      ? "Served from this machine only. The log keeps a hash and the length of each call, never the command text (" + (d.health.log_path || "") + "). laya-guard " + (d.health.version || "") + ". Updated " + fmtTime(d.generated_at, false) + (state.paused ? ", paused." : ", refreshing every 5 seconds.")
+      : "Disconnected. Trying again every 5 seconds.";
   }
 
   function render() {
     var d = state.data;
     if (!d) return;
-    renderStatus(d.health, true);
-    renderBanner(d.health, true);
-    renderTiles(d.totals);
-    renderTimeline(d.timeline, d.window, d.totals.total);
-    renderPolicies(d.policies);
+    renderLede(d);
+    renderNote(d, true);
+    renderTape(d);
     renderRecent(d.recent, d.totals.total);
-    $("log-path").textContent = d.health.log_path || "";
-    $("updated").textContent = "Updated " + fmtTime(d.generated_at, false) + (state.paused ? " · paused" : " · auto-refresh 5s");
+    renderPolicies(d.policies);
+    renderOver(d.timeline, d.window, d.totals.total);
+    renderFooter(d, true);
   }
 
   function load() {
@@ -366,13 +370,13 @@ footer { color: var(--muted); font-size: 12px; margin-top: 8px; }
       .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
       .then(function (data) { state.data = data; render(); })
       .catch(function () {
-        renderStatus({}, false);
-        renderBanner({}, false);
-        $("updated").textContent = "Disconnected";
+        $("lede").textContent = "The dashboard can't reach the server.";
+        renderNote({}, false);
+        renderFooter({}, false);
       });
   }
 
-  function bindSeg(id, attr, onPick) {
+  function bindTabs(id, attr, onPick) {
     $(id).addEventListener("click", function (ev) {
       var b = ev.target.closest("button");
       if (!b) return;
@@ -380,18 +384,18 @@ footer { color: var(--muted); font-size: 12px; margin-top: 8px; }
       onPick(b.getAttribute(attr));
     });
   }
-  bindSeg("windows", "data-window", function (w) { state.window = w; load(); });
-  bindSeg("filters", "data-filter", function (f) { state.filter = f; if (state.data) renderRecent(state.data.recent, state.data.totals.total); });
+  bindTabs("windows", "data-window", function (w) { state.window = w; load(); });
+  bindTabs("filters", "data-filter", function (f) { state.filter = f; if (state.data) renderRecent(state.data.recent, state.data.totals.total); });
   $("pause").addEventListener("click", function () {
     state.paused = !state.paused;
     this.setAttribute("aria-pressed", String(state.paused));
-    this.textContent = state.paused ? "Resume" : "Pause";
-    if (!state.paused) load(); else if (state.data) render();
+    this.textContent = state.paused ? "Resume updates" : "Pause updates";
+    if (!state.paused) load(); else if (state.data) renderFooter(state.data, true);
   });
   var resizeTimer = null;
   window.addEventListener("resize", function () {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(function () { if (state.data) renderTimeline(state.data.timeline, state.data.window, state.data.totals.total); }, 150);
+    resizeTimer = setTimeout(function () { if (state.data) { renderTape(state.data); renderOver(state.data.timeline, state.data.window, state.data.totals.total); } }, 150);
   });
   setInterval(function () { if (!state.paused && !document.hidden) load(); }, 5000);
   document.addEventListener("visibilitychange", function () { if (!document.hidden && !state.paused) load(); });

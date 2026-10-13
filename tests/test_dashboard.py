@@ -75,6 +75,20 @@ def test_timeline_buckets_are_contiguous_and_add_up():
     assert dashboard.build_stats([], NOW, "all")["timeline"] == []
 
 
+def test_tape_is_the_latest_calls_oldest_first():
+    entries = [_entry(i, "block" if i == 4 else "allow") for i in range(1, 6)]     # i minutes ago
+    s = dashboard.build_stats(entries, NOW, "24h")
+    assert "".join(c[0] for c in s["tape"]) == "abaaa"                          # oldest on the left
+    stamps = [c[1] for c in s["tape"]]
+    assert stamps == sorted(stamps)
+    many = [_entry(i / 10) for i in range(1, dashboard.TAPE_LIMIT + 61)]
+    tape = dashboard.build_stats(many, NOW, "24h")["tape"]
+    assert len(tape) == dashboard.TAPE_LIMIT and tape[-1][1] >= tape[0][1]        # capped, newest kept
+    odd = dashboard.build_stats([_entry(1, "weird")], NOW, "24h")["tape"]
+    assert odd[0][0] == "?"
+    assert dashboard.build_stats([], NOW, "24h")["tape"] == []
+
+
 def test_recent_is_newest_first_capped_and_has_no_command_text():
     entries = [_entry(i, tool_call="SECRET COMMAND", tool_sha="ABCDEF0123456789") for i in range(1, 80)]
     s = dashboard.build_stats(entries, NOW, "24h")
