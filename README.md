@@ -5,6 +5,7 @@
 [![ci](https://github.com/scs0209/laya-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/scs0209/laya-guard/actions/workflows/ci.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![python: >=3.10](https://img.shields.io/badge/python-%3E%3D3.10-blue.svg)](pyproject.toml)
+[![pypi](https://img.shields.io/pypi/v/laya-guardrail.svg)](https://pypi.org/project/laya-guardrail/)
 
 <p align="center">
   <strong>English</strong> · <a href="README.ko.md">한국어</a>
@@ -31,7 +32,12 @@ patterns, model judgment for everything else → `allow` / `review` / `block`.
 ```bash
 pip install laya-guardrail   # PyPI name; the command it installs is `laya-guard`
 laya-guard serve             # loads the model, then listens on localhost:8787
+laya-guard install claude-code   # hook it into an agent: shows a diff first, then backs up and checks
+laya-guard dashboard         # or do it with a click (and see what the guard is doing): see Dashboard
 ```
+
+`laya-guard install` works for eleven agents (Claude Code, Codex CLI, Cursor, Gemini CLI, Qwen Code, Windsurf,
+Copilot CLI, Cline, OpenCode, Kilo Code, Amp): [one command per agent](#1c-every-other-agent).
 
 > The PyPI package is **`laya-guardrail`**. `pip install laya-guard` installs an
 > unrelated project ([dockndevai/laya-guard](https://pypi.org/project/laya-guard/)).
@@ -41,6 +47,52 @@ Requires Python ≥ 3.10. The model runtime pulls in PyTorch + transformers
 downloads on first `serve`. To try just the regex layer without any of that:
 `pip install --no-deps laya-guardrail pyyaml`, then
 `LAYA_GUARD_MOCK=1 laya-guard check "rm -rf /"`.
+
+## Dashboard
+
+```bash
+laya-guard dashboard   # starts the server if it isn't running and opens http://127.0.0.1:8787/dashboard
+```
+
+<p align="center">
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/scs0209/laya-guard/main/docs/images/dashboard-overview-light.png">
+  <img src="https://raw.githubusercontent.com/scs0209/laya-guard/main/docs/images/dashboard-overview-dark.png" width="860" alt="The laya-guard dashboard: verdict counts, a tape of recent calls, and which agents are protected">
+</picture>
+</p>
+
+A small app on your own machine (nothing leaves it) that shows what the guard is doing and protects your agents
+with a click. The screenshots use made-up data.
+
+- **Overview**: how many calls were judged and how they split, a tape with one fine line per call (blocks stand tall
+  and red; click one to open that call), and cards for what needs a look: an outline and a count when there are blocks or
+  reviews, and one card per agent that isn't protected yet.
+- **Agents**: it finds the coding agents on this machine by itself (an executable on `PATH`, an app bundle or a config
+  directory; read-only, it never opens those files) and shows whether each one has the hook. **Install hook** opens a
+  sheet with the exact diff. Nothing is written until you press **Apply change**; then the file is backed up, written
+  atomically, and two test calls go through the hook to check it. The blue button at the bottom of the sidebar installs
+  wherever the hook is missing.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/scs0209/laya-guard/main/docs/images/dashboard-agents-dark.png" width="49%" alt="The Agents view: a tile per agent found on the machine, with a status dot">
+  <img src="https://raw.githubusercontent.com/scs0209/laya-guard/main/docs/images/dashboard-install-sheet-dark.png" width="49%" alt="The install sheet: the exact diff to ~/.cursor/hooks.json before anything is written">
+</p>
+
+- **Calls**: every judged call with its policy, reason, source, timing, length and hash (never the command text), with
+  a verdict filter and search.
+- **Policies**: which rules decided the calls.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/scs0209/laya-guard/main/docs/images/dashboard-calls-dark.png" width="860" alt="The Calls view: a list of judged calls and the selected one on the right">
+</p>
+
+Keyboard: `j`/`k` move through the calls, `a` `r` `b` `0` filter by verdict, `1`-`5` pick the window, `/` search, `p`
+pause, `?` help. Light and dark follow your system. It only answers requests whose `Host` is loopback (DNS rebinding),
+loads nothing from the network, and shows hashes and lengths, never the text of a command. The one place it writes a
+file is the install sheet, so that endpoint asks for more: a same-origin `Origin`, a JSON body, a per-process token only
+the page carries, and the id of the diff you were shown (if the file changed since, you review it again). It changes
+the user scope only; use `laya-guard install --scope project` for a project. `--no-open` prints the URL instead of
+opening a browser.
 
 ## 15-second demo (no model download)
 
@@ -64,7 +116,8 @@ curl -X POST localhost:8787/guard -H 'Content-Type: application/json' \
 
 ```
 agent tool_call
-  → guard-hook.sh (Claude Code PreToolUse hook; block ⇒ exit 2 cancels the run, review ⇒ permission prompt)
+  → your agent's hook, installed by `laya-guard install` (Claude Code: guard-hook.sh, a PreToolUse hook;
+    block ⇒ exit 2 cancels the run, review ⇒ permission prompt)
   → POST /guard (localhost:8787)
   → chains (`a && b`, `a; b`, `a || b`) are split and each command judged below;
     the worst verdict wins
@@ -107,27 +160,28 @@ checked against the regexes, which catches patterns spanning commands
 
 ## Supported agents
 
-| Agent | Integration | `review` becomes |
-|---|---|---|
-| Claude Code | [PreToolUse hook](guard-hook.sh) | `ask` (permission prompt; `LAYA_GUARD_REVIEW=pass` to pass through) |
-| OpenCode | [`tool.execute.before` plugin](integrations/opencode/laya-guard.ts) | allow + stderr warning |
-| Codex CLI | [`PreToolUse` hook](integrations/codex/) | allow + stderr note (no ask lane) |
-| Cursor | [`beforeShellExecution` hook](integrations/cursor/) | `ask` (human approval) |
-| Kilo Code | [`tool.execute.before` plugin](integrations/kilo/laya-guard.ts) | allow + stderr warning |
-| Windsurf | [`pre_run_command` hook](integrations/windsurf/guard.py) | exit 0 + stderr note |
-| Cline | [`PreToolUse` executable](integrations/cline/PreToolUse) | passes (`cancel: false`) |
-| Gemini CLI | [`BeforeTool` hook](integrations/gemini/check.py) | exit 0 + stderr note |
-| Qwen Code | [`PreToolUse` hook](integrations/qwen/check.py) | `ask` (deny when headless) |
-| Amp | [`delegate` helper](integrations/amp/permissions-helper) | exit 1 = ask |
-| Copilot CLI | [`preToolUse` hook](integrations/copilot/policy.py) | `ask` (deny when headless) |
+| Agent | Install | Integration | `review` becomes |
+|---|---|---|---|
+| Claude Code | `laya-guard install claude-code` | [PreToolUse hook](guard-hook.sh) | `ask` (permission prompt; `LAYA_GUARD_REVIEW=pass` to pass through) |
+| Codex CLI | `laya-guard install codex` | [`PreToolUse` hook](integrations/codex/) | allow + stderr note (no ask lane) |
+| Cursor | `laya-guard install cursor` | [`beforeShellExecution` hook](integrations/cursor/) | `ask` (human approval) |
+| Gemini CLI | `laya-guard install gemini-cli` | [`BeforeTool` hook](integrations/gemini/check.py) | exit 0 + stderr note |
+| Qwen Code | `laya-guard install qwen-code` | [`PreToolUse` hook](integrations/qwen/check.py) | `ask` (deny when headless) |
+| Windsurf | `laya-guard install windsurf` | [`pre_run_command` hook](integrations/windsurf/guard.py) | exit 0 + stderr note |
+| Copilot CLI | `laya-guard install copilot-cli` | [`preToolUse` hook](integrations/copilot/policy.py) | `ask` (deny when headless) |
+| Cline | `laya-guard install cline` | [`PreToolUse` executable](integrations/cline/PreToolUse) | passes (`cancel: false`) |
+| OpenCode | `laya-guard install opencode` | [`tool.execute.before` plugin](integrations/opencode/laya-guard.ts) | allow + stderr warning |
+| Kilo Code | `laya-guard install kilo` | [`tool.execute.before` plugin](integrations/kilo/laya-guard.ts) | allow + stderr warning |
+| Amp | `laya-guard install amp` | [`tool.call` plugin](integrations/amp/laya-guard.ts) | allow + stderr note |
 
 No hook mechanism, so no adapter: Aider, Roo Code (shut down May 2026),
 Continue (tiers only, repo archived), Junie (allow/ask only). Details in
 [integrations/](integrations/).
 
-Setup per agent: [integrations/](integrations/). Only Cursor and Claude Code route
-`review` to a human by default; elsewhere `review` warns and passes — use native `permission`/
-`allowlist` rules alongside if you want hard asks.
+`laya-guard install <agent>` does the setup for you ([what it writes and what's left to do](#1c-every-other-agent));
+the manual steps per agent are in [integrations/](integrations/). Claude Code, Cursor, Qwen Code and Copilot CLI route
+`review` to a human (and deny it when nobody can answer); elsewhere `review` warns and passes, so use native
+`permission`/`allowlist` rules alongside if you want hard asks.
 
 ## Use cases
 
@@ -282,36 +336,11 @@ for counting unique prompts.
 
 ```bash
 laya-guard stats       # verdict distribution, block/review rates, top policies, latency
-laya-guard dashboard   # the same as a local web page; starts the server if it isn't running
+laya-guard dashboard   # the same as a local web page (see Dashboard); starts the server if it isn't running
 ```
 
-The dashboard (`http://127.0.0.1:8787/dashboard`) is a small app with a sidebar and four views.
-**Overview** says how many calls were judged over a 1h to all-time window and how they split, draws a
-tape with one fine line per judged call (blocks stand tall and red; click one to open that call), and
-has cards for what needs a look (outlined and counted when there are blocks or reviews). **Calls** is
-the list on the left and the selected call on the right (policy, reason, source, timing, length and
-hash, never the text), with a verdict filter and search. **Policies** shows which rules decided the
-calls. **Agents** is described below. Keyboard: `j`/`k` move through the calls, `a` `r` `b` `0` verdict,
-`1`-`5` window, `/` search, `p` pause, `?` help. It refuses requests whose `Host` isn't loopback (DNS
-rebinding) and loads nothing from the network. `--no-open` prints the URL instead of opening a browser.
+The [dashboard](#dashboard) shows the same numbers, and more, in a browser.
 
-**Agents** is the click version of `laya-guard install`, and the blue button pinned at the bottom of
-the sidebar does the same in one click. It finds the coding agents on this machine by itself (an
-executable on `PATH`, an app bundle or a config directory such as `~/.codex`; read-only, it never
-opens those files) and shows each as a tile (the ones that weren't found sit behind the `+` tile). A tile shows whether
-the hook is in place for that agent, what it would write and what's left for you to do in the agent, and
-**Install hook** / **Remove** open a sheet with the exact diff; the sidebar button installs where it's missing.
-The logos are the products' own marks (Claude Code, Cursor, Gemini, Qwen, Windsurf, Copilot, Cline and OpenCode from
-[Simple Icons](https://simpleicons.org), CC0; Codex, Kilo Code and Amp from
-[Lobe Icons](https://github.com/lobehub/lobe-icons), MIT). They belong to their owners and are only there to say which
-product a tile is.
-Nothing is written until you press *Apply change*; then the settings file is backed up
-(`settings.json.laya-guard-<time>.bak`), written atomically, and two test calls go through the
-hook to check it. Only the user scope can be changed from the page; use the CLI for `--scope
-project|local`. Because this is the one place the page writes a file, the endpoint is held to more
-than the read-only ones: loopback `Host`, a same-origin `Origin`, a JSON body (a cross-site form
-post can't send one), a per-process token only the page carries, and the id of the diff you were
-shown (if the file changed since, you get a 409 and review it again).
 Disable with `LAYA_GUARD_LOG=0`, relocate with `LAYA_GUARD_LOG_PATH=...`.
 Publish the aggregates (never raw prompts) as field evidence next to benchmarks.
 

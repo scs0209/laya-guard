@@ -4,6 +4,7 @@
 
 [![ci](https://github.com/scs0209/laya-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/scs0209/laya-guard/actions/workflows/ci.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![pypi](https://img.shields.io/pypi/v/laya-guardrail.svg)](https://pypi.org/project/laya-guardrail/)
 
 <p align="center">
   <a href="README.md">English</a> · <strong>한국어</strong>
@@ -29,7 +30,12 @@ English: [README.md](README.md)
 ```bash
 pip install laya-guardrail   # PyPI 이름. 설치되는 명령어는 `laya-guard`
 laya-guard serve             # 모델을 올린 뒤 localhost:8787에서 대기
+laya-guard install claude-code   # 에이전트에 훅 연결: diff를 먼저 보여주고, 백업하고, 확인
+laya-guard dashboard         # 클릭으로도 가능(가드가 하는 일도 볼 수 있음): 대시보드 참고
 ```
+
+`laya-guard install`은 에이전트 11종(Claude Code, Codex CLI, Cursor, Gemini CLI, Qwen Code, Windsurf, Copilot CLI,
+Cline, OpenCode, Kilo Code, Amp)에서 됩니다: [에이전트마다 명령 하나](#1c-나머지-에이전트-전부).
 
 > PyPI 패키지 이름은 **`laya-guardrail`**입니다. `pip install laya-guard`는 무관한
 > 다른 프로젝트([dockndevai/laya-guard](https://pypi.org/project/laya-guard/))를 설치합니다.
@@ -38,6 +44,49 @@ Python ≥ 3.10 필요. 모델 런타임이 PyTorch + transformers를 함께 설
 따라 수백 MB~수 GB), ~322M 체크포인트는 첫 `serve` 때 내려받습니다. 이것 없이 정규식
 레이어만 써보려면 `pip install --no-deps laya-guardrail pyyaml` 후
 `LAYA_GUARD_MOCK=1 laya-guard check "rm -rf /"`.
+
+## 대시보드
+
+```bash
+laya-guard dashboard   # 서버가 꺼져 있으면 함께 시작하고 http://127.0.0.1:8787/dashboard 를 엽니다
+```
+
+<p align="center">
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/scs0209/laya-guard/main/docs/images/dashboard-overview-light.png">
+  <img src="https://raw.githubusercontent.com/scs0209/laya-guard/main/docs/images/dashboard-overview-dark.png" width="860" alt="laya-guard 대시보드: 판정 건수, 최근 호출 테이프, 보호되는 에이전트">
+</picture>
+</p>
+
+내 컴퓨터에서만 도는 작은 앱(어떤 것도 밖으로 나가지 않음)으로, 가드가 무엇을 하는지 보여주고 클릭 한 번으로 에이전트를
+보호합니다. 스크린샷은 지어낸 데이터입니다.
+
+- **Overview**: 몇 건을 판단했고 어떻게 나뉘었는지, 호출 하나당 가는 선 하나인 테이프(block은 길고 붉음, 선을 클릭하면
+  해당 호출이 열림), 확인이 필요한 항목 카드(block이나 review가 있으면 테두리와 건수 배지, 아직 보호되지 않은 에이전트마다
+  카드 하나)를 보여줍니다.
+- **Agents**: 이 컴퓨터에 있는 코딩 에이전트를 스스로 찾아서(`PATH`의 실행 파일, 앱 번들, 설정 폴더. 읽기 전용이며 그 파일의
+  내용은 열지 않음) 각각 훅이 들어 있는지 보여줍니다. **Install hook**을 누르면 정확한 diff가 담긴 시트가 열립니다.
+  **Apply change**를 누르기 전에는 아무것도 쓰지 않고, 누르면 파일을 백업하고 원자적으로 쓴 뒤 훅을 통해 테스트 호출 두 건을
+  보내 확인합니다. 사이드바 맨 아래 파란 버튼은 훅이 빠진 모든 곳에 설치합니다.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/scs0209/laya-guard/main/docs/images/dashboard-agents-dark.png" width="49%" alt="Agents 화면: 이 컴퓨터에서 찾은 에이전트별 타일과 상태 점">
+  <img src="https://raw.githubusercontent.com/scs0209/laya-guard/main/docs/images/dashboard-install-sheet-dark.png" width="49%" alt="설치 시트: 아무것도 쓰기 전에 보여주는 ~/.cursor/hooks.json의 정확한 diff">
+</p>
+
+- **Calls**: 판정한 호출마다 정책, 사유, 출처, 소요 시간, 길이, 해시(명령 원문은 없음)를 보여주며 판정 필터와 검색이 있습니다.
+- **Policies**: 어떤 규칙이 호출을 판정했는지 보여줍니다.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/scs0209/laya-guard/main/docs/images/dashboard-calls-dark.png" width="860" alt="Calls 화면: 판정한 호출 목록과 오른쪽에 선택한 호출">
+</p>
+
+키보드: `j`/`k` 호출 이동, `a` `r` `b` `0` 판정 필터, `1`-`5` 기간, `/` 검색, `p` 일시정지, `?` 도움말. 라이트/다크는
+시스템을 따릅니다. `Host`가 루프백인 요청에만 답하고(DNS 리바인딩 방어), 네트워크에서 아무것도 불러오지 않으며, 해시와
+길이만 보여주고 명령 원문은 보여주지 않습니다. 파일을 쓰는 유일한 곳은 설치 시트라서 그 엔드포인트는 더 많은 것을
+요구합니다. 같은 출처의 `Origin`, JSON 본문, 페이지만 가진 프로세스별 토큰, 방금 보여준 diff의 id입니다(그 사이 파일이
+바뀌었으면 다시 확인). user 범위만 바꾸며, 프로젝트는 `laya-guard install --scope project`를 쓰세요. `--no-open`은
+브라우저를 열지 않고 URL만 출력합니다.
 
 ## 15초 데모 (모델 다운로드 없음)
 
@@ -61,7 +110,8 @@ curl -X POST localhost:8787/guard -H 'Content-Type: application/json' \
 
 ```
 에이전트 tool_call
-  → guard-hook.sh (Claude Code PreToolUse 훅; block이면 exit 2로 실행 취소, review면 권한 프롬프트)
+  → 에이전트의 훅, `laya-guard install`이 설치 (Claude Code는 guard-hook.sh, PreToolUse 훅;
+    block이면 exit 2로 실행 취소, review면 권한 프롬프트)
   → POST /guard (localhost:8787)
   → 체인(`a && b`, `a; b`, `a || b`)은 명령별로 나눠 아래 단계를 거치고, 가장 나쁜 판정을 씀
   → policy.yaml: 정규식 프리필터 12종 (block 정책이 review 정책보다 우선)
@@ -101,25 +151,26 @@ build`, `vite build`, `jest` 같은 평범한 스크립트를 차단하기 때�
 
 ## 지원 에이전트
 
-| 에이전트 | 연동 | `review` 처리 |
-|---|---|---|
-| Claude Code | [PreToolUse 훅](guard-hook.sh) | `ask` (권한 프롬프트, `LAYA_GUARD_REVIEW=pass`면 통과) |
-| OpenCode | [`tool.execute.before` 플러그인](integrations/opencode/laya-guard.ts) | allow + stderr 경고 |
-| Codex CLI | [`PreToolUse` 훅](integrations/codex/) | allow + stderr 안내 (ask 불가) |
-| Cursor | [`beforeShellExecution` 훅](integrations/cursor/) | `ask` (사람 승인) |
-| Kilo Code | [`tool.execute.before` 플러그인](integrations/kilo/laya-guard.ts) | allow + stderr 경고 |
-| Windsurf | [`pre_run_command` 훅](integrations/windsurf/guard.py) | exit 0 + stderr 안내 |
-| Cline | [`PreToolUse` 실행파일](integrations/cline/PreToolUse) | 통과 (`cancel: false`) |
-| Gemini CLI | [`BeforeTool` 훅](integrations/gemini/check.py) | exit 0 + stderr 안내 |
-| Qwen Code | [`PreToolUse` 훅](integrations/qwen/check.py) | `ask` (headless에선 deny) |
-| Amp | [`delegate` 헬퍼](integrations/amp/permissions-helper) | exit 1 = ask |
-| Copilot CLI | [`preToolUse` 훅](integrations/copilot/policy.py) | `ask` (headless에선 deny) |
+| 에이전트 | 설치 | 연동 | `review` 처리 |
+|---|---|---|---|
+| Claude Code | `laya-guard install claude-code` | [PreToolUse 훅](guard-hook.sh) | `ask` (권한 프롬프트, `LAYA_GUARD_REVIEW=pass`면 통과) |
+| Codex CLI | `laya-guard install codex` | [`PreToolUse` 훅](integrations/codex/) | allow + stderr 안내 (ask 불가) |
+| Cursor | `laya-guard install cursor` | [`beforeShellExecution` 훅](integrations/cursor/) | `ask` (사람 승인) |
+| Gemini CLI | `laya-guard install gemini-cli` | [`BeforeTool` 훅](integrations/gemini/check.py) | exit 0 + stderr 안내 |
+| Qwen Code | `laya-guard install qwen-code` | [`PreToolUse` 훅](integrations/qwen/check.py) | `ask` (headless에선 deny) |
+| Windsurf | `laya-guard install windsurf` | [`pre_run_command` 훅](integrations/windsurf/guard.py) | exit 0 + stderr 안내 |
+| Copilot CLI | `laya-guard install copilot-cli` | [`preToolUse` 훅](integrations/copilot/policy.py) | `ask` (headless에선 deny) |
+| Cline | `laya-guard install cline` | [`PreToolUse` 실행파일](integrations/cline/PreToolUse) | 통과 (`cancel: false`) |
+| OpenCode | `laya-guard install opencode` | [`tool.execute.before` 플러그인](integrations/opencode/laya-guard.ts) | allow + stderr 경고 |
+| Kilo Code | `laya-guard install kilo` | [`tool.execute.before` 플러그인](integrations/kilo/laya-guard.ts) | allow + stderr 경고 |
+| Amp | `laya-guard install amp` | [`tool.call` 플러그인](integrations/amp/laya-guard.ts) | allow + stderr 안내 |
 
 훅 메커니즘이 없어 어댑터 불가: Aider, Roo Code(2026-05 종료), Continue(단계제만,
 저장소 아카이브), Junie(allow/ask만). 자세히는 [integrations/](integrations/).
 
-에이전트별 설치법: [integrations/](integrations/). `review`를 기본으로 사람에게
-넘기는 건 Cursor와 Claude Code입니다. 나머지는 경고 후 통과하니, 강제 승인이 필요하면 각 도구의
+`laya-guard install <에이전트>`가 설정을 대신 해줍니다([무엇을 쓰고 무엇이 남는지](#1c-나머지-에이전트-전부)). 에이전트별
+수동 설치법은 [integrations/](integrations/)에 있습니다. `review`를 사람에게 넘기는 것은 Claude Code, Cursor, Qwen Code,
+Copilot CLI이고(답할 사람이 없으면 거부), 나머지는 경고 후 통과하니 강제 승인이 필요하면 각 도구의
 `permission`/`allowlist` 규칙을 함께 쓰세요.
 
 ## 사용처
@@ -263,33 +314,11 @@ CI가 이미 이렇게 돕니다. `eval/run_eval.py --min-acc 1.0`은 판정 정
 
 ```bash
 laya-guard stats       # 판정 분포, block/review율, 상위 정책, 지연시간
-laya-guard dashboard   # 같은 내용을 로컬 웹 페이지로 (서버가 꺼져 있으면 함께 시작)
+laya-guard dashboard   # 같은 내용을 로컬 웹 페이지로 (대시보드 참고, 서버가 꺼져 있으면 함께 시작)
 ```
 
-대시보드(`http://127.0.0.1:8787/dashboard`)는 사이드바와 네 개의 화면이 있는 작은 앱입니다.
-**Overview**는 1시간부터 전체 기간까지 몇 건을 판단했고 어떻게 나뉘었는지 말해 주고, 호출 하나당
-가는 선 하나인 테이프(block은 길고 붉음, 선을 클릭하면 해당 호출이 열림)를 그리며, 확인이 필요한
-항목 카드(block이나 review가 있으면 테두리와 건수 배지)를 보여줍니다. **Calls**는 왼쪽 목록과 오른쪽
-선택한 호출(정책, 사유, 출처, 소요 시간, 길이, 해시. 원문은 없음)이며 판정 필터와 검색이 있습니다.
-**Policies**는 어떤 규칙이 호출을 판정했는지 보여줍니다. **Agents**는 아래에 설명합니다. 키보드:
-`j`/`k` 호출 이동, `a` `r` `b` `0` 판정, `1`-`5` 기간, `/` 검색, `p` 일시정지, `?` 도움말. `Host`가
-루프백이 아닌 요청은 거부하고(DNS 리바인딩 방어) 네트워크에서 아무것도 불러오지 않습니다.
-`--no-open`은 브라우저를 열지 않고 URL만 출력합니다.
+[대시보드](#대시보드)가 같은 수치를, 그리고 더 많은 것을 브라우저에서 보여줍니다.
 
-**Agents**는 `laya-guard install`의 클릭 버전이고, 사이드바 맨 아래 파란 버튼으로 같은 일을 한 번에
-할 수 있습니다. 이 컴퓨터에 있는 코딩 에이전트는 스스로 찾아서(`PATH`의 실행 파일, 앱 번들, `~/.codex` 같은
-설정 폴더. 읽기 전용이며 그 파일의 내용은 열지 않음) 타일로 보여줍니다(못 찾은 것은 `+` 타일 뒤에 있음). 타일은 그
-에이전트에 훅이 들어 있는지, 무엇을 쓰는지, 에이전트에서 직접 해야 할 일이 무엇인지 보여주고, **Install hook** /
-**Remove**를 누르면 정확한 diff가 담긴 시트가 열리며, 사이드바 버튼은 빠진 곳에 설치합니다. 로고는 각 제품의 공식
-마크입니다(Claude Code, Cursor, Gemini, Qwen, Windsurf, Copilot, Cline, OpenCode는 [Simple Icons](https://simpleicons.org)
-CC0, Codex, Kilo Code, Amp는 [Lobe Icons](https://github.com/lobehub/lobe-icons) MIT에서 가져옴). 상표권은 각 소유자에게
-있으며, 어떤 제품인지 알리는 용도로만 씁니다.
-*Apply change*를 누르기 전에는 아무것도 쓰지 않고, 누르면 설정 파일을 백업하고
-(`settings.json.laya-guard-<시각>.bak`) 원자적으로 쓴 뒤, 훅을 통해 테스트 호출 두 건을 보내 확인합니다.
-페이지에서는 user 범위만 바꿀 수 있고, `--scope project|local`은 CLI를 쓰세요. 페이지가 파일을 쓰는
-유일한 곳이라 읽기 전용 엔드포인트보다 조건이 엄격합니다. 루프백 `Host`, 같은 출처의 `Origin`, JSON
-본문(다른 사이트의 form 전송은 보낼 수 없음), 페이지만 가진 프로세스별 토큰, 그리고 방금 보여준 diff의
-id가 모두 필요합니다(그 사이 파일이 바뀌었으면 409가 나오고 다시 확인해야 합니다).
 `LAYA_GUARD_LOG=0`으로 끄고, `LAYA_GUARD_LOG_PATH=...`로 위치를 바꿀 수 있습니다.
 집계치(원문 아님)를 공개하면 벤치 점수 옆에 붙일 실전 근거가 됩니다.
 
