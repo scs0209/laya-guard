@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 import difflib
+import hashlib
 import json
 import os
 import shlex
@@ -214,7 +215,11 @@ def write_settings(settings: Settings, new_text: str) -> Path | None:
     path.parent.mkdir(parents=True, exist_ok=True)
     backup = None
     if settings.exists:
-        backup = path.with_name(f"{path.name}.laya-guard-{time.strftime('%Y%m%d-%H%M%S')}.bak")
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        backup, n = path.with_name(f"{path.name}.laya-guard-{stamp}.bak"), 1
+        while backup.exists():             # two writes in the same second must not overwrite the first backup
+            backup = path.with_name(f"{path.name}.laya-guard-{stamp}-{n}.bak")
+            n += 1
         shutil.copy2(path, backup)
     fd, tmp = tempfile.mkstemp(prefix=path.name + ".", dir=path.parent)
     try:
@@ -230,6 +235,62 @@ def write_settings(settings: Settings, new_text: str) -> Path | None:
             os.unlink(tmp)
         raise
     return backup
+
+
+# --- plan and apply (shared by the CLI's callers and the dashboard) ------------------------------
+
+@dataclass
+class Plan:
+    action: str                 # install | uninstall
+    agent: str
+    scope: str
+    settings: Settings
+    new_data: dict
+    new_text: str
+    outcome: str                # install: added | updated | unchanged | manual; uninstall: removed | nothing
+    command: str = ""
+    left: int = 0               # hand-written entries an uninstall left in place
+
+    @property
+    def changed(self) -> bool:
+        return self.new_data != self.settings.data
+
+    @property
+    def diff(self) -> str:
+        return unified_diff(self.settings, self.new_text) if self.changed else ""
+
+    @property
+    def diff_id(self) -> str:
+        """Identifies exactly this change to exactly this file content. A change can only be applied
+        by presenting the id of the diff the user was shown; if the file changed in between, it differs."""
+        blob = f"{self.settings.path}\0{self.settings.raw}\0{self.new_text}"
+        return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
+
+
+def make_plan(action: str, agent: str, scope: str, home: Path, project_dir: Path,
+              bin_override: str | None = None, matcher: str = DEFAULT_MATCHER, force: bool = False) -> Plan:
+    """Work out a change without writing anything. Raises InstallError with advice."""
+    if agent not in AGENTS:
+        raise InstallError(f"unsupported agent {agent!r}; supported: {', '.join(AGENTS)}")
+    if sys.platform == "win32":
+        raise InstallError("the hook is a bash script, so Windows isn't supported yet")
+    settings = load_settings(settings_path(scope, home, project_dir))
+    if action == "install":
+        command = hook_command(cli_path(bin_override), hook_script())
+        data, outcome = plan_install(settings, command, matcher, force)
+        return Plan(action, agent, scope, settings, data, settings.render(data), outcome, command)
+    if action == "uninstall":
+        data, removed, left = plan_uninstall(settings, force)
+        return Plan(action, agent, scope, settings, data, settings.render(data),
+                    "removed" if removed else "nothing", left=left)
+    raise InstallError(f"unknown action {action!r}")
+
+
+def apply_plan(plan: Plan, verify: bool = True) -> tuple[Path | None, list[tuple[str, int, int]]]:
+    """Write the plan (backup first). After an install, send the test calls through the hook."""
+    backup = write_settings(plan.settings, plan.new_text)
+    probes = run_probes(plan.command) if verify and plan.action == "install" else []
+    return backup, probes
 
 
 # --- checking -----------------------------------------------------------------------------------

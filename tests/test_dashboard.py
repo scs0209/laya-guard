@@ -195,3 +195,136 @@ def test_api_stats_returns_the_log_and_health(client):
 def test_api_stats_reports_when_logging_is_off(client, monkeypatch):
     monkeypatch.setenv("LAYA_GUARD_LOG", "0")
     assert client.get("/api/stats").json()["health"]["logging"] is False
+
+
+# --- installing the hook from the dashboard -----------------------------------------------------
+
+def test_origin_and_token_checks():
+    ok = dashboard.origin_allowed
+    assert ok("http://127.0.0.1:8787", "127.0.0.1:8787") and ok("http://localhost:8787", "localhost:8787")
+    assert ok("http://[::1]:8787", "[::1]:8787")
+    for origin, host in [(None, "127.0.0.1:8787"), ("", "127.0.0.1:8787"), ("null", "127.0.0.1:8787"),
+                         ("http://evil.example", "127.0.0.1:8787"), ("http://127.0.0.1:9999", "127.0.0.1:8787"),
+                         ("https://127.0.0.1:8787", "127.0.0.1:8787"), ("http://127.0.0.1:8787", "evil.example:8787"),
+                         ("http://localhost:8787", "127.0.0.1:8787")]:
+        assert not ok(origin, host), (origin, host)
+    assert dashboard.token_ok("abc", "abc")
+    assert not dashboard.token_ok("abd", "abc") and not dashboard.token_ok(None, "abc") and not dashboard.token_ok("", "")
+
+
+def test_page_carries_the_token_placeholder():
+    html = dashboard.render_page("N0NC3", "T0K3N")
+    assert "{{TOKEN}}" not in html and 'name="laya-token" content="T0K3N"' in html
+
+
+@pytest.fixture
+def agents(client, tmp_path, monkeypatch):
+    """The dashboard client with HOME in a temp dir and a stand-in laya-guard executable."""
+    from laya_guard import install
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    stub = tmp_path / "laya-guard"
+    stub.write_text(f'#!/bin/sh\nPYTHONPATH="{Path(__file__).resolve().parent.parent / "src"}" '
+                    f'exec "{sys.executable}" -m laya_guard.cli "$@"\n')
+    stub.chmod(0o755)
+    monkeypatch.setattr(install, "cli_path", lambda override=None: stub)
+    page = client.get("/dashboard")
+    token = re.search(r'name="laya-token" content="([^"]+)"', page.text).group(1)
+    settings = home / ".claude" / "settings.json"
+
+    def post(action, body, **kw):
+        headers = {"Content-Type": "application/json", "Origin": "http://127.0.0.1:8787", "X-Laya-Token": token}
+        headers.update(kw.get("headers", {}))
+        headers = {k: v for k, v in headers.items() if v is not None}
+        return client.post(f"/api/agents/claude-code/{action}", content=json.dumps(body), headers=headers)
+
+    return type("Agents", (), {"client": client, "post": staticmethod(post), "settings": settings, "home": home, "token": token})
+
+
+def test_agents_status_is_readable_and_reports_not_installed(agents):
+    r = agents.client.get("/api/agents")
+    assert r.status_code == 200
+    a = r.json()["agents"][0]
+    assert (a["id"], a["name"], a["scope"], a["state"]) == ("claude-code", "Claude Code", "user", "not-installed")
+    assert a["path"].endswith(".claude/settings.json") and a["path"].startswith("~")
+    assert agents.client.get("/api/agents", headers={"host": "evil.example:8787"}).status_code == 403
+
+
+def test_changing_settings_needs_every_check(agents):
+    body = {"scope": "user", "mode": "preview"}
+    assert agents.post("install", body).status_code == 200
+    assert agents.post("install", body, headers={"X-Laya-Token": None}).status_code == 403          # no token
+    assert agents.post("install", body, headers={"X-Laya-Token": "wrong"}).status_code == 403
+    assert agents.post("install", body, headers={"Origin": "http://evil.example"}).status_code == 403
+    assert agents.post("install", body, headers={"Origin": None}).status_code == 403                # no Origin
+    assert agents.post("install", body, headers={"Content-Type": "text/plain"}).status_code == 415  # a form-style post
+    assert agents.post("install", body, headers={"host": "evil.example:8787", "Origin": "http://evil.example:8787"}).status_code == 403
+    assert not agents.settings.exists()
+
+
+def test_preview_shows_the_diff_and_writes_nothing(agents):
+    r = agents.post("install", {"mode": "preview"})
+    body = r.json()
+    assert body["changed"] and body["outcome"] == "added" and body["applied"] is False
+    assert "guard-hook.sh" in body["diff"] and body["diff"].count("\n+") > 5 and body["diff_id"]
+    header = body["diff"].split("\n@@")[0]
+    assert "~/.claude/settings.json (after)" in header and str(agents.home) not in header   # the short path, not the full one
+    assert not agents.settings.exists()
+
+
+def test_applying_needs_the_diff_that_was_shown(agents):
+    preview = agents.post("install", {"mode": "preview"}).json()
+    assert agents.post("install", {"mode": "apply"}).status_code == 409                       # no diff id
+    assert agents.post("install", {"mode": "apply", "diff_id": "0" * 16}).status_code == 409   # not the one shown
+    assert not agents.settings.exists()
+    done = agents.post("install", {"mode": "apply", "diff_id": preview["diff_id"]}).json()
+    assert done["applied"] is True and done["backup"] is None
+    assert [p["ok"] for p in done["probes"]] == [True, True]                                   # both test calls behave
+    entry = json.loads(agents.settings.read_text())["hooks"]["PreToolUse"][0]["hooks"][0]
+    assert "LAYA_GUARD_MANAGED=1" in entry["command"]
+    assert agents.client.get("/api/agents").json()["agents"][0]["state"] == "installed"
+    again = agents.post("install", {"mode": "preview"}).json()
+    assert again["changed"] is False and again["diff_id"] is None
+
+
+def test_a_change_made_after_the_preview_is_not_overwritten(agents):
+    agents.settings.parent.mkdir()
+    agents.settings.write_text('{"model": "a"}\n', encoding="utf-8")
+    preview = agents.post("install", {"mode": "preview"}).json()
+    agents.settings.write_text('{"model": "b"}\n', encoding="utf-8")                          # edited meanwhile
+    r = agents.post("install", {"mode": "apply", "diff_id": preview["diff_id"]})
+    assert r.status_code == 409 and "changed since the preview" in r.json()["detail"]
+    assert agents.settings.read_text() == '{"model": "b"}\n'
+
+
+def test_uninstall_through_the_dashboard_restores_the_file_and_backs_up(agents):
+    agents.settings.parent.mkdir()
+    agents.settings.write_text('{"model": "a"}\n', encoding="utf-8")
+    p = agents.post("install", {"mode": "preview"}).json()
+    done = agents.post("install", {"mode": "apply", "diff_id": p["diff_id"]}).json()
+    assert done["backup"] and json.loads(agents.settings.read_text())["model"] == "a"
+    p = agents.post("uninstall", {"mode": "preview"}).json()
+    assert p["outcome"] == "removed"
+    agents.post("uninstall", {"mode": "apply", "diff_id": p["diff_id"]})
+    assert json.loads(agents.settings.read_text()) == {"model": "a"}
+    assert len(list(agents.settings.parent.glob("*.bak"))) == 2
+
+
+def test_a_hand_written_entry_needs_force_and_bad_requests_are_refused(agents):
+    agents.settings.parent.mkdir()
+    manual = {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "/x/guard-hook.sh"}]}]}}
+    agents.settings.write_text(json.dumps(manual), encoding="utf-8")
+    assert agents.post("install", {"mode": "preview"}).json()["changed"] is False              # left alone
+    forced = agents.post("install", {"mode": "preview", "force": True}).json()
+    assert forced["changed"] is True and forced["outcome"] == "updated"
+    assert agents.post("install", {"scope": "project"}).status_code == 400                   # user scope only
+    assert agents.post("install", {"mode": "dance"}).status_code == 400
+    assert agents.post("frobnicate", {}).status_code == 404
+    r = agents.client.post("/api/agents/cursor/install", content="{}",
+                           headers={"Content-Type": "application/json", "Origin": "http://127.0.0.1:8787",
+                                    "X-Laya-Token": agents.token})
+    assert r.status_code == 404
+    agents.settings.write_text("{nope", encoding="utf-8")
+    assert agents.post("install", {"mode": "preview"}).status_code == 400                     # invalid JSON is refused
+    assert agents.settings.read_text() == "{nope"

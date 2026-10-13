@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="laya-token" content="{{TOKEN}}">
 <title>laya-guard</title>
 <!--
 Design plan (kept here so the next change starts from it)
@@ -118,6 +119,33 @@ footer kbd { font: inherit; color: var(--muted); border: 1px solid var(--hair); 
 .help dt { color: var(--ink); font-weight: 600; }
 .help dd { margin: 0; color: var(--muted); }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.agents { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--hair); }
+.agent { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; column-gap: 32px; align-items: center; padding: 22px 4px; border-bottom: 1px solid var(--hair); }
+.agent .name { font-size: 17px; font-weight: 600; }
+.agent .path { color: var(--faint); font-size: 13px; margin-top: 2px; overflow-wrap: anywhere; }
+.agent .stat { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+.agent .stat i { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); display: inline-block; flex: none; }
+.agent .stat.ok { color: var(--allow); } .agent .stat.ok i { background: var(--allow); }
+.agent .stat.warn { color: var(--review); } .agent .stat.warn i { background: var(--review); }
+.agent .stat.bad { color: var(--block); } .agent .stat.bad i { background: var(--block); }
+.btn { font-size: 14px; padding: 8px 18px; border-radius: 999px; border: 1px solid var(--ink); color: var(--ink); background: transparent; white-space: nowrap; }
+.btn:hover { background: var(--wash); }
+.btn.primary { background: var(--ink); color: var(--paper); }
+.btn.primary:hover { background: var(--ink); opacity: 0.88; }
+.btn[disabled] { opacity: 0.45; cursor: default; }
+.agents-note { margin: 14px 0 0; color: var(--faint); font-size: 13px; max-width: 44em; }
+.sheet { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); display: none; align-items: center; justify-content: center; padding: 20px; z-index: 6; }
+.sheet.show { display: flex; }
+.sheet .box { background: var(--paper); border: 1px solid var(--hair); border-radius: 14px; padding: 28px 30px; width: 100%; max-width: 680px; max-height: 88vh; overflow: auto; }
+.sheet h2 { font-size: 20px; margin: 0 0 6px; }
+.sheet .lead { margin: 0 0 18px; color: var(--muted); font-size: 15px; overflow-wrap: anywhere; }
+pre.diff { margin: 0 0 20px; padding: 14px 16px; background: var(--wash); border-radius: 8px; overflow: auto; max-height: 300px; font: 12.5px/1.55 ui-monospace, "SF Mono", Menlo, Consolas, monospace; white-space: pre; }
+pre.diff .add { color: var(--allow); } pre.diff .del { color: var(--block); } pre.diff .meta { color: var(--faint); }
+.sheet .err { color: var(--block); font-size: 14px; margin: -4px 0 16px; }
+.sheet .actions { display: flex; gap: 12px; justify-content: flex-end; flex-wrap: wrap; }
+.checks { list-style: none; margin: 0 0 20px; padding: 0; font-size: 14px; }
+.checks li { padding: 3px 0; }
+.checks .ok { color: var(--allow); } .checks .no { color: var(--block); }
 @media (prefers-reduced-motion: reduce) {
   .tape.intro .tick, .call.new { animation: none; }
   .tick { transition: none; }
@@ -132,6 +160,9 @@ footer kbd { font: inherit; color: var(--muted); border: 1px solid var(--hair); 
   .call .why { grid-column: 2; }
   .call .policy { display: none; }
   .detail { margin-left: 0; }
+  .agent { grid-template-columns: minmax(0, 1fr); row-gap: 12px; }
+  .agent .btn { justify-self: start; }
+  .sheet .box { padding: 22px 20px; }
 }
 </style>
 </head>
@@ -160,6 +191,12 @@ footer kbd { font: inherit; color: var(--muted); border: 1px solid var(--hair); 
 
     <div class="tape" id="tape"></div>
     <div class="axis"><span id="tape-from"></span><span id="tape-to"></span></div>
+
+    <section aria-labelledby="h-agents">
+      <div class="head"><h2 id="h-agents">Agents</h2></div>
+      <ul class="agents" id="agents"></ul>
+      <p class="agents-note" id="agents-note"></p>
+    </section>
 
     <section aria-labelledby="h-calls">
       <div class="head">
@@ -195,6 +232,20 @@ footer kbd { font: inherit; color: var(--muted); border: 1px solid var(--hair); 
       <dt>p</dt><dd>pause or resume updates</dd>
       <dt>? or esc</dt><dd>open or close this help</dd>
     </dl>
+  </div>
+</div>
+
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+  <div class="box">
+    <h2 id="sheet-title"></h2>
+    <p class="lead" id="sheet-lead"></p>
+    <pre class="diff" id="sheet-diff" tabindex="0"></pre>
+    <ul class="checks" id="sheet-checks"></ul>
+    <p class="err" id="sheet-err" role="alert"></p>
+    <div class="actions">
+      <button type="button" class="btn" id="sheet-cancel">Cancel</button>
+      <button type="button" class="btn primary" id="sheet-apply">Apply change</button>
+    </div>
   </div>
 </div>
 
@@ -445,6 +496,111 @@ footer kbd { font: inherit; color: var(--muted); border: 1px solid var(--hair); 
   }
   function toggleHelp(show) { var h = $("help"); h.classList.toggle("show", show == null ? !h.classList.contains("show") : show); }
 
+  // --- agents: install or remove the hook from here ---
+  var TOKEN = (document.querySelector('meta[name="laya-token"]') || {}).content || "";
+  var agentsSig = "", agentList = [], pending = null;
+  var STATES = {
+    "installed": { cls: "ok", text: "Protected", btn: "Remove", action: "uninstall" },
+    "not-installed": { cls: "warn", text: "Not protected yet", btn: "Install", action: "install", primary: true },
+    "manual": { cls: "", text: "Hook added by hand", btn: "Let laya-guard manage it", action: "install", force: true },
+    "broken": { cls: "bad", text: "The hook points to a file that is gone", btn: "Repair", action: "install", primary: true },
+    "invalid": { cls: "bad", text: "The settings file is not valid JSON", btn: null }
+  };
+
+  function api(method, url, body) {
+    var opts = { method: method, cache: "no-store", headers: {} };
+    if (body) { opts.headers["Content-Type"] = "application/json"; opts.headers["X-Laya-Token"] = TOKEN; opts.body = JSON.stringify(body); }
+    return fetch(url, opts).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        if (!r.ok) throw new Error(typeof j.detail === "string" ? j.detail : "HTTP " + r.status);
+        return j;
+      });
+    });
+  }
+
+  function renderAgents() {
+    var box = $("agents");
+    clear(box);
+    agentList.forEach(function (a) {
+      var s = STATES[a.state] || STATES.invalid;
+      var row = el("li", { "class": "agent" },
+        el("div", null, el("div", { "class": "name", text: a.name }), el("div", { "class": "path", text: a.path + (a.state === "invalid" && a.detail ? ": " + a.detail : "") })),
+        el("span", { "class": "stat " + s.cls }, el("i"), s.text));
+      if (s.btn) {
+        var b = el("button", { type: "button", "class": "btn" + (s.primary ? " primary" : ""), text: s.btn });
+        b.addEventListener("click", function () { openSheet(a, s.action, s.force || (s.action === "install" && a.managed === false)); });
+        row.appendChild(b);
+      } else row.appendChild(el("span"));
+      box.appendChild(row);
+    });
+    $("agents-note").textContent = agentList.length ? "The hook judges each Bash call before Claude Code runs it. You see the exact change and confirm it first, and the settings file is backed up." : "";
+  }
+
+  function loadAgents() {
+    if ($("sheet").classList.contains("show")) return Promise.resolve();
+    return api("GET", "/api/agents").then(function (j) {
+      var sig = JSON.stringify(j.agents);
+      if (sig === agentsSig) return;
+      agentsSig = sig; agentList = j.agents; renderAgents();
+    }).catch(function () {});
+  }
+
+  function paintDiff(text) {
+    var pre = $("sheet-diff");
+    clear(pre);
+    text.split("\n").forEach(function (line) {
+      var cls = (line.indexOf("+++") === 0 || line.indexOf("---") === 0 || line.indexOf("@@") === 0) ? "meta" : line.charAt(0) === "+" ? "add" : line.charAt(0) === "-" ? "del" : "";
+      pre.appendChild(el("span", { "class": cls, text: line }));
+      pre.appendChild(document.createTextNode("\n"));
+    });
+  }
+
+  function openSheet(a, action, force) {
+    pending = { agent: a.id, action: action, force: !!force, diffId: null };
+    $("sheet-title").textContent = (action === "install" ? "Install the hook for " : "Remove the hook from ") + a.name;
+    $("sheet-lead").textContent = "Checking what would change in " + a.path + ".";
+    clear($("sheet-diff")); $("sheet-diff").hidden = true; clear($("sheet-checks")); $("sheet-err").textContent = "";
+    $("sheet-apply").hidden = false; $("sheet-apply").disabled = true; $("sheet-cancel").textContent = "Cancel";
+    $("sheet").classList.add("show");
+    api("POST", "/api/agents/" + a.id + "/" + action, { scope: "user", mode: "preview", force: !!force }).then(function (j) {
+      if (!j.changed) {
+        $("sheet-lead").textContent = "Nothing to change in " + j.path + ".";
+        $("sheet-apply").hidden = true; $("sheet-cancel").textContent = "Close";
+        return;
+      }
+      pending.diffId = j.diff_id;
+      $("sheet-lead").textContent = (action === "install" ? "This adds a hook to " : "This removes the hook from ") + j.path + ". Your other settings stay as they are and the file is backed up first. The JSON is re-indented, so some lines may show as changed.";
+      paintDiff(j.diff);
+      $("sheet-diff").hidden = false; $("sheet-apply").disabled = false; $("sheet-apply").focus();
+    }).catch(function (e) {
+      $("sheet-lead").textContent = ""; $("sheet-err").textContent = e.message;
+      $("sheet-apply").hidden = true; $("sheet-cancel").textContent = "Close";
+    });
+  }
+
+  function closeSheet() {
+    $("sheet").classList.remove("show");
+    pending = null; agentsSig = "";
+    loadAgents();
+  }
+  $("sheet-cancel").addEventListener("click", closeSheet);
+  $("sheet").addEventListener("click", function (ev) { if (ev.target === this) closeSheet(); });
+  $("sheet-apply").addEventListener("click", function () {
+    if (!pending || !pending.diffId) return;
+    var btn = this, p = pending;
+    btn.disabled = true; $("sheet-err").textContent = "";
+    api("POST", "/api/agents/" + p.agent + "/" + p.action, { scope: "user", mode: "apply", diff_id: p.diffId, force: p.force }).then(function (j) {
+      $("sheet-title").textContent = p.action === "install" ? "Hook installed" : "Hook removed";
+      $("sheet-lead").textContent = "Saved to " + j.path + (j.backup ? ". The previous file is at " + j.backup + "." : ".") +
+        (p.action === "install" ? " If Claude Code is already open, restart it so it picks the hook up." : "");
+      $("sheet-diff").hidden = true; btn.hidden = true; $("sheet-cancel").textContent = "Close";
+      var list = $("sheet-checks");
+      clear(list);
+      (j.probes || []).forEach(function (c) { list.appendChild(el("li", { "class": c.ok ? "ok" : "no", text: (c.ok ? "Passed: " : "Failed: ") + c.label })); });
+      pending = null;
+    }).catch(function (e) { btn.disabled = false; $("sheet-err").textContent = e.message; });
+  });
+
   $("windows").addEventListener("click", function (ev) { var b = ev.target.closest("button"); if (b) setWindow(b.getAttribute("data-window")); });
   $("filters").addEventListener("click", function (ev) { var b = ev.target.closest("button"); if (b) setFilter(b.getAttribute("data-filter")); });
   $("help").addEventListener("click", function (ev) { if (ev.target === this) toggleHelp(false); });
@@ -465,6 +621,7 @@ footer kbd { font: inherit; color: var(--muted); border: 1px solid var(--hair); 
 
   document.addEventListener("keydown", function (ev) {
     if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+    if ($("sheet").classList.contains("show")) { if (ev.key === "Escape") { closeSheet(); ev.preventDefault(); } return; }
     var k = ev.key, handled = true;
     if (k === "Enter" || k === " ") {
       var li = ev.target && ev.target.closest && ev.target.closest("li.call");
@@ -491,9 +648,10 @@ footer kbd { font: inherit; color: var(--muted); border: 1px solid var(--hair); 
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(function () { if (state.data) { state.drawn = true; renderTape(state.data); } }, 150);
   });
-  setInterval(function () { if (!state.paused && !document.hidden) load(true); }, 5000);
-  document.addEventListener("visibilitychange", function () { if (!document.hidden && !state.paused) load(true); });
+  setInterval(function () { if (!state.paused && !document.hidden) { load(true); loadAgents(); } }, 5000);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden && !state.paused) { load(true); loadAgents(); } });
   load(false);
+  loadAgents();
 })();
 </script>
 </body>

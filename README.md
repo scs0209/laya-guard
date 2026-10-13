@@ -231,7 +231,7 @@ laya-guard stats       # verdict distribution, block/review rates, top policies,
 laya-guard dashboard   # the same as a local web page; starts the server if it isn't running
 ```
 
-The dashboard (`http://127.0.0.1:8787/dashboard`) is a read-only, one-column page: a sentence
+The dashboard (`http://127.0.0.1:8787/dashboard`) is a one-column page: a sentence
 saying how many calls were judged over a 1h to all-time window and how they split, a tape with one
 fine line per judged call (blocks stand tall and red), the most recent calls (click one for its
 policy, reason, source, timing, length and hash, never the text) and per-policy counts. Point at a
@@ -240,6 +240,15 @@ details, `a` `r` `b` `0` verdict, `1`-`5` window, `p` pause, `?` help. It refuse
 `Host` isn't loopback (DNS rebinding) and loads nothing from the network. `--no-open` prints the
 URL instead of opening a browser.
 
+The **Agents** section is the click version of `laya-guard install`: it shows whether the Claude Code
+hook is in `~/.claude/settings.json`, and **Install** / **Remove** open a sheet with the exact diff.
+Nothing is written until you press *Apply change*; then the settings file is backed up
+(`settings.json.laya-guard-<time>.bak`), written atomically, and two test calls go through the
+hook to check it. Only the user scope can be changed from the page; use the CLI for `--scope
+project|local`. Because this is the one place the page writes a file, the endpoint is held to more
+than the read-only ones: loopback `Host`, a same-origin `Origin`, a JSON body (a cross-site form
+post can't send one), a per-process token only the page carries, and the id of the diff you were
+shown (if the file changed since, you get a 409 and review it again).
 Disable with `LAYA_GUARD_LOG=0`, relocate with `LAYA_GUARD_LOG_PATH=...`.
 Publish the aggregates (never raw prompts) as field evidence next to benchmarks.
 
@@ -295,7 +304,9 @@ All patterns live in [policy.yaml](src/laya_guard/policy.yaml) — edit, add you
 - `GET /dashboard` — the local dashboard page; `GET /api/stats?window=1h|24h|7d|30d|all` — the
   numbers behind it (totals, timeline, per-policy counts, recent verdicts as hash + length).
   Both answer 403 unless the `Host` header is loopback.
-
+- `GET /api/agents` — where the hook stands for each agent. `POST /api/agents/{agent}/{install|uninstall}`
+  with `{"mode": "preview"}` returns the diff and its `diff_id`; `{"mode": "apply", "diff_id": ...}`
+  makes the change. Needs the page's token and a same-origin JSON request (see above).
 ## Configuration
 
 | Knob | Where | Default |

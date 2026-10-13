@@ -213,13 +213,21 @@ laya-guard stats       # 판정 분포, block/review율, 상위 정책, 지연�
 laya-guard dashboard   # 같은 내용을 로컬 웹 페이지로 (서버가 꺼져 있으면 함께 시작)
 ```
 
-대시보드(`http://127.0.0.1:8787/dashboard`)는 읽기 전용의 한 열짜리 페이지입니다. 1시간부터 전체
+대시보드(`http://127.0.0.1:8787/dashboard`)는 한 열짜리 페이지입니다. 1시간부터 전체
 기간까지 몇 건을 판단했고 어떻게 나뉘었는지 한 문장으로 말해 주고, 호출 하나당 가는 선 하나인
 테이프(block은 길고 붉음), 최근 호출(클릭하면 정책, 사유, 출처, 소요 시간, 길이, 해시. 원문은
 없음), 정책별 건수를 보여줍니다. 호출에 마우스를 올리면 테이프의 해당 선이, 선에 올리면 해당 호출이
 밝아집니다. 키보드: `j`/`k` 이동, `enter` 상세, `a` `r` `b` `0` 판정, `1`-`5` 기간, `p` 일시정지, `?` 도움말. `Host`가 루프백이 아닌 요청은 거부하고(DNS 리바인딩 방어) 네트워크에서
 아무것도 불러오지 않습니다. `--no-open`은 브라우저를 열지 않고 URL만 출력합니다.
 
+**Agents** 섹션은 `laya-guard install`의 클릭 버전입니다. `~/.claude/settings.json`에 Claude Code
+훅이 들어 있는지 보여주고, **Install** / **Remove**를 누르면 정확한 diff가 담긴 시트가 열립니다.
+*Apply change*를 누르기 전에는 아무것도 쓰지 않고, 누르면 설정 파일을 백업하고
+(`settings.json.laya-guard-<시각>.bak`) 원자적으로 쓴 뒤, 훅을 통해 테스트 호출 두 건을 보내 확인합니다.
+페이지에서는 user 범위만 바꿀 수 있고, `--scope project|local`은 CLI를 쓰세요. 페이지가 파일을 쓰는
+유일한 곳이라 읽기 전용 엔드포인트보다 조건이 엄격합니다. 루프백 `Host`, 같은 출처의 `Origin`, JSON
+본문(다른 사이트의 form 전송은 보낼 수 없음), 페이지만 가진 프로세스별 토큰, 그리고 방금 보여준 diff의
+id가 모두 필요합니다(그 사이 파일이 바뀌었으면 409가 나오고 다시 확인해야 합니다).
 `LAYA_GUARD_LOG=0`으로 끄고, `LAYA_GUARD_LOG_PATH=...`로 위치를 바꿀 수 있습니다.
 집계치(원문 아님)를 공개하면 벤치 점수 옆에 붙일 실전 근거가 됩니다.
 
@@ -274,7 +282,9 @@ laya-guard dashboard   # 같은 내용을 로컬 웹 페이지로 (서버가 꺼
 - `POST /v1/systemone` — Jev식 `{state, questions}` 호출용 드롭인 shim
 - `GET /dashboard` — 로컬 대시보드 페이지, `GET /api/stats?window=1h|24h|7d|30d|all` — 그 뒤의
   수치(합계, 추이, 정책별 건수, 최근 판정은 해시와 길이). 둘 다 `Host`가 루프백이 아니면 403.
-
+- `GET /api/agents` — 에이전트별 훅 상태. `POST /api/agents/{agent}/{install|uninstall}`에
+  `{"mode": "preview"}`를 보내면 diff와 `diff_id`를, `{"mode": "apply", "diff_id": ...}`를 보내면
+  실제 변경을 합니다. 페이지의 토큰과 같은 출처의 JSON 요청이 필요합니다(위 설명 참고).
 ## 설정
 
 | 항목 | 위치 | 기본값 |

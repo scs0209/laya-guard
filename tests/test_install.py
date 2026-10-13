@@ -152,6 +152,11 @@ def test_write_settings_backs_up_keeps_the_mode_and_leaves_no_temp_files(tmp_pat
     assert backup and json.loads(backup.read_text()) == {"a": 1}
     assert (s.path.stat().st_mode & 0o777) == 0o600
     assert sorted(p.name for p in tmp_path.iterdir() if p.name.startswith("s.json.") and not p.name.endswith(".bak")) == []
+    # two writes in the same second keep both backups: the first one is the user's original file
+    s.exists = True
+    again = install.write_settings(s, s.render({"a": 3}))
+    assert again != backup and again.exists() and json.loads(again.read_text()) == {"a": 2}
+    assert json.loads(backup.read_text()) == {"a": 1}
     fresh = install.load_settings(tmp_path / "sub" / "new.json")
     assert install.write_settings(fresh, fresh.render({"b": 1})) is None
     assert (fresh.path.stat().st_mode & 0o777) == 0o644

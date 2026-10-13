@@ -24,12 +24,21 @@ All notable changes to this project are documented here. Versions follow
   hand-written `guard-hook.sh` entry is reported and left alone unless `--force`. After installing
   it sends two test calls through the hook and checks the exit codes; `status --check` repeats that.
   Claude Code only for now.
+- Click-to-install in the dashboard: an **Agents** section shows whether the Claude Code hook is
+  in `~/.claude/settings.json`; **Install**, **Remove** and **Repair** open a sheet with the exact
+  diff, and nothing is written until *Apply change* (backup, atomic write, then the same two test
+  calls as the CLI). User scope only; `GET /api/agents` and `POST /api/agents/{agent}/{action}`.
+  The write endpoint needs a loopback `Host`, a same-origin `Origin`, a JSON body, a per-process
+  token only the page carries, and the `diff_id` of the diff that was shown (409 if the file
+  changed since). The dashboard is no longer read-only. Roadmap: #37.
 
 ### Changed
 
 - The hook script now ships inside the package (`laya_guard/hooks/guard-hook.sh`, so a plain
   `pip install` has it). `guard-hook.sh` in the repo root is a thin wrapper around it, so settings
   that point at the old path keep working.
+- Settings backups (`<file>.laya-guard-<time>.bak`) no longer overwrite each other when two changes
+  land in the same second; the later one gets a `-1`, `-2` suffix.
 
 ## [0.2.6] - 2026-10-13
 

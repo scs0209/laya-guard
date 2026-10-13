@@ -1,16 +1,19 @@
-"""Read-only dashboard for the local verdict log (standard library only).
+"""Dashboard for the local verdict log (standard library only).
 
 Pure functions used by server.py: statistics over `verdicts.jsonl`, the loopback Host check
-that defends against DNS rebinding, and the page itself. The log never contains command text
-(only a hash and a length), so neither does the dashboard.
+that defends against DNS rebinding, the same-origin and token checks that guard the one thing
+the page can change (an agent's hook settings), and the page itself. The log never contains
+command text (only a hash and a length), so neither does the dashboard.
 """
 from __future__ import annotations
 
+import hmac
 import math
 import os
 from datetime import datetime, timedelta, timezone
 from importlib import resources
 from pathlib import Path
+from urllib.parse import urlsplit
 
 ALLOWED_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 WINDOWS = {"1h": timedelta(hours=1), "24h": timedelta(hours=24), "7d": timedelta(days=7),
@@ -40,6 +43,20 @@ def host_allowed(host: str | None) -> bool:
     else:                                                      # 127.0.0.1 or bare ::1
         name = host
     return name in ALLOWED_HOSTS
+
+
+def origin_allowed(origin: str | None, host: str | None) -> bool:
+    """For requests that change something: the Origin header (which browsers always send on a
+    cross-site POST and on a same-site fetch POST) must name the same loopback host and port the
+    request was sent to. A request without an Origin, or from another site, is refused."""
+    if not origin or not host or not host_allowed(host):
+        return False
+    parts = urlsplit(origin)
+    return parts.scheme == "http" and parts.netloc.lower() == host.strip().lower()
+
+
+def token_ok(given: str | None, expected: str) -> bool:
+    return bool(given) and bool(expected) and hmac.compare_digest(given.encode(), expected.encode())
 
 
 def parse_ts(value) -> datetime | None:
@@ -177,6 +194,8 @@ def api_headers() -> dict[str, str]:
     return {"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"}
 
 
-def render_page(nonce: str) -> str:
+def render_page(nonce: str, token: str = "") -> str:
+    """The page, with this response's CSP nonce and the server's write token. Only a page served from
+    this origin can read the token (nothing sends CORS headers), and writes need it."""
     html = resources.files("laya_guard").joinpath("dashboard.html").read_text(encoding="utf-8")
-    return html.replace("{{NONCE}}", nonce)
+    return html.replace("{{NONCE}}", nonce).replace("{{TOKEN}}", token)

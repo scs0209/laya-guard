@@ -1,17 +1,24 @@
 """laya-guard HTTP server. POST /guard + Jev-compatible POST /v1/systemone."""
 from __future__ import annotations
+import hmac
 import os
 import time
 import secrets
 from datetime import datetime, timezone
-from fastapi import FastAPI, HTTPException, Request
+from pathlib import Path
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
-from . import dashboard
+from . import dashboard, install
 from .guard import judge, is_mock
 from .log import load_entries, log_enabled, log_path, log_verdict
 
 app = FastAPI(title="laya-guard")
+
+# Changing an agent's settings from the dashboard needs this token. It is made when the server starts
+# and only the dashboard page carries it; nothing sends CORS headers, so another site can't read it.
+_WRITE_TOKEN = secrets.token_urlsafe(32)
+AGENT_NAMES = {"claude-code": "Claude Code"}
 
 
 def _judge_and_log(text: str, source: str, cwd: str | None = None):
@@ -67,7 +74,7 @@ def _version() -> str:
 def dashboard_page(request: Request):
     _require_loopback_host(request)
     nonce = secrets.token_urlsafe(16)
-    return HTMLResponse(dashboard.render_page(nonce), headers=dashboard.page_headers(nonce))
+    return HTMLResponse(dashboard.render_page(nonce, _WRITE_TOKEN), headers=dashboard.page_headers(nonce))
 
 @app.get("/api/stats")
 def api_stats(request: Request, window: str = "24h"):
@@ -78,6 +85,67 @@ def api_stats(request: Request, window: str = "24h"):
     stats["health"] = {"ok": True, "mock": is_mock(), "version": _version(), "logging": log_enabled(),
                        "log_path": dashboard.display_path(log_path())}
     return JSONResponse(stats, headers=dashboard.api_headers())
+
+def _require_write_access(request: Request) -> None:
+    """Everything that edits a settings file: loopback Host, same-origin, a JSON body (a plain
+    cross-site form post can't send one) and the token only the dashboard page has."""
+    _require_loopback_host(request)
+    if not dashboard.origin_allowed(request.headers.get("origin"), request.headers.get("host")):
+        raise HTTPException(status_code=403, detail="cross-origin request refused")
+    if not request.headers.get("content-type", "").lower().startswith("application/json"):
+        raise HTTPException(status_code=415, detail="send application/json")
+    if not dashboard.token_ok(request.headers.get("x-laya-token"), _WRITE_TOKEN):
+        raise HTTPException(status_code=403, detail="missing or wrong token; reload the dashboard")
+
+@app.get("/api/agents")
+def api_agents(request: Request):
+    """Where the hook stands for each agent (user scope only: that is what the dashboard changes)."""
+    _require_loopback_host(request)
+    agents = []
+    for agent in install.AGENTS:
+        st = install.status("user", Path.home(), Path.cwd())
+        agents.append({"id": agent, "name": AGENT_NAMES.get(agent, agent), "scope": "user",
+                       "path": dashboard.display_path(st.path), "state": st.state, "detail": st.detail,
+                       "managed": install.is_managed(st.command) if st.command else None})
+    return JSONResponse({"agents": agents}, headers=dashboard.api_headers())
+
+class AgentReq(BaseModel):
+    scope: str = "user"
+    mode: str = "preview"        # preview: show the change; apply: make it (needs the preview's diff_id)
+    diff_id: str | None = None
+    force: bool = False
+
+@app.post("/api/agents/{agent}/{action}", dependencies=[Depends(_require_write_access)])
+def api_agent_action(agent: str, action: str, req: AgentReq):
+    # _require_write_access runs as a dependency, so a request without the token is refused
+    # before its body is even parsed
+    if agent not in install.AGENTS or action not in ("install", "uninstall"):
+        raise HTTPException(status_code=404, detail="unknown agent or action")
+    if req.scope != "user":
+        raise HTTPException(status_code=400, detail="only the user scope can be changed from the dashboard")
+    if req.mode not in ("preview", "apply"):
+        raise HTTPException(status_code=400, detail="mode must be preview or apply")
+    try:
+        plan = install.make_plan(action, agent, "user", Path.home(), Path.cwd(), force=req.force)
+    except install.InstallError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    shown = dashboard.display_path(plan.settings.path)
+    head, _, rest = plan.diff.partition("\n@@")                        # only the ---/+++ header lines carry the path
+    diff = head.replace(str(plan.settings.path), shown) + (("\n@@" + rest) if rest else "")
+    body = {"outcome": plan.outcome, "path": shown, "changed": plan.changed,
+            "diff": diff, "diff_id": plan.diff_id if plan.changed else None, "left": plan.left}
+    if req.mode == "preview" or not plan.changed:
+        return JSONResponse({**body, "applied": False}, headers=dashboard.api_headers())
+    # applying needs the id of the diff the user was shown: if the file changed since, it won't match
+    if not req.diff_id or not hmac.compare_digest(req.diff_id, plan.diff_id):
+        raise HTTPException(status_code=409, detail="the settings changed since the preview; review the change again")
+    try:
+        backup, probes = install.apply_plan(plan)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"couldn't write the settings file: {exc.strerror or exc}")
+    return JSONResponse({**body, "applied": True, "backup": dashboard.display_path(backup) if backup else None,
+                         "probes": [{"label": l, "expected": e, "exit": g, "ok": e == g} for l, e, g in probes]},
+                        headers=dashboard.api_headers())
 
 @app.post("/v1/systemone")
 def systemone(body: dict):
