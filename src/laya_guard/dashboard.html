@@ -399,9 +399,11 @@ footer kbd { font: inherit; color: var(--muted); border: 1px solid var(--hair); 
   }
 
   function load(fresh) {
-    return fetch("/api/stats?window=" + encodeURIComponent(state.window), { cache: "no-store" })
+    var win = state.window;                  // the window this request is for; a slower answer for an old one is dropped
+    return fetch("/api/stats?window=" + encodeURIComponent(win), { cache: "no-store" })
       .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
       .then(function (data) {
+        if (win !== state.window) return;
         // nothing new: keep the page as it is (no flicker, hover and open details survive)
         var last = data.tape.length ? data.tape[data.tape.length - 1][1] : "";
         var sig = [data.window, data.totals.total, last, data.health.mock, data.health.logging].join("|");

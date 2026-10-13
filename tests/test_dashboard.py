@@ -195,3 +195,12 @@ def test_api_stats_returns_the_log_and_health(client):
 def test_api_stats_reports_when_logging_is_off(client, monkeypatch):
     monkeypatch.setenv("LAYA_GUARD_LOG", "0")
     assert client.get("/api/stats").json()["health"]["logging"] is False
+
+
+def test_page_drops_a_response_for_a_window_that_is_no_longer_selected():
+    # a slow 24h poll must not overwrite the page after the user pressed 1 for the last hour
+    html = dashboard.render_page("N0NC3")
+    start = html.index("function load(fresh)")
+    body = html[start:html.index("function setWindow", start)]
+    assert "var win = state.window;" in body and 'encodeURIComponent(win)' in body
+    assert body.index("if (win !== state.window) return;") < body.index("state.data = data;")
