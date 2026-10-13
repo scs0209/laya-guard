@@ -228,7 +228,9 @@ laya-guard dashboard   # 같은 내용을 로컬 웹 페이지로 (서버가 꺼
 설정 폴더. 읽기 전용이며 그 파일의 내용은 열지 않음) 타일로 보여줍니다. 지금 laya-guard가 보호할 수 있는 것은
 Claude Code이고, 그 타일은 `~/.claude/settings.json`에 훅이 들어 있는지 보여주며 **Install hook** /
 **Remove**를 누르면 정확한 diff가 담긴 시트가 열립니다. 나머지(Codex CLI, Cursor, Gemini CLI)는
-"찾았지만 아직 지원하지 않음"으로 표시됩니다.
+"찾았지만 아직 지원하지 않음"으로 표시됩니다. 로고는 각 제품의 공식 마크입니다(Claude Code, Cursor, Gemini는
+[Simple Icons](https://simpleicons.org) CC0, Codex는 [Lobe Icons](https://github.com/lobehub/lobe-icons) MIT에서 가져옴).
+상표권은 각 소유자에게 있으며, 어떤 제품인지 알리는 용도로만 씁니다.
 *Apply change*를 누르기 전에는 아무것도 쓰지 않고, 누르면 설정 파일을 백업하고
 (`settings.json.laya-guard-<시각>.bak`) 원자적으로 쓴 뒤, 훅을 통해 테스트 호출 두 건을 보내 확인합니다.
 페이지에서는 user 범위만 바꿀 수 있고, `--scope project|local`은 CLI를 쓰세요. 페이지가 파일을 쓰는

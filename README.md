@@ -247,7 +247,9 @@ executable on `PATH`, an app bundle or a config directory such as `~/.codex`; re
 opens those files) and shows each as a tile. Claude Code is the one laya-guard can protect so far:
 its tile shows whether the hook is in `~/.claude/settings.json`, and **Install hook** / **Remove**
 open a sheet with the exact diff. The others (Codex CLI, Cursor, Gemini CLI) are listed as found
-but not supported yet.
+but not supported yet. The logos are the products' own marks (Claude Code, Cursor and Gemini from
+[Simple Icons](https://simpleicons.org), CC0; Codex from [Lobe Icons](https://github.com/lobehub/lobe-icons), MIT).
+They belong to their owners and are only there to say which product a tile is.
 Nothing is written until you press *Apply change*; then the settings file is backed up
 (`settings.json.laya-guard-<time>.bak`), written atomically, and two test calls go through the
 hook to check it. Only the user scope can be changed from the page; use the CLI for `--scope
