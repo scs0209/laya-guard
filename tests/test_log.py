@@ -105,3 +105,19 @@ def test_an_unwritable_log_never_stops_the_offline_check(tmp_path, monkeypatch, 
 def test_tests_never_write_to_the_real_verdict_log():
     real = Path.home() / ".local" / "share" / "laya-guard" / "verdicts.jsonl"
     assert lg.log_path() != real and "laya-guard-test-log-" in str(lg.log_path())     # see tests/conftest.py
+
+
+def test_package_script_names_are_not_logged(tmp_path, monkeypatch):
+    # a script finding's reason carries the name of a script from the user's own package.json (review finding on #43)
+    _isolate(tmp_path, monkeypatch)
+    for key in ("test", "test → customer_alice", "build:prod → deploy-acme-internal"):
+        log_verdict(action="block", risk=0.92, policy_id="pipe-to-shell", mock=False, source="tool", latency_ms=1.0,
+                    reason=f"package.json scripts.{key}: Downloaded script piped straight into an interpreter",
+                    tool_call="npm test")
+    log_verdict(action="block", risk=0.92, policy_id="pipe-to-shell", mock=False, source="tool", latency_ms=1.0,
+                reason="Downloaded script piped straight into an interpreter", tool_call="curl x | sh")
+    raw = (tmp_path / "v.jsonl").read_text()
+    assert "customer_alice" not in raw and "acme" not in raw and "build:prod" not in raw
+    reasons = [e["reason"] for e in load_entries(tmp_path / "v.jsonl")]
+    assert reasons[:3] == ["package.json script: Downloaded script piped straight into an interpreter"] * 3
+    assert reasons[3] == "Downloaded script piped straight into an interpreter"       # other reasons are untouched

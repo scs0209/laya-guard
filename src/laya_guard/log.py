@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -27,6 +28,16 @@ def log_path() -> Path:
     xdg = os.environ.get("XDG_DATA_HOME", "")
     base = Path(xdg).expanduser() if xdg else Path.home() / ".local" / "share"
     return base / "laya-guard" / "verdicts.jsonl"
+
+
+_SCRIPT_REASON = re.compile(r"^(package\.json scripts\.).*: ", re.S)
+
+
+def _public_reason(reason: str) -> str:
+    """The reason as it may be logged. A package.json script finding reads "package.json scripts.<name>: <policy
+    message>" and the name (or a chain of them) comes from the user's own file, so it is dropped here; the verdict
+    the caller gets keeps it. Greedy on purpose: if a message itself held a colon, more is hidden, never less."""
+    return _SCRIPT_REASON.sub("package.json script: ", reason)
 
 
 def log_verdict(
@@ -51,7 +62,7 @@ def log_verdict(
         "action": action,
         "risk": risk,
         "policy_id": policy_id,
-        "reason": reason,  # policy message from policy.yaml — no user content
+        "reason": _public_reason(reason),  # policy message from policy.yaml — no user content
         "mock": mock,
         "source": source,
         "latency_ms": round(float(latency_ms), 1),

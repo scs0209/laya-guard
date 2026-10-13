@@ -5,6 +5,13 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+### Security
+
+- The verdict log no longer records the names of `package.json` scripts. A script finding's reason read
+  `package.json scripts.<name>: <policy message>`, and the name comes from the user's own file, so it is dropped when
+  the entry is written (the verdict returned to the caller keeps it). Hash and length were always the only things kept
+  of a command; now the reason can't carry command-derived text either. Found by review on #43.
+
 ### Added
 
 - `LAYA_GUARD_FAIL=ask`: with the server down, a call the offline check can't judge (neither regex-flagged nor on the
