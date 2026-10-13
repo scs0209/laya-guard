@@ -476,7 +476,7 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
   function primary() { return needing()[0] || null; }
   function selected() {
     for (var i = 0; i < agentList.length; i++) if (agentList[i].id === state.agent) return agentList[i];
-    return agentList.filter(shown)[0] || agentList[0] || null;
+    return needing()[0] || agentList.filter(shown)[0] || agentList[0] || null;     // land on what needs the hook
   }
   function startChange(a) { var s = stateOf(a); if (s.btn) openSheet(a, s.action, s.force || (s.action === "install" && a.managed === false)); }
 
