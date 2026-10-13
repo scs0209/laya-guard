@@ -8,8 +8,8 @@ def cmd_check(args):
     text = " ".join(args.text) if args.text else sys.stdin.read()
     cwd = os.path.abspath(args.cwd)
     if args.offline:
-        # LAYA_GUARD_FAIL: open (default) passes what it can't judge, closed blocks it, ask sends it to a human
-        unknown = {"closed": "block", "ask": "review"}.get(os.environ.get("LAYA_GUARD_FAIL", ""), "allow")
+        # LAYA_GUARD_FAIL: ask (default) sends what it can't judge to a human, closed blocks it, open passes it
+        unknown = {"open": "allow", "closed": "block"}.get(os.environ.get("LAYA_GUARD_FAIL", ""), "review")
         t0 = time.perf_counter()
         v = judge_offline(text, unknown=unknown, cwd=cwd)
         _log_offline(v, text, (time.perf_counter() - t0) * 1000.0)
@@ -323,7 +323,8 @@ def main(argv=None):
     c = sub.add_parser("check"); c.add_argument("text", nargs="*")
     c.add_argument("--offline", action="store_true",
                    help="regex + safe-command check only, no model (what hooks fall back to when the "
-                        "server is down; LAYA_GUARD_FAIL=closed blocks unjudged calls, =ask asks a human)")
+                        "server is down; unjudged calls are sent to a human by default, "
+                        "LAYA_GUARD_FAIL=closed blocks them, =open passes them)")
     c.add_argument("--json", action="store_true", help="print the verdict as JSON")
     c.add_argument("--cwd", default=".",
                    help="directory the command runs in; package.json scripts that `npm test` "

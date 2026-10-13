@@ -9,11 +9,11 @@ Needs laya-guard on localhost:8787. Override: LAYA_GUARD_URL env.
 Contract (per Copilot hooks reference): tool-call payload on stdin, decision
 JSON on stdout with permissionDecision allow/deny/ask (reason required for
 deny; ask prompts interactively, counts as deny headless). Crashes/nonzero
-exits fail closed, timeouts fail open. review maps to ask. Unreadable
-input -> exit 0 with no decision (normal flow continues).
+exits fail closed, timeouts fail open. review maps to ask.
 Guard unreachable or slower than 10s -> `laya-guard check --offline`
-(regex-flagged blocks, safe commands pass, the rest passes unless
-LAYA_GUARD_FAIL=closed).
+(regex-flagged blocks, safe commands pass). A call it can't judge, or input
+that can't be read, is asked about (LAYA_GUARD_FAIL=closed blocks it, =open
+passes it).
 """
 import json
 import os
@@ -23,7 +23,12 @@ import urllib.request
 
 GUARD_URL = os.environ.get("LAYA_GUARD_URL", "http://localhost:8787/guard")
 GUARD_BIN = os.environ.get("LAYA_GUARD_BIN", "laya-guard")
-FAIL_CLOSED = os.environ.get("LAYA_GUARD_FAIL", "open") == "closed"
+FAIL_MODE = os.environ.get("LAYA_GUARD_FAIL", "ask")
+
+
+def not_judged(why: str) -> dict:
+    return {"action": {"open": "allow", "closed": "block"}.get(FAIL_MODE, "review"), "risk": 0.5,
+            "policy_id": "offline", "reason": f"{why}; not judged"}
 
 
 def extract_text(event: object) -> str:
@@ -93,11 +98,11 @@ def judge_offline(text: str, cwd: str) -> dict:
     # Server down or too slow: regex + safe-command check without the model.
     try:
         r = subprocess.run([GUARD_BIN, "check", "--offline", "--json", "--cwd", cwd], input=text,
-                           capture_output=True, text=True, timeout=10)
+                           capture_output=True, text=True, timeout=10,
+                           env=dict(os.environ, LAYA_GUARD_FAIL=FAIL_MODE))
         verdict = json.loads(r.stdout)
     except Exception:
-        verdict = {"action": "block" if FAIL_CLOSED else "allow", "risk": 0.5,
-                   "policy_id": "offline", "reason": "guard server and CLI unavailable; not judged"}
+        verdict = not_judged("guard server and CLI unavailable")
     print(f"laya-guard: server unreachable, offline check -> {verdict.get('action')}",
           file=sys.stderr)
     return verdict
@@ -108,12 +113,15 @@ def main() -> int:
         raw = sys.stdin.read()
         event = json.loads(raw) if raw.strip() else {}
     except Exception:
-        return 0  # unreadable input -> normal flow continues
-    text = extract_text(event)
-    cwd = extract_cwd(event)
-    verdict = judge(text, cwd)
-    if verdict is None:
-        verdict = judge_offline(text, cwd)
+        event = None
+    if event is None:
+        verdict = not_judged("could not read the hook input")
+    else:
+        text = extract_text(event)
+        cwd = extract_cwd(event)
+        verdict = judge(text, cwd)
+        if verdict is None:
+            verdict = judge_offline(text, cwd)
     action = verdict.get("action")
     if action == "block":
         print(json.dumps({

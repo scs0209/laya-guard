@@ -4,9 +4,11 @@ All adapters gate tool execution through your local laya-guard server
 (`laya-guard serve`, default `http://localhost:8787/guard`).
 Set `LAYA_GUARD_URL` to override. When the server is unreachable or slower
 than 10s, every adapter falls back to `laya-guard check --offline`:
-regex-flagged calls are blocked, safe commands pass, and the rest pass unless
-`LAYA_GUARD_FAIL=closed`. Set `LAYA_GUARD_BIN` if the CLI isn't on the agent's
-`PATH`. See the main README's "Server down" section.
+regex-flagged calls are blocked, safe commands pass, and the rest are asked
+about, or blocked by adapters whose agent has no ask lane
+(`LAYA_GUARD_FAIL=closed` blocks them everywhere, `=open` lets them pass).
+Set `LAYA_GUARD_BIN` if the CLI isn't on the agent's `PATH`. See the main
+README's "Server down" section.
 
 | Agent | Mechanism | Files | review maps to |
 |---|---|---|---|

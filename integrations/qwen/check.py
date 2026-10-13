@@ -10,10 +10,11 @@ Contract (per Qwen Code docs): JSON event on stdin (tool_name, tool_input,
 session_id, cwd, permission_mode); on exit 0, stdout JSON controls the event:
 permissionDecision allow/deny/ask. Exit 2 blocks (stderr as feedback); other
 exits are non-blocking errors. review maps to ask (falls back to deny in
-headless runs). Unreadable input -> fail open.
+headless runs).
 Guard unreachable or slower than 10s -> `laya-guard check --offline`
-(regex-flagged blocks, safe commands pass, the rest passes unless
-LAYA_GUARD_FAIL=closed).
+(regex-flagged blocks, safe commands pass). A call it can't judge, or input
+that can't be read, is asked about (LAYA_GUARD_FAIL=closed blocks it, =open
+passes it).
 """
 import json
 import os
@@ -23,7 +24,12 @@ import urllib.request
 
 GUARD_URL = os.environ.get("LAYA_GUARD_URL", "http://localhost:8787/guard")
 GUARD_BIN = os.environ.get("LAYA_GUARD_BIN", "laya-guard")
-FAIL_CLOSED = os.environ.get("LAYA_GUARD_FAIL", "open") == "closed"
+FAIL_MODE = os.environ.get("LAYA_GUARD_FAIL", "ask")
+
+
+def not_judged(why: str) -> dict:
+    return {"action": {"open": "allow", "closed": "block"}.get(FAIL_MODE, "review"), "risk": 0.5,
+            "policy_id": "offline", "reason": f"{why}; not judged"}
 
 
 def extract_text(event: object) -> str:
@@ -35,6 +41,15 @@ def extract_text(event: object) -> str:
         except (TypeError, ValueError):
             return f"{tool}({tool_input})"
     return str(event)
+
+
+def shell_command(event: object) -> str | None:
+    # The offline safe-command list matches a bare command, not the tool-call wrapper the model sees.
+    if isinstance(event, dict) and event.get("tool_name") == "run_shell_command":
+        tool_input = event.get("tool_input")
+        if isinstance(tool_input, dict) and isinstance(tool_input.get("command"), str):
+            return tool_input["command"] or None
+    return None
 
 
 def extract_cwd(event: object) -> str:
@@ -73,11 +88,11 @@ def judge_offline(text: str, cwd: str) -> dict:
     # Server down or too slow: regex + safe-command check without the model.
     try:
         r = subprocess.run([GUARD_BIN, "check", "--offline", "--json", "--cwd", cwd], input=text,
-                           capture_output=True, text=True, timeout=10)
+                           capture_output=True, text=True, timeout=10,
+                           env=dict(os.environ, LAYA_GUARD_FAIL=FAIL_MODE))
         verdict = json.loads(r.stdout)
     except Exception:
-        verdict = {"action": "block" if FAIL_CLOSED else "allow", "risk": 0.5,
-                   "policy_id": "offline", "reason": "guard server and CLI unavailable; not judged"}
+        verdict = not_judged("guard server and CLI unavailable")
     print(f"laya-guard: server unreachable, offline check -> {verdict.get('action')}",
           file=sys.stderr)
     return verdict
@@ -88,12 +103,15 @@ def main() -> int:
         raw = sys.stdin.read()
         event = json.loads(raw) if raw.strip() else {}
     except Exception:
-        return 0  # unreadable input -> fail open
-    text = extract_text(event)
-    cwd = extract_cwd(event)
-    verdict = judge(text, cwd)
-    if verdict is None:
-        verdict = judge_offline(text, cwd)
+        event = None
+    if event is None:
+        verdict = not_judged("could not read the hook input")
+    else:
+        text = extract_text(event)
+        cwd = extract_cwd(event)
+        verdict = judge(text, cwd)
+        if verdict is None:
+            verdict = judge_offline(shell_command(event) or text, cwd)
     action = verdict.get("action")
     if action == "block":
         print(json.dumps({

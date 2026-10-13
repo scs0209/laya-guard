@@ -594,13 +594,13 @@ def judge_offline(tool_call: str, fail_closed: bool = False, cwd: str | None = N
 
     Regex-flagged calls are blocked and safe commands allowed. Anything else
     can't be judged without the model, and `unknown` says what happens to it:
-    "allow" (the default), "block" (what fail_closed means), or "review", which
-    sends it to the human lane of agents that have one (a headless run has nobody
-    to answer, so there it is denied). With cwd, the package.json scripts a safe
-    command runs are checked too.
+    "review" (the default), which sends it to the human lane of agents that have
+    one (a headless run has nobody to answer, so there it is denied), "block"
+    (what fail_closed means), or "allow". With cwd, the package.json scripts a
+    safe command runs are checked too.
     """
     if unknown is None:
-        unknown = "block" if fail_closed else "allow"
+        unknown = "block" if fail_closed else "review"
     if _oversized(tool_call):
         return _oversized_verdict(tool_call, mock=False)
     ko = _is_korean(tool_call)
