@@ -8,11 +8,12 @@ All notable changes to this project are documented here. Versions follow
 ### Added
 
 - `laya-guard dashboard`: a local dashboard at `http://127.0.0.1:8787/dashboard`
-  (starts the server if it isn't running, `--no-open` prints the URL). A calm one-column page:
-  a sentence with the verdict counts for a 1h to all-time window, a tape with one fine line per
-  judged call (linked to the list: point at one and the other lights up), the most recent calls
-  with policy, reason, hash and length (never command text) and per-policy counts; keyboard
-  shortcuts (`j`/`k`, `enter`, `1`-`5`, `p`, `?`). Served by the existing server as
+  (starts the server if it isn't running, `--no-open` prints the URL). A small app with a sidebar
+  and four views: Overview (a sentence with the verdict counts for a 1h to all-time window, a tape
+  with one fine line per judged call, outlined cards with count badges for blocks and reviews),
+  Calls (the list on the left, the selected call on the right with policy, reason, hash and length,
+  never command text; verdict filter and search), Policies, and Agents. Keyboard shortcuts
+  (`j`/`k`, `a` `r` `b` `0`, `1`-`5`, `/`, `p`, `?`). Served by the existing server as
   `GET /dashboard` and `GET /api/stats`; both answer 403 unless the `Host` header is loopback
   (DNS rebinding), the page is self-contained under a nonce-only CSP, and it loads nothing
   from the network. The HTML ships as package data. Roadmap: #37.
@@ -24,8 +25,9 @@ All notable changes to this project are documented here. Versions follow
   hand-written `guard-hook.sh` entry is reported and left alone unless `--force`. After installing
   it sends two test calls through the hook and checks the exit codes; `status --check` repeats that.
   Claude Code only for now.
-- Click-to-install in the dashboard: an **Agents** section shows whether the Claude Code hook is
-  in `~/.claude/settings.json`; **Install**, **Remove** and **Repair** open a sheet with the exact
+- Click-to-install in the dashboard: the **Agents** view shows whether the Claude Code hook is
+  in `~/.claude/settings.json` (agent tiles with a status dot), and a button pinned at the bottom of
+  the sidebar installs it in one click. **Install**, **Remove** and **Repair** open a sheet with the exact
   diff, and nothing is written until *Apply change* (backup, atomic write, then the same two test
   calls as the CLI). User scope only; `GET /api/agents` and `POST /api/agents/{agent}/{action}`.
   The write endpoint needs a loopback `Host`, a same-origin `Origin`, a JSON body, a per-process

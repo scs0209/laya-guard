@@ -231,17 +231,19 @@ laya-guard stats       # verdict distribution, block/review rates, top policies,
 laya-guard dashboard   # the same as a local web page; starts the server if it isn't running
 ```
 
-The dashboard (`http://127.0.0.1:8787/dashboard`) is a one-column page: a sentence
-saying how many calls were judged over a 1h to all-time window and how they split, a tape with one
-fine line per judged call (blocks stand tall and red), the most recent calls (click one for its
-policy, reason, source, timing, length and hash, never the text) and per-policy counts. Point at a
-call and its line on the tape lights up, and the other way round. Keyboard: `j`/`k` move, `enter`
-details, `a` `r` `b` `0` verdict, `1`-`5` window, `p` pause, `?` help. It refuses requests whose
-`Host` isn't loopback (DNS rebinding) and loads nothing from the network. `--no-open` prints the
-URL instead of opening a browser.
+The dashboard (`http://127.0.0.1:8787/dashboard`) is a small app with a sidebar and four views.
+**Overview** says how many calls were judged over a 1h to all-time window and how they split, draws a
+tape with one fine line per judged call (blocks stand tall and red; click one to open that call), and
+has cards for what needs a look (outlined and counted when there are blocks or reviews). **Calls** is
+the list on the left and the selected call on the right (policy, reason, source, timing, length and
+hash, never the text), with a verdict filter and search. **Policies** shows which rules decided the
+calls. **Agents** is described below. Keyboard: `j`/`k` move through the calls, `a` `r` `b` `0` verdict,
+`1`-`5` window, `/` search, `p` pause, `?` help. It refuses requests whose `Host` isn't loopback (DNS
+rebinding) and loads nothing from the network. `--no-open` prints the URL instead of opening a browser.
 
-The **Agents** section is the click version of `laya-guard install`: it shows whether the Claude Code
-hook is in `~/.claude/settings.json`, and **Install** / **Remove** open a sheet with the exact diff.
+**Agents** is the click version of `laya-guard install`, and the blue button pinned at the bottom of
+the sidebar does the same in one click. It shows whether the Claude Code hook is in
+`~/.claude/settings.json`, and **Install hook** / **Remove** open a sheet with the exact diff.
 Nothing is written until you press *Apply change*; then the settings file is backed up
 (`settings.json.laya-guard-<time>.bak`), written atomically, and two test calls go through the
 hook to check it. Only the user scope can be changed from the page; use the CLI for `--scope
