@@ -216,13 +216,12 @@ laya-guard stats       # verdict distribution, block/review rates, top policies,
 laya-guard dashboard   # the same as a local web page; starts the server if it isn't running
 ```
 
-The dashboard (`http://127.0.0.1:8787/dashboard`) is a read-only log viewer: the verdict counts
-over a 1h to all-time window, a tape with one block glyph per judged call (blocks stand tall),
-per-policy counts, calls over time and the most recent calls (with the policy's reason, a
-fingerprint drawn from the call's hash, the hash and the length, never the text). The same
-command always gets the same fingerprint, so repeated calls are easy to spot. It is driven from
-the keyboard (`j`/`k` move, `enter` details, `/` filter, `a` `r` `b` `0` verdict, `1`-`5` window,
-`p` pause, `?` help). It refuses requests whose
+The dashboard (`http://127.0.0.1:8787/dashboard`) is a read-only, one-column page: a sentence
+saying how many calls were judged over a 1h to all-time window and how they split, a tape with one
+fine line per judged call (blocks stand tall and red), the most recent calls (click one for its
+policy, reason, source, timing, length and hash, never the text) and per-policy counts. Point at a
+call and its line on the tape lights up, and the other way round. Keyboard: `j`/`k` move, `enter`
+details, `a` `r` `b` `0` verdict, `1`-`5` window, `p` pause, `?` help. It refuses requests whose
 `Host` isn't loopback (DNS rebinding) and loads nothing from the network. `--no-open` prints the
 URL instead of opening a browser.
 
