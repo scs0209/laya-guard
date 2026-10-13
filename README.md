@@ -136,6 +136,21 @@ see Supported agents above for the full list.
 
 ### 1. Guard Claude Code (PreToolUse hook)
 
+```bash
+laya-guard install claude-code             # ~/.claude/settings.json; shows a diff and asks first
+laya-guard install claude-code --scope local   # ./.claude/settings.local.json (also: project)
+laya-guard status --check                  # where it's installed, is the server up, does the hook work
+laya-guard uninstall claude-code           # removes only what `install` added
+```
+
+`install` registers the hook for the `Bash` tool (`--matcher` to change that), writes absolute
+paths (hooks often don't inherit your virtualenv's `PATH`), prints a diff, backs up the file
+and asks before writing (`--dry-run` to only look, `--yes` to skip the question). It merges into
+your existing hooks, never overwrites them, and leaves a hand-written `guard-hook.sh` entry alone
+unless you pass `--force`. Afterwards it sends two test calls through the hook (a harmless one and a
+download piped into a shell) and checks the exit codes. The hook is a bash script, so Windows isn't
+supported yet. To do it by hand instead:
+
 Register [guard-hook.sh](guard-hook.sh) as a PreToolUse hook. It reads the tool
 payload from stdin, POSTs it to the local server, and exits 2 on `block`
 (cancelling that run). `review` asks you: the hook prints a `permissionDecision: "ask"`
@@ -145,6 +160,60 @@ Non-interactive runs (`claude -p`) have nobody to answer, so an `ask` is denied 
 For the Bash tool only the command is judged, not the agent's description.
 If the server is unreachable or slower than 10s, it falls back to the offline
 check (see [Server down](#server-down)). Point it elsewhere with `LAYA_GUARD_URL`.
+
+### 1b. Guard Cursor (beforeShellExecution hook)
+
+```bash
+laya-guard install cursor              # ~/.cursor/hooks.json; shows a diff and asks first
+laya-guard install cursor --scope project   # ./.cursor/hooks.json (Cursor has no local scope)
+laya-guard status --agent cursor --check
+laya-guard uninstall cursor
+```
+
+Same safety as above (diff, backup, test calls, `--dry-run`, `--yes`, only its own entries are removed),
+with the differences that matter for Cursor. Cursor runs every hook that matches, so laya-guard's entry
+sits next to whatever other tools registered for `beforeShellExecution`, and Cursor takes the strictest
+answer (`deny` beats `ask` beats `allow`). The hook script answers in Cursor's format: `deny` with a
+message for you and one for the agent, `ask` for `review`, otherwise `allow`, and it always prints valid JSON
+because Cursor blocks a command when a permission hook's output isn't. Cursor's `hooks.json` is often not
+strict JSON (other tools leave trailing commas in it); `install` reads it anyway and says so before it
+rewrites the file without them. A hand-written adapter from [integrations/cursor/](integrations/cursor/) is
+reported and left alone unless you pass `--force`, so you don't end up with two judges. The test calls check
+the answer (`allow` / `deny`), not an exit code. These hooks apply to the Cursor app; whether the Cursor CLI
+runs `beforeShellExecution` hooks isn't something Cursor's docs state, so this isn't tested there.
+
+### 1c. Every other agent
+
+```bash
+laya-guard install gemini-cli     # also: codex, qwen-code, windsurf, copilot-cli, cline, opencode, kilo, amp
+laya-guard status --check         # what's installed on this machine, and whether each hook answers
+```
+
+One command per agent, with the same safety as above: it shows a diff first, backs up what it replaces,
+writes absolute paths, merges next to other tools' entries and removes only its own on `uninstall`.
+What it writes, and the one thing it can't do for you:
+
+| Agent | `laya-guard install` writes | You still do |
+|---|---|---|
+| Claude Code | a hook entry in `~/.claude/settings.json` | restart it if it's open |
+| Codex CLI | an entry in `~/.codex/hooks.json`, or a marked block in `config.toml` if that's where your hooks live | run `/hooks` and trust it (Codex asks before running a new hook) |
+| Cursor | an entry in `~/.cursor/hooks.json` | — |
+| Gemini CLI | an entry in `~/.gemini/settings.json`, and `tools.enableHooks` (older versions ship with hooks off) | restart it |
+| Qwen Code | an entry in `~/.qwen/settings.json` | restart it, or open `/hooks` |
+| Windsurf | an entry in `~/.codeium/windsurf/hooks.json` | reload; hooks don't run in Restricted Mode |
+| Copilot CLI | its own file, `~/.copilot/hooks/laya-guard.json` | start a new session |
+| Cline | an executable `~/Documents/Cline/Hooks/PreToolUse` | switch it on in Cline's Hooks tab |
+| OpenCode | `~/.config/opencode/plugins/laya-guard.ts` | restart it |
+| Kilo Code | `~/.config/kilo/plugin/laya-guard.ts` | restart it |
+| Amp | `~/.config/amp/plugins/laya-guard.ts` | run "plugins: reload" |
+
+`--scope project` writes the project-level equivalent instead (`.codex/`, `.gemini/`, `.github/hooks/`, `.amp/plugins/`, ...).
+Hooks get two test calls through the real adapter after installing; plugins (OpenCode, Kilo, Amp) can only be run
+by the agent itself, so `install` says so instead. The adapters shipped in the package are the ones in
+[integrations/](integrations/) (a test keeps them identical). **None of the agents are launched in the tests.**
+The formats come from each agent's current docs and from files other tools leave on a real machine; for Codex,
+Qwen Code, Windsurf, Cline and Kilo `install` says it hasn't been run against the app, and Cline's hook mechanism in
+particular is documented in a way that's moving to plugins.
 
 ### 2. Guard any agent loop (HTTP)
 
@@ -212,9 +281,37 @@ stored** — only metadata (action, risk, policy, latency) plus a truncated SHA-
 for counting unique prompts.
 
 ```bash
-laya-guard stats   # verdict distribution, block/review rates, top policies, latency
+laya-guard stats       # verdict distribution, block/review rates, top policies, latency
+laya-guard dashboard   # the same as a local web page; starts the server if it isn't running
 ```
 
+The dashboard (`http://127.0.0.1:8787/dashboard`) is a small app with a sidebar and four views.
+**Overview** says how many calls were judged over a 1h to all-time window and how they split, draws a
+tape with one fine line per judged call (blocks stand tall and red; click one to open that call), and
+has cards for what needs a look (outlined and counted when there are blocks or reviews). **Calls** is
+the list on the left and the selected call on the right (policy, reason, source, timing, length and
+hash, never the text), with a verdict filter and search. **Policies** shows which rules decided the
+calls. **Agents** is described below. Keyboard: `j`/`k` move through the calls, `a` `r` `b` `0` verdict,
+`1`-`5` window, `/` search, `p` pause, `?` help. It refuses requests whose `Host` isn't loopback (DNS
+rebinding) and loads nothing from the network. `--no-open` prints the URL instead of opening a browser.
+
+**Agents** is the click version of `laya-guard install`, and the blue button pinned at the bottom of
+the sidebar does the same in one click. It finds the coding agents on this machine by itself (an
+executable on `PATH`, an app bundle or a config directory such as `~/.codex`; read-only, it never
+opens those files) and shows each as a tile (the ones that weren't found sit behind the `+` tile). A tile shows whether
+the hook is in place for that agent, what it would write and what's left for you to do in the agent, and
+**Install hook** / **Remove** open a sheet with the exact diff; the sidebar button installs where it's missing.
+The logos are the products' own marks (Claude Code, Cursor, Gemini, Qwen, Windsurf, Copilot, Cline and OpenCode from
+[Simple Icons](https://simpleicons.org), CC0; Codex, Kilo Code and Amp from
+[Lobe Icons](https://github.com/lobehub/lobe-icons), MIT). They belong to their owners and are only there to say which
+product a tile is.
+Nothing is written until you press *Apply change*; then the settings file is backed up
+(`settings.json.laya-guard-<time>.bak`), written atomically, and two test calls go through the
+hook to check it. Only the user scope can be changed from the page; use the CLI for `--scope
+project|local`. Because this is the one place the page writes a file, the endpoint is held to more
+than the read-only ones: loopback `Host`, a same-origin `Origin`, a JSON body (a cross-site form
+post can't send one), a per-process token only the page carries, and the id of the diff you were
+shown (if the file changed since, you get a 409 and review it again).
 Disable with `LAYA_GUARD_LOG=0`, relocate with `LAYA_GUARD_LOG_PATH=...`.
 Publish the aggregates (never raw prompts) as field evidence next to benchmarks.
 
@@ -267,7 +364,12 @@ All patterns live in [policy.yaml](src/laya_guard/policy.yaml) — edit, add you
   `limit` (input over 256K chars or a line over 16K chars, blocked unread).
   `laya-guard check --offline --json` returns the same shape with `offline`.)
 - `POST /v1/systemone` — drop-in compatible shim for Jev-style `{state, questions}` calls
-
+- `GET /dashboard` — the local dashboard page; `GET /api/stats?window=1h|24h|7d|30d|all` — the
+  numbers behind it (totals, timeline, per-policy counts, recent verdicts as hash + length).
+  Both answer 403 unless the `Host` header is loopback.
+- `GET /api/agents` — the agents found on this machine and, for Claude Code, where the hook stands. `POST /api/agents/{agent}/{install|uninstall}`
+  with `{"mode": "preview"}` returns the diff and its `diff_id`; `{"mode": "apply", "diff_id": ...}`
+  makes the change. Needs the page's token and a same-origin JSON request (see above).
 ## Configuration
 
 | Knob | Where | Default |

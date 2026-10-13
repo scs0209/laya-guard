@@ -15,11 +15,70 @@ All notable changes to this project are documented here. Versions follow
   appended to the verdict log with `via: "offline"`, the server records how it judged (`via`: `model`, `regex`,
   `allowlist`, `heuristic`, `limit`), and `laya-guard stats` prints how many calls were judged without the model, with the
   server down or after a model error. Still hash and length only; mock mode isn't counted.
+- `laya-guard dashboard`: a local dashboard at `http://127.0.0.1:8787/dashboard`
+  (starts the server if it isn't running, `--no-open` prints the URL). A small app with a sidebar
+  and four views: Overview (a sentence with the verdict counts for a 1h to all-time window, a tape
+  with one fine line per judged call, outlined cards with count badges for blocks and reviews),
+  Calls (the list on the left, the selected call on the right with policy, reason, hash and length,
+  never command text; verdict filter and search), Policies, and Agents. Keyboard shortcuts
+  (`j`/`k`, `a` `r` `b` `0`, `1`-`5`, `/`, `p`, `?`). Served by the existing server as
+  `GET /dashboard` and `GET /api/stats`; both answer 403 unless the `Host` header is loopback
+  (DNS rebinding), the page is self-contained under a nonce-only CSP, and it loads nothing
+  from the network. The HTML ships as package data. Roadmap: #37.
+- `laya-guard install claude-code` / `uninstall claude-code` / `status`: registers (and removes,
+  and inspects) the Claude Code hook without editing JSON by hand. It writes absolute paths,
+  merges into existing hooks instead of overwriting them, prints a diff, backs up the settings
+  file and asks before writing (`--dry-run`, `--yes`, `--scope user|project|local`, `--matcher`,
+  `--force`). `uninstall` removes only entries it added (marked `LAYA_GUARD_MANAGED=1`); a
+  hand-written `guard-hook.sh` entry is reported and left alone unless `--force`. After installing
+  it sends two test calls through the hook and checks the exit codes; `status --check` repeats that.
+  Claude Code only for now.
+- Click-to-install in the dashboard: the **Agents** view shows whether the Claude Code hook is
+  in `~/.claude/settings.json` (agent tiles with a status dot), and a button pinned at the bottom of
+  the sidebar installs it in one click. The view finds the agents on the machine by itself (an
+  executable on `PATH`, an app bundle or a config directory; read-only) and lists Codex CLI and
+  Gemini CLI as found but not supported yet (Cursor is supported, see below). Each tile shows the product's own logo (inline, nothing
+  is loaded from the network; Simple Icons CC0 and Lobe Icons MIT, trademarks of their owners). **Install**, **Remove** and **Repair** open a sheet with the exact
+  diff, and nothing is written until *Apply change* (backup, atomic write, then the same two test
+  calls as the CLI). User scope only; `GET /api/agents` and `POST /api/agents/{agent}/{action}`.
+  The write endpoint needs a loopback `Host`, a same-origin `Origin`, a JSON body, a per-process
+  token only the page carries, and the `diff_id` of the diff that was shown (409 if the file
+  changed since). The dashboard is no longer read-only. Roadmap: #37.
+- `laya-guard install <agent>` for every supported agent, in the CLI and the dashboard: Claude Code, Codex CLI, Cursor,
+  Gemini CLI, Qwen Code, Windsurf, Copilot CLI, Cline, OpenCode, Kilo Code and Amp. Each follows its own documented
+  mechanism behind the same diff, backup, atomic write and test calls: JSON hook entries (merged next to other tools'),
+  a marked block in Codex's `config.toml` for people who keep hooks there, a drop-in file of its own for Copilot CLI,
+  plugin files for OpenCode, Kilo and Amp, and a wrapper script for Cline. Gemini CLI's hooks switch
+  (`tools.enableHooks`, off by default in 0.20) is turned on and said so in the diff. What an install can't do for you
+  (trusting the hook in Codex, switching it on in Cline, a restart or reload) is shown after it. The dashboard shows the
+  agents found on the machine as tiles, the rest behind a `+` tile. `status` covers all of them (`--agent`, `--all`);
+  the adapters now ship inside the package under names no other tool uses, and a test keeps them identical to
+  `integrations/`. Plugins can't be run from outside the agent, so they get no test calls. The agents are not launched
+  in the tests: formats come from their docs and from files other tools leave behind, and the install output says
+  so for the ones it hasn't seen run.
+- `laya-guard install cursor` / `uninstall cursor` / `status --agent cursor`, and Cursor in the dashboard: registers a
+  `beforeShellExecution` hook in `~/.cursor/hooks.json` (or `./.cursor/hooks.json` with `--scope project`) with the same
+  diff, backup, atomic write and test calls as Claude Code. It merges next to the entries other tools put there
+  (Cursor runs all of them and takes the strictest answer), reads `hooks.json` even when it has trailing commas (and
+  says so before rewriting it without them), and reports a hand-written `integrations/cursor` adapter instead of adding a
+  second judge. The new `guard-cursor-hook.sh` answers in Cursor's format (`permission` allow, ask or deny with
+  `user_message` and `agent_message`) and always prints valid JSON, because Cursor blocks a command when a permission
+  hook's output isn't. `status` now covers every supported agent.
 
 ### Changed
-
 - The tests no longer write to the developer's own verdict log: `tests/conftest.py` points `LAYA_GUARD_LOG_PATH` at a
   temporary file for the whole run.
+
+- Amp now has a real plugin (`integrations/amp/laya-guard.ts`, a `tool.call` handler); the `delegate` helper stays as
+  the legacy route. Kilo's plugin default-exports `{ id, server }`, which Kilo's docs require. The Copilot adapter reads
+  the documented `toolName`/`toolArgs` payload. The dashboard's agent logos for Qwen Code, Windsurf, Copilot CLI,
+  Cline, OpenCode, Kilo Code and Amp come from Simple Icons and Lobe Icons.
+
+- The hook script now ships inside the package (`laya_guard/hooks/guard-hook.sh`, so a plain
+  `pip install` has it). `guard-hook.sh` in the repo root is a thin wrapper around it, so settings
+  that point at the old path keep working.
+- Settings backups (`<file>.laya-guard-<time>.bak`) no longer overwrite each other when two changes
+  land in the same second; the later one gets a `-1`, `-2` suffix.
 
 ## [0.2.6] - 2026-10-13
 

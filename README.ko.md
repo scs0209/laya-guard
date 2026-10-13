@@ -126,10 +126,77 @@ build`, `vite build`, `jest` 같은 평범한 스크립트를 차단하기 때�
 
 ### 1. Claude Code 가드 (PreToolUse 훅)
 
+```bash
+laya-guard install claude-code             # ~/.claude/settings.json. diff를 보여주고 먼저 묻습니다
+laya-guard install claude-code --scope local   # ./.claude/settings.local.json (project도 가능)
+laya-guard status --check                  # 어디에 설치됐는지, 서버는 떠 있는지, 훅이 동작하는지
+laya-guard uninstall claude-code           # `install`이 추가한 것만 제거
+```
+
+`install`은 `Bash` 도구용으로 훅을 등록하고(`--matcher`로 변경), 절대 경로를 씁니다(훅은 가상환경의
+`PATH`를 물려받지 못하는 경우가 많습니다). 변경을 diff로 보여주고, 파일을 백업하고, 쓰기 전에
+확인합니다(`--dry-run`은 보기만, `--yes`는 확인 생략). 기존 훅에 병합하고 덮어쓰지 않으며, 손으로
+쓴 `guard-hook.sh` 항목은 `--force` 없이는 건드리지 않습니다. 끝나면 훅에 시험 호출 두 개(무해한 것
+하나, 다운로드를 셸로 넘기는 것 하나)를 보내 종료 코드를 확인합니다. 훅이 bash 스크립트라 Windows는
+아직 지원하지 않습니다. 직접 하려면:
+
 [guard-hook.sh](guard-hook.sh)를 PreToolUse 훅으로 등록하세요. tool 페이로드를
 stdin으로 읽어 로컬 서버에 POST하고, `block`이면 exit 2로 해당 실행을 취소합니다.
 `review`면 `permissionDecision: "ask"` JSON을 출력해 Claude Code가 정책과 사유가 담긴 권한 프롬프트로 사람에게 묻습니다(`LAYA_GUARD_REVIEW=pass`면 예전처럼 통과). `allow`는 조용히 통과합니다. 응답할 사람이 없는 비대화형(`claude -p`)에서는 ask가 거부됩니다. Bash 도구는 에이전트가 쓴 설명이 아니라 명령만 심판합니다. 서버에 닿지 않거나 10초 안에 답이 없으면 오프라인 검사로 대체합니다([서버 장애](#서버-장애) 참조).
 [한계](#한계)를 먼저 읽어주세요. 서버 주소는 `LAYA_GUARD_URL`로 바꿀 수 있습니다.
+
+### 1b. Cursor 가드 (beforeShellExecution 훅)
+
+```bash
+laya-guard install cursor              # ~/.cursor/hooks.json. diff를 보여주고 먼저 묻습니다
+laya-guard install cursor --scope project   # ./.cursor/hooks.json (Cursor에는 local 범위가 없음)
+laya-guard status --agent cursor --check
+laya-guard uninstall cursor
+```
+
+안전장치는 위와 같습니다(diff, 백업, 테스트 호출, `--dry-run`, `--yes`, 자기가 넣은 항목만 제거). Cursor에서
+다른 점은 이렇습니다. Cursor는 조건에 맞는 훅을 전부 실행하므로, laya-guard 항목은 다른 도구가
+`beforeShellExecution`에 등록한 항목 옆에 들어가고 Cursor는 가장 엄격한 답을 따릅니다(`deny`가 `ask`보다,
+`ask`가 `allow`보다 우선). 훅 스크립트는 Cursor 형식으로 답합니다. 차단은 사용자용과 에이전트용 메시지가 담긴
+`deny`, `review`는 `ask`, 나머지는 `allow`이고, 권한 훅의 출력이 유효한 JSON이 아니면 Cursor가 명령을 막기
+때문에 항상 유효한 JSON 하나만 출력합니다. Cursor의 `hooks.json`은 엄격한 JSON이 아닌 경우가 많은데(다른
+도구가 끝에 쉼표를 남김) `install`은 그래도 읽고, 쉼표를 없애고 다시 쓴다는 점을 먼저 알려줍니다.
+[integrations/cursor/](integrations/cursor/)의 어댑터를 직접 등록해 둔 경우는 알려주기만 하고
+`--force` 없이는 건드리지 않아 판정이 두 번 돌지 않습니다. 테스트 호출은 종료 코드가 아니라 답(`allow` /
+`deny`)을 확인합니다. 이 훅은 Cursor 앱에 적용되며, Cursor CLI가 `beforeShellExecution` 훅을 실행하는지는
+Cursor 문서에 명시돼 있지 않아 거기서는 확인하지 않았습니다.
+
+### 1c. 나머지 에이전트 전부
+
+```bash
+laya-guard install gemini-cli     # 그 밖에: codex, qwen-code, windsurf, copilot-cli, cline, opencode, kilo, amp
+laya-guard status --check         # 이 컴퓨터에 뭐가 설치돼 있고 각 훅이 제대로 답하는지
+```
+
+에이전트마다 명령 하나이고 안전장치는 위와 같습니다. diff를 먼저 보여주고, 바꾸는 파일은 백업하고, 절대 경로를
+쓰고, 다른 도구의 항목 옆에 병합하며, `uninstall`은 자기가 넣은 것만 지웁니다. 무엇을 쓰는지, 그리고 직접 해야 하는
+한 가지는 다음과 같습니다.
+
+| 에이전트 | `laya-guard install`이 쓰는 것 | 직접 할 일 |
+|---|---|---|
+| Claude Code | `~/.claude/settings.json`의 훅 항목 | 열려 있으면 재시작 |
+| Codex CLI | `~/.codex/hooks.json` 항목(훅을 `config.toml`에 두는 경우는 표시된 블록) | `/hooks`로 신뢰 처리(새 훅은 Codex가 먼저 물음) |
+| Cursor | `~/.cursor/hooks.json` 항목 | — |
+| Gemini CLI | `~/.gemini/settings.json` 항목과 `tools.enableHooks`(옛 버전은 훅이 꺼져 있음) | 재시작 |
+| Qwen Code | `~/.qwen/settings.json` 항목 | 재시작 또는 `/hooks` |
+| Windsurf | `~/.codeium/windsurf/hooks.json` 항목 | 창 다시 불러오기(제한 모드에서는 훅이 안 돎) |
+| Copilot CLI | 전용 파일 `~/.copilot/hooks/laya-guard.json` | 새 세션 시작 |
+| Cline | 실행 파일 `~/Documents/Cline/Hooks/PreToolUse` | Cline의 Hooks 탭에서 켜기 |
+| OpenCode | `~/.config/opencode/plugins/laya-guard.ts` | 재시작 |
+| Kilo Code | `~/.config/kilo/plugin/laya-guard.ts` | 재시작 |
+| Amp | `~/.config/amp/plugins/laya-guard.ts` | "plugins: reload" 실행 |
+
+`--scope project`는 프로젝트 쪽 위치(`.codex/`, `.gemini/`, `.github/hooks/`, `.amp/plugins/` 등)에 씁니다. 훅은 설치
+직후 실제 어댑터로 테스트 호출 두 건을 보내 확인하고, 플러그인(OpenCode, Kilo, Amp)은 에이전트만 실행할 수
+있어서 `install`이 그렇다고 알려줍니다. 패키지에 들어 있는 어댑터는 [integrations/](integrations/)의 것과
+같습니다(테스트가 보장). **테스트에서 에이전트를 실제로 실행하지는 않습니다.** 형식은 각 에이전트의 현재 문서와, 다른
+도구가 실제 컴퓨터에 남긴 파일에서 가져왔고, Codex, Qwen Code, Windsurf, Cline, Kilo는 앱에서 직접 돌려보지 않았다고
+`install`이 알려줍니다. 특히 Cline의 훅은 문서가 플러그인 쪽으로 옮겨가는 중입니다.
 
 ### 2. 아무 에이전트 루프 가드 (HTTP)
 
@@ -195,9 +262,34 @@ CI가 이미 이렇게 돕니다. `eval/run_eval.py --min-acc 1.0`은 판정 정
 앞자리만 남습니다.
 
 ```bash
-laya-guard stats   # 판정 분포, block/review율, 상위 정책, 지연시간
+laya-guard stats       # 판정 분포, block/review율, 상위 정책, 지연시간
+laya-guard dashboard   # 같은 내용을 로컬 웹 페이지로 (서버가 꺼져 있으면 함께 시작)
 ```
 
+대시보드(`http://127.0.0.1:8787/dashboard`)는 사이드바와 네 개의 화면이 있는 작은 앱입니다.
+**Overview**는 1시간부터 전체 기간까지 몇 건을 판단했고 어떻게 나뉘었는지 말해 주고, 호출 하나당
+가는 선 하나인 테이프(block은 길고 붉음, 선을 클릭하면 해당 호출이 열림)를 그리며, 확인이 필요한
+항목 카드(block이나 review가 있으면 테두리와 건수 배지)를 보여줍니다. **Calls**는 왼쪽 목록과 오른쪽
+선택한 호출(정책, 사유, 출처, 소요 시간, 길이, 해시. 원문은 없음)이며 판정 필터와 검색이 있습니다.
+**Policies**는 어떤 규칙이 호출을 판정했는지 보여줍니다. **Agents**는 아래에 설명합니다. 키보드:
+`j`/`k` 호출 이동, `a` `r` `b` `0` 판정, `1`-`5` 기간, `/` 검색, `p` 일시정지, `?` 도움말. `Host`가
+루프백이 아닌 요청은 거부하고(DNS 리바인딩 방어) 네트워크에서 아무것도 불러오지 않습니다.
+`--no-open`은 브라우저를 열지 않고 URL만 출력합니다.
+
+**Agents**는 `laya-guard install`의 클릭 버전이고, 사이드바 맨 아래 파란 버튼으로 같은 일을 한 번에
+할 수 있습니다. 이 컴퓨터에 있는 코딩 에이전트는 스스로 찾아서(`PATH`의 실행 파일, 앱 번들, `~/.codex` 같은
+설정 폴더. 읽기 전용이며 그 파일의 내용은 열지 않음) 타일로 보여줍니다(못 찾은 것은 `+` 타일 뒤에 있음). 타일은 그
+에이전트에 훅이 들어 있는지, 무엇을 쓰는지, 에이전트에서 직접 해야 할 일이 무엇인지 보여주고, **Install hook** /
+**Remove**를 누르면 정확한 diff가 담긴 시트가 열리며, 사이드바 버튼은 빠진 곳에 설치합니다. 로고는 각 제품의 공식
+마크입니다(Claude Code, Cursor, Gemini, Qwen, Windsurf, Copilot, Cline, OpenCode는 [Simple Icons](https://simpleicons.org)
+CC0, Codex, Kilo Code, Amp는 [Lobe Icons](https://github.com/lobehub/lobe-icons) MIT에서 가져옴). 상표권은 각 소유자에게
+있으며, 어떤 제품인지 알리는 용도로만 씁니다.
+*Apply change*를 누르기 전에는 아무것도 쓰지 않고, 누르면 설정 파일을 백업하고
+(`settings.json.laya-guard-<시각>.bak`) 원자적으로 쓴 뒤, 훅을 통해 테스트 호출 두 건을 보내 확인합니다.
+페이지에서는 user 범위만 바꿀 수 있고, `--scope project|local`은 CLI를 쓰세요. 페이지가 파일을 쓰는
+유일한 곳이라 읽기 전용 엔드포인트보다 조건이 엄격합니다. 루프백 `Host`, 같은 출처의 `Origin`, JSON
+본문(다른 사이트의 form 전송은 보낼 수 없음), 페이지만 가진 프로세스별 토큰, 그리고 방금 보여준 diff의
+id가 모두 필요합니다(그 사이 파일이 바뀌었으면 409가 나오고 다시 확인해야 합니다).
 `LAYA_GUARD_LOG=0`으로 끄고, `LAYA_GUARD_LOG_PATH=...`로 위치를 바꿀 수 있습니다.
 집계치(원문 아님)를 공개하면 벤치 점수 옆에 붙일 실전 근거가 됩니다.
 
@@ -250,7 +342,11 @@ laya-guard stats   # 판정 분포, block/review율, 상위 정책, 지연시간
   `limit`(전체 256K자 또는 한 줄 16K자 초과, 읽지 않고 차단).
   `laya-guard check --offline --json`도 같은 형태로 `offline`을 반환.)
 - `POST /v1/systemone` — Jev식 `{state, questions}` 호출용 드롭인 shim
-
+- `GET /dashboard` — 로컬 대시보드 페이지, `GET /api/stats?window=1h|24h|7d|30d|all` — 그 뒤의
+  수치(합계, 추이, 정책별 건수, 최근 판정은 해시와 길이). 둘 다 `Host`가 루프백이 아니면 403.
+- `GET /api/agents` — 이 컴퓨터에서 찾은 에이전트와, Claude Code의 훅 상태. `POST /api/agents/{agent}/{install|uninstall}`에
+  `{"mode": "preview"}`를 보내면 diff와 `diff_id`를, `{"mode": "apply", "diff_id": ...}`를 보내면
+  실제 변경을 합니다. 페이지의 토큰과 같은 출처의 JSON 요청이 필요합니다(위 설명 참고).
 ## 설정
 
 | 항목 | 위치 | 기본값 |

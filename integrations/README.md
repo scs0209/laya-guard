@@ -15,7 +15,7 @@ regex-flagged calls are blocked, safe commands pass, and the rest pass unless
 | Codex CLI | `PreToolUse` command hook (deny JSON) | [`codex/`](codex/) | allow + stderr note (PreToolUse has no ask lane) |
 | Cursor | `beforeShellExecution` hook (exit 2 / deny JSON) | [`cursor/`](cursor/) | `ask` (human approval lane) |
 | Kilo Code | `tool.execute.before` plugin (throw blocks) | [`kilo/laya-guard.ts`](kilo/laya-guard.ts) | allow + stderr warning |
-| Windsurf (Cascade) | `pre_run_command` hook (exit 2 blocks) | [`windsurf/`](windsurf/) (config: `~/.codeium/windsurf/hooks.json`) | exit 0 + stderr note |
+| Windsurf (Cascade, now Devin Desktop) | `pre_run_command` hook (exit 2 blocks) | [`windsurf/`](windsurf/) (config: `~/.codeium/windsurf/hooks.json`) | exit 0 + stderr note |
 | Cline | `PreToolUse` executable (`cancel: true/false`) | [`cline/PreToolUse`](cline/PreToolUse) (copy to `.clinerules/hooks/PreToolUse`) | passes (`cancel: false`) |
 | Gemini CLI | `BeforeTool` hook (`decision: deny` / exit 2) | [`gemini/`](gemini/) | exit 0 + stderr note |
 | Qwen Code | `PreToolUse` hook (`permissionDecision`) | [`qwen/`](qwen/) | `ask` (falls back to deny headless) |
@@ -48,6 +48,9 @@ https://opencode.ai/docs/permissions/
 
 ## Codex CLI
 
+The quick way is `laya-guard install codex` (see the main README). Current Codex has hooks on by default, so the
+`[features]` line below is only for older versions, and it asks you to trust a new hook: run `/hooks` once. The manual way:
+
 1. `cp codex/check_command.py ~/.codex/hooks/ && chmod +x ~/.codex/hooks/check_command.py`
 2. Append `codex/config-snippet.toml` to `~/.codex/config.toml`
    (requires `[features] hooks = true`).
@@ -56,6 +59,9 @@ https://opencode.ai/docs/permissions/
 
 ## Cursor
 
+The quick way is `laya-guard install cursor`: it merges its own hook into `~/.cursor/hooks.json` (next to
+other tools' hooks), shows a diff first and checks the result (see the main README). The manual way:
+
 1. `cp cursor/laya-guard.py ~/.cursor/hooks/ && chmod +x ~/.cursor/hooks/laya-guard.py`
 2. Merge `cursor/hooks.json` into `~/.cursor/hooks.json` (user) or
    `<project>/.cursor/hooks.json` (project; change the command path to
@@ -63,7 +69,8 @@ https://opencode.ai/docs/permissions/
 
 ## Kilo Code
 
-Copy `kilo/laya-guard.ts` to `.kilo/plugin/laya-guard.ts` (project) or
+`laya-guard install kilo` does this for you. Kilo registers a plugin from its default export (`{ id, server }`);
+the adapter has one, a bare named export is only accepted as a legacy form. Copy `kilo/laya-guard.ts` to `.kilo/plugin/laya-guard.ts` (project) or
 `~/.config/kilo/plugin/laya-guard.ts` (global). For hard asks, add
 `permission` rules in `kilo.jsonc`. Docs:
 https://kilo.ai/docs/automate/extending/plugins
@@ -97,6 +104,12 @@ in Cline Features settings. The script returns `{"cancel": true/false}`.
    Docs: Qwen Code hooks reference.
 
 ## Amp
+
+`laya-guard install amp` installs `amp/laya-guard.ts` as a plugin in `~/.config/amp/plugins/` (project:
+`.amp/plugins/`), then run "plugins: reload" in Amp. Plugins are what Amp recommends for controlling tool use now; a
+`tool.call` handler rejects a blocked command with the reason and passes the rest. Only shell commands are judged.
+The older `delegate` permissions helper below still works for people on the legacy rules, but its `allow` answer
+(exit 0) also skips your own ask rules, which a plugin doesn't do.
 
 1. `cp amp/permissions-helper ~/.local/bin/amp-laya-guard && chmod +x ~/.local/bin/amp-laya-guard`
 2. `amp permissions add delegate --to amp-laya-guard '*'`

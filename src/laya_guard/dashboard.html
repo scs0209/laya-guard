@@ -1,0 +1,942 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="laya-token" content="{{TOKEN}}">
+<title>laya-guard</title>
+<!--
+Design plan (kept here so the next change starts from it)
+- A small desktop-style app, not a long page: a sidebar with the four views, one primary action pinned at its
+  bottom (install the hook), and a rounded pane on the right. Reference: the project and asset managers people
+  keep open next to their editor. Earlier versions (cards everywhere, a dense terminal, one long column) were
+  all rejected, so the screen stays quiet: few things per view, generous gaps, one accent colour.
+- Cards carry state with their outline (amber needs a look, red is blocked) and a count badge, the way the
+  reference marks projects that need attention. Everything else is plain.
+- Agents are square tiles with a status dot. Clicking one shows its state; the button in the pane (or the one
+  pinned in the sidebar) opens the exact diff, and nothing is written until "Apply change".
+- Calls is a list on the left and the selected call on the right.
+- Palette: neutral dark by default (light when the system is light), blue for the primary action, and the
+  verdict colours (green, amber, red) as the only other colour.
+- Type: one system sans, tabular figures. No web fonts and no external icons: this page may not load anything.
+- Agent marks: each tile carries the product's own logo (Claude Code, Cursor and Gemini from Simple Icons, CC0;
+  Codex from Lobe Icons, MIT). The marks belong to their owners and are here only to say which product a tile is.
+- Motion: the tape draws in once and new calls fade in. Both stop under reduced motion.
+-->
+<style nonce="{{NONCE}}">
+:root {
+  color-scheme: light dark;
+  --bg: #e7e9ee; --side: #f3f4f7; --pane: #ffffff; --card: #f2f3f6; --card-hi: #e8eaef; --line: #dcdfe5;
+  --text: #1a1b1f; --muted: #5b5e69; --faint: #888b96;
+  --accent: #2563eb; --on-accent: #ffffff; --glow: rgba(37, 99, 235, 0.32); --ring: rgba(37, 99, 235, 0.18);
+  --ok: #1d8a58; --warn: #a96a07; --bad: #c43434;
+  --t-allow: #c3cac6; --t-review: #dba03a; --t-block: #d23b3b;
+  --sans: ui-sans-serif, -apple-system, "SF Pro Text", "Segoe UI", system-ui, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141518; --side: #191a1e; --pane: #1f2024; --card: #26272c; --card-hi: #2d2e35; --line: #2f3037;
+    --text: #ececf0; --muted: #9c9da8; --faint: #6f707b;
+    --accent: #3b82f6; --glow: rgba(59, 130, 246, 0.42); --ring: rgba(59, 130, 246, 0.26);
+    --ok: #4fd08e; --warn: #f2b53a; --bad: #ff6a6a;
+    --t-allow: #3b433f; --t-review: #f2b53a; --t-block: #ff6060;
+  }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { background: var(--bg); }
+body { margin: 0; color: var(--text); background: var(--bg); font: 14px/1.5 var(--sans); font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: inherit; }
+button:focus-visible, input:focus-visible, .search:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ic { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.muted { color: var(--muted); }
+
+/* shell */
+.app { display: grid; grid-template-columns: 244px minmax(0, 1fr); height: 100vh; }
+.side { display: flex; flex-direction: column; padding: 20px 14px 14px; background: var(--side); border-right: 1px solid var(--line); min-height: 0; }
+.brand { display: flex; align-items: center; gap: 12px; padding: 2px 10px 22px; }
+.logo { width: 34px; height: 34px; border-radius: 10px; background: var(--card-hi); display: grid; place-items: center; color: var(--accent); }
+.wordmark { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; line-height: 1.2; }
+.state { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; }
+.state i { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); display: inline-block; }
+.state.warn i { background: var(--warn); }
+.state.bad i { background: var(--bad); }
+.nav { display: flex; flex-direction: column; gap: 4px; }
+.nav button { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 11px; color: var(--muted); }
+.nav button:hover { background: var(--card); color: var(--text); }
+.nav button[aria-current="page"] { background: var(--card-hi); color: var(--text); }
+.grow { flex: 1; }
+.cta { display: flex; align-items: center; gap: 12px; width: 100%; padding: 13px 16px; border-radius: 999px; font-weight: 600; background: var(--card-hi); color: var(--text); }
+.cta .sub { display: block; font-size: 11.5px; font-weight: 400; opacity: 0.78; line-height: 1.25; }
+.cta.primary { background: var(--accent); color: var(--on-accent); box-shadow: 0 8px 26px var(--glow); }
+.cta.primary:hover { filter: brightness(1.08); }
+.cta.ok { background: transparent; border: 1px solid var(--line); color: var(--ok); }
+.cta.bad { background: transparent; border: 1.5px solid var(--bad); color: var(--bad); }
+.cta.quiet { background: var(--card); color: var(--muted); }
+.foot { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--line); margin-top: 16px; padding-top: 12px; }
+.icon-btn { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; color: var(--muted); }
+.icon-btn:hover { background: var(--card); color: var(--text); }
+
+.main { display: flex; flex-direction: column; min-width: 0; height: 100vh; padding: 0 18px 18px; }
+.top { display: flex; align-items: center; gap: 14px; padding: 18px 6px 16px; flex-wrap: wrap; }
+.top h1 { margin: 0; font-size: 19px; font-weight: 650; letter-spacing: -0.015em; }
+.search { display: none; flex: 1; max-width: 440px; margin: 0 auto; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 0 16px; height: 38px; color: var(--faint); }
+.search input { flex: 1; min-width: 0; background: none; border: 0; outline: 0; color: var(--text); font: inherit; }
+.search input::placeholder { color: var(--faint); }
+.app[data-view="calls"] .search { display: flex; }
+.top .push { margin-left: auto; }
+.seg { display: inline-flex; background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
+.seg button { padding: 4px 13px; border-radius: 999px; color: var(--muted); font-size: 13px; white-space: nowrap; }
+.seg button:hover { color: var(--text); }
+.seg button[aria-pressed="true"] { background: var(--card-hi); color: var(--text); }
+.app[data-view="agents"] #windows { display: none; }
+
+.stage { flex: 1; min-height: 0; }
+.view { height: 100%; }
+.pane { background: var(--pane); border: 1px solid var(--line); border-radius: 20px; padding: 34px 38px 44px; overflow: auto; min-height: 0; }
+.inner { max-width: 860px; }
+
+/* overview */
+h2 { margin: 0; font-size: 30px; line-height: 1.15; font-weight: 650; letter-spacing: -0.03em; }
+.split { margin: 10px 0 0; font-size: 16px; line-height: 1.5; color: var(--muted); }
+.split .a { color: var(--ok); } .split .r { color: var(--warn); } .split .b { color: var(--bad); }
+.note { margin: 10px 0 0; font-size: 13px; color: var(--muted); max-width: 42em; }
+.note .warn { color: var(--warn); } .note .bad { color: var(--bad); }
+.tape { margin: 40px 0 8px; }
+.tape svg { display: block; width: 100%; height: 64px; overflow: visible; }
+.tick { cursor: pointer; transform-box: fill-box; transform-origin: bottom; transition: opacity 0.15s; }
+.tick.allow { fill: var(--t-allow); } .tick.review { fill: var(--t-review); } .tick.block { fill: var(--t-block); } .tick.unknown { fill: var(--line); }
+.tape:hover .tick { opacity: 0.45; } .tape .tick:hover { opacity: 1; }
+.tape.intro .tick { animation: draw 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) backwards; }
+.tape .base { stroke: var(--line); stroke-width: 1; }
+.axis { display: flex; justify-content: space-between; color: var(--faint); font-size: 12px; }
+.label { margin: 40px 0 12px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 18px 14px; padding-top: 8px; }
+.foot-note { margin: 56px 0 0; color: var(--faint); font-size: 12px; line-height: 1.7; max-width: 46em; }
+.foot-note kbd, .help kbd { font: inherit; color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 0 6px; }
+
+/* cards: state is the outline, the badge is a count */
+.card { position: relative; display: block; width: 100%; background: var(--card); border: 1.5px solid transparent; border-radius: 14px; padding: 14px 16px; }
+button.card:hover { background: var(--card-hi); }
+.card.sel { background: var(--card-hi); border-color: var(--line); }
+.card.warn { border-color: var(--warn); }
+.card.bad { border-color: var(--bad); }
+.card .t { font-weight: 600; font-size: 14px; }
+.card .s { color: var(--faint); font-size: 12.5px; margin-top: 1px; overflow-wrap: anywhere; }
+.badge { position: absolute; top: -9px; right: -7px; min-width: 22px; height: 22px; padding: 0 7px; border-radius: 999px; background: var(--bad); color: #fff; font-size: 11.5px; font-weight: 700; display: grid; place-items: center; }
+.badge.warn { background: var(--warn); color: #1c1503; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; background: var(--faint); }
+.dot.allow, .dot.ok { background: var(--ok); } .dot.review, .dot.warn { background: var(--warn); } .dot.block, .dot.bad { background: var(--bad); }
+.pill { display: inline-flex; align-items: center; gap: 8px; padding: 5px 13px; border-radius: 999px; border: 1px solid var(--line); font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.pill.ok { color: var(--ok); border-color: var(--ok); } .pill.warn { color: var(--warn); border-color: var(--warn); } .pill.bad { color: var(--bad); border-color: var(--bad); }
+
+/* agents */
+.pane-head { display: flex; align-items: center; gap: 16px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.pane-head .tile-lg { width: 48px; height: 48px; border-radius: 14px; background: var(--card); display: grid; place-items: center; color: var(--muted); flex: none; }
+.pane-head .tile-lg .ic { width: 24px; height: 24px; }
+.pane-head h2 { font-size: 21px; letter-spacing: -0.02em; }
+.pane-head .sub { color: var(--faint); font-size: 12.5px; overflow-wrap: anywhere; }
+.pane-head .pill { margin-left: auto; }
+.tiles { display: flex; flex-wrap: wrap; gap: 14px; margin: 0; }
+.tilebox { display: flex; flex-direction: column; align-items: center; gap: 7px; width: 76px; }
+.tile { position: relative; width: 58px; height: 58px; border-radius: 17px; background: var(--card); border: 1.5px solid var(--line); display: grid; place-items: center; color: var(--text); }
+.tile:hover { background: var(--card-hi); }
+.tile[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 4px var(--ring); }
+.tile .ic { width: 26px; height: 26px; }
+.ic.mark { fill: currentColor; stroke: none; }
+.ag-claude-code, .pane-head .tile-lg.ag-claude-code { color: #d97757; }
+.ag-gemini-cli, .pane-head .tile-lg.ag-gemini-cli { color: #8e75b2; }
+.ag-qwen-code, .pane-head .tile-lg.ag-qwen-code { color: #6950ef; }
+.pane-head .tile-lg.ag-codex, .pane-head .tile-lg.ag-cursor { color: var(--text); }
+.tile.add { border-style: dashed; background: transparent; color: var(--faint); cursor: default; }
+.tile .sdot { position: absolute; right: -4px; bottom: -4px; width: 13px; height: 13px; border-radius: 50%; border: 2.5px solid var(--pane); background: var(--faint); }
+.tile .sdot.ok { background: var(--ok); } .tile .sdot.warn { background: var(--warn); } .tile .sdot.bad { background: var(--bad); }
+.more-agents { margin-top: 16px; max-width: 640px; }
+.more-agents .label { margin: 0 0 8px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { padding: 5px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--muted); font-size: 12.5px; }
+.chip:hover { background: var(--card-hi); color: var(--text); }
+.fine { margin: 12px 0 0; color: var(--faint); font-size: 12.5px; max-width: 40em; }
+.tilelabel { font-size: 12px; color: var(--muted); max-width: 76px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-body { margin-top: 36px; padding: 26px 28px 28px; background: var(--card); border-radius: 16px; max-width: 640px; }
+.agent-body h3 { margin: 0; font-size: 18px; font-weight: 620; letter-spacing: -0.015em; }
+.agent-body p { margin: 8px 0 0; color: var(--muted); font-size: 14px; max-width: 34em; }
+.agent-body .row { margin-top: 20px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.agent-facts { margin: 24px 0 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 22px; font-size: 13px; }
+.agent-facts dt { color: var(--faint); } .agent-facts dd { margin: 0; overflow-wrap: anywhere; }
+.btn { padding: 9px 20px; border-radius: 999px; border: 1px solid var(--line); background: var(--card-hi); color: var(--text); font-size: 14px; font-weight: 500; white-space: nowrap; }
+.btn:hover { filter: brightness(1.08); }
+.btn.primary { background: var(--accent); border-color: transparent; color: var(--on-accent); box-shadow: 0 6px 20px var(--glow); }
+.btn[disabled] { opacity: 0.45; cursor: default; box-shadow: none; filter: none; }
+
+/* calls */
+.split-view { display: grid; grid-template-columns: minmax(280px, 370px) minmax(0, 1fr); gap: 16px; }
+.listcol { overflow: auto; min-height: 0; padding: 2px 4px 2px 2px; }
+.listhead { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 2px 4px 12px; background: var(--bg); }
+.listhead .label { margin: 0; }
+.list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.call { padding: 11px 14px 12px; }
+.call .head { display: flex; align-items: center; gap: 9px; }
+.call .verdict { font-weight: 600; font-size: 13.5px; }
+.verdict.allow { color: var(--ok); } .verdict.review { color: var(--warn); } .verdict.block { color: var(--bad); }
+.call .when { margin-left: auto; color: var(--faint); font-size: 12px; }
+.call .s { margin-top: 3px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.call.new { animation: arrive 0.5s ease-out; }
+.list-foot { padding: 14px 6px 6px; color: var(--faint); font-size: 12px; }
+.empty { padding: 30px 8px; color: var(--muted); text-align: center; }
+.empty code { font: 13px var(--mono); }
+.empty-pane { height: 100%; min-height: 260px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--faint); text-align: center; }
+.empty-pane .big { width: 70px; height: 70px; border-radius: 50%; background: var(--card); display: grid; place-items: center; }
+.empty-pane .big .ic { width: 30px; height: 30px; }
+.empty-pane .title { color: var(--text); font-size: 16px; font-weight: 600; }
+.facts { margin: 26px 0 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 32px; font-size: 14px; }
+.facts dt { color: var(--faint); } .facts dd { margin: 0; overflow-wrap: anywhere; }
+.facts .mono { font: 13px var(--mono); }
+.pane-head .vbig { font-size: 22px; font-weight: 650; letter-spacing: -0.02em; }
+
+/* policies */
+.stack { display: flex; flex-direction: column; gap: 14px; margin-top: 28px; }
+.meter { display: flex; height: 5px; margin-top: 12px; background: var(--card-hi); border-radius: 3px; overflow: hidden; }
+.meter i { display: block; height: 100%; }
+.meter .a { background: var(--t-allow); } .meter .r { background: var(--t-review); } .meter .b { background: var(--t-block); }
+
+/* dialogs */
+.help, .sheet { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55); display: none; align-items: center; justify-content: center; padding: 20px; z-index: 6; }
+.help.show, .sheet.show { display: flex; }
+.help .box, .sheet .box { background: var(--pane); border: 1px solid var(--line); border-radius: 20px; padding: 28px 30px; width: 100%; }
+.help .box { max-width: 420px; }
+.help h2, .sheet h2 { font-size: 20px; letter-spacing: -0.02em; margin: 0 0 14px; }
+.help dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 8px 24px; font-size: 14px; }
+.help dt { font-weight: 600; } .help dd { margin: 0; color: var(--muted); }
+.sheet .box { max-width: 700px; max-height: 88vh; overflow: auto; }
+.sheet h2 { margin-bottom: 6px; }
+.sheet .lead { margin: 0 0 18px; color: var(--muted); font-size: 14px; overflow-wrap: anywhere; }
+pre.diff { margin: 0 0 20px; padding: 14px 16px; background: var(--card); border-radius: 12px; overflow: auto; max-height: 300px; font: 12.5px/1.55 var(--mono); white-space: pre; }
+pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.diff .meta { color: var(--faint); }
+.sheet .err { color: var(--bad); font-size: 14px; margin: -4px 0 16px; }
+.sheet .actions { display: flex; gap: 12px; justify-content: flex-end; flex-wrap: wrap; }
+.checks { list-style: none; margin: 0 0 20px; padding: 0; font-size: 14px; }
+.checks li { padding: 3px 0; } .checks .ok { color: var(--ok); } .checks .no { color: var(--bad); }
+
+@keyframes draw { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes arrive { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .tape.intro .tick, .call.new { animation: none; }
+  .tick { transition: none; }
+}
+
+/* narrow: the sidebar becomes a bar on top and the page scrolls normally */
+@media (max-width: 1040px) {
+  .split-view { grid-template-columns: 1fr; height: auto; }
+  .listcol { overflow: visible; }
+  .split-view .pane { order: -1; }
+}
+@media (max-width: 860px) {
+  .app { display: block; height: auto; min-height: 100vh; }
+  .side { position: sticky; top: 0; z-index: 4; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 14px 10px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .brand { padding: 0; }
+  .nav { flex-direction: row; width: 100%; overflow-x: auto; gap: 0; order: 3; scrollbar-width: none; }
+  .nav::-webkit-scrollbar, .seg::-webkit-scrollbar { display: none; }
+  .nav button { padding: 8px 10px; gap: 8px; flex: none; }
+  .grow, .foot, .cta { display: none; }
+  .main { height: auto; padding: 0 12px 24px; }
+  .stage, .view { height: auto; }
+  .top { padding: 16px 4px 12px; }
+  .search { order: 5; flex-basis: 100%; max-width: none; margin: 0; }
+  .pane { padding: 24px 20px 32px; overflow: visible; }
+  .top .push { margin-left: 0; }
+  .seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .seg button { padding: 4px 10px; }
+}
+@media (max-width: 430px) {
+  .nav button .ic { display: none; }
+  .nav button { flex: 1; justify-content: center; padding: 8px 6px; }
+}
+</style>
+</head>
+<body>
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <symbol id="i-overview" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.8"/><rect x="14" y="3" width="7" height="5" rx="1.8"/><rect x="14" y="12" width="7" height="9" rx="1.8"/><rect x="3" y="16" width="7" height="5" rx="1.8"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7.5 3v5.2c0 4.6-3.1 8.2-7.5 9.8-4.4-1.6-7.5-5.2-7.5-9.8V6z"/><path d="M8.8 12.2l2.2 2.2 4.2-4.4"/></symbol>
+  <symbol id="i-calls" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></symbol>
+  <symbol id="i-policies" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 1 1 3.6 2.3c-.8.4-1.2.9-1.2 1.8M12 17h.01"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8.5 5v14M15.5 5v14"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17h.01"/></symbol>
+  <symbol id="i-ban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M5.7 5.7l12.6 12.6"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-claudecode" viewBox="0 0 24 24"><path d="M21 10.5h3v3h-3v3h-1.5v3H18v-3h-1.5v3H15v-3H9v3H7.5v-3H6v3H4.5v-3H3v-3H0v-3h3v-6h18Zm-15 0h1.5v-3H6Zm10.5 0H18v-3h-1.5z"/></symbol>
+  <symbol id="i-cursor-logo" viewBox="0 0 24 24"><path d="M11.503.131 1.891 5.678a.84.84 0 0 0-.42.726v11.188c0 .3.162.575.42.724l9.609 5.55a1 1 0 0 0 .998 0l9.61-5.55a.84.84 0 0 0 .42-.724V6.404a.84.84 0 0 0-.42-.726L12.497.131a1.01 1.01 0 0 0-.996 0M2.657 6.338h18.55c.263 0 .43.287.297.515L12.23 22.918c-.062.107-.229.064-.229-.06V12.335a.59.59 0 0 0-.295-.51l-9.11-5.257c-.109-.063-.064-.23.061-.23"/></symbol>
+  <symbol id="i-gemini" viewBox="0 0 24 24"><path d="M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81"/></symbol>
+  <symbol id="i-codex" viewBox="0 0 24 24"><path fill-rule="evenodd" d="M8.086.457a6.105 6.105 0 013.046-.415c1.333.153 2.521.72 3.564 1.7a.117.117 0 00.107.029c1.408-.346 2.762-.224 4.061.366l.063.03.154.076c1.357.703 2.33 1.77 2.918 3.198.278.679.418 1.388.421 2.126a5.655 5.655 0 01-.18 1.631.167.167 0 00.04.155 5.982 5.982 0 011.578 2.891c.385 1.901-.01 3.615-1.183 5.14l-.182.22a6.063 6.063 0 01-2.934 1.851.162.162 0 00-.108.102c-.255.736-.511 1.364-.987 1.992-1.199 1.582-2.962 2.462-4.948 2.451-1.583-.008-2.986-.587-4.21-1.736a.145.145 0 00-.14-.032c-.518.167-1.04.191-1.604.185a5.924 5.924 0 01-2.595-.622 6.058 6.058 0 01-2.146-1.781c-.203-.269-.404-.522-.551-.821a7.74 7.74 0 01-.495-1.283 6.11 6.11 0 01-.017-3.064.166.166 0 00.008-.074.115.115 0 00-.037-.064 5.958 5.958 0 01-1.38-2.202 5.196 5.196 0 01-.333-1.589 6.915 6.915 0 01.188-2.132c.45-1.484 1.309-2.648 2.577-3.493.282-.188.55-.334.802-.438.286-.12.573-.22.861-.304a.129.129 0 00.087-.087A6.016 6.016 0 015.635 2.31C6.315 1.464 7.132.846 8.086.457zm-.804 7.85a.848.848 0 00-1.473.842l1.694 2.965-1.688 2.848a.849.849 0 001.46.864l1.94-3.272a.849.849 0 00.007-.854l-1.94-3.393zm5.446 6.24a.849.849 0 000 1.695h4.848a.849.849 0 000-1.696h-4.848z"/></symbol>
+  <symbol id="i-windsurf" viewBox="0 0 24 24"><path d="M23.55 5.067c-1.2038-.002-2.1806.973-2.1806 2.1765v4.8676c0 .972-.8035 1.7594-1.7597 1.7594-.568 0-1.1352-.286-1.4718-.7659l-4.9713-7.1003c-.4125-.5896-1.0837-.941-1.8103-.941-1.1334 0-2.1533.9635-2.1533 2.153v4.8957c0 .972-.7969 1.7594-1.7596 1.7594-.57 0-1.1363-.286-1.4728-.7658L.4076 5.1598C.2822 4.9798 0 5.0688 0 5.2882v4.2452c0 .2147.0656.4228.1884.599l5.4748 7.8183c.3234.462.8006.8052 1.3509.9298 1.3771.313 2.6446-.747 2.6446-2.0977v-4.893c0-.972.7875-1.7593 1.7596-1.7593h.003a1.798 1.798 0 0 1 1.4718.7658l4.9723 7.0994c.4135.5905 1.05.941 1.8093.941 1.1587 0 2.1515-.9645 2.1515-2.153v-4.8948c0-.972.7875-1.7594 1.7596-1.7594h.194a.22.22 0 0 0 .2204-.2202v-4.622a.22.22 0 0 0-.2203-.2203Z"/></symbol>
+  <symbol id="i-copilot" viewBox="0 0 24 24"><path d="M23.922 16.997C23.061 18.492 18.063 22.02 12 22.02 5.937 22.02.939 18.492.078 16.997A.641.641 0 0 1 0 16.741v-2.869a.883.883 0 0 1 .053-.22c.372-.935 1.347-2.292 2.605-2.656.167-.429.414-1.055.644-1.517a10.098 10.098 0 0 1-.052-1.086c0-1.331.282-2.499 1.132-3.368.397-.406.89-.717 1.474-.952C7.255 2.937 9.248 1.98 11.978 1.98c2.731 0 4.767.957 6.166 2.093.584.235 1.077.546 1.474.952.85.869 1.132 2.037 1.132 3.368 0 .368-.014.733-.052 1.086.23.462.477 1.088.644 1.517 1.258.364 2.233 1.721 2.605 2.656a.841.841 0 0 1 .053.22v2.869a.641.641 0 0 1-.078.256Zm-11.75-5.992h-.344a4.359 4.359 0 0 1-.355.508c-.77.947-1.918 1.492-3.508 1.492-1.725 0-2.989-.359-3.782-1.259a2.137 2.137 0 0 1-.085-.104L4 11.746v6.585c1.435.779 4.514 2.179 8 2.179 3.486 0 6.565-1.4 8-2.179v-6.585l-.098-.104s-.033.045-.085.104c-.793.9-2.057 1.259-3.782 1.259-1.59 0-2.738-.545-3.508-1.492a4.359 4.359 0 0 1-.355-.508Zm2.328 3.25c.549 0 1 .451 1 1v2c0 .549-.451 1-1 1-.549 0-1-.451-1-1v-2c0-.549.451-1 1-1Zm-5 0c.549 0 1 .451 1 1v2c0 .549-.451 1-1 1-.549 0-1-.451-1-1v-2c0-.549.451-1 1-1Zm3.313-6.185c.136 1.057.403 1.913.878 2.497.442.544 1.134.938 2.344.938 1.573 0 2.292-.337 2.657-.751.384-.435.558-1.15.558-2.361 0-1.14-.243-1.847-.705-2.319-.477-.488-1.319-.862-2.824-1.025-1.487-.161-2.192.138-2.533.529-.269.307-.437.808-.438 1.578v.021c0 .265.021.562.063.893Zm-1.626 0c.042-.331.063-.628.063-.894v-.02c-.001-.77-.169-1.271-.438-1.578-.341-.391-1.046-.69-2.533-.529-1.505.163-2.347.537-2.824 1.025-.462.472-.705 1.179-.705 2.319 0 1.211.175 1.926.558 2.361.365.414 1.084.751 2.657.751 1.21 0 1.902-.394 2.344-.938.475-.584.742-1.44.878-2.497Z"/></symbol>
+  <symbol id="i-cline" viewBox="0 0 24 24"><path d="m23.365 13.556-1.442-2.895V8.994c0-2.764-2.218-5.002-4.954-5.002h-2.464c.178-.367.276-.779.276-1.213A2.77 2.77 0 0 0 12.018 0a2.77 2.77 0 0 0-2.763 2.779c0 .434.098.846.276 1.213H7.067c-2.736 0-4.954 2.238-4.954 5.002v1.667L.64 13.549c-.149.29-.149.636 0 .927l1.472 2.855v1.667C2.113 21.762 4.33 24 7.067 24h9.902c2.736 0 4.954-2.238 4.954-5.002V17.33l1.44-2.865c.143-.286.143-.622.002-.91m-12.854 2.36a2.27 2.27 0 0 1-2.261 2.273 2.27 2.27 0 0 1-2.261-2.273v-4.042A2.27 2.27 0 0 1 8.249 9.6a2.267 2.267 0 0 1 2.262 2.274zm7.285 0a2.27 2.27 0 0 1-2.26 2.273 2.27 2.27 0 0 1-2.262-2.273v-4.042A2.267 2.267 0 0 1 15.535 9.6a2.267 2.267 0 0 1 2.261 2.274z"/></symbol>
+  <symbol id="i-opencode" viewBox="0 0 24 24"><path d="M22 24H2V0h20zM17 4.8H7v14.4h10z"/></symbol>
+  <symbol id="i-qwen" viewBox="0 0 24 24"><path d="M23.919 14.545 20.817 9.17l1.47-2.544a.56.56 0 0 0 0-.566l-1.633-2.83a.57.57 0 0 0-.49-.283h-6.207L12.487.402a.57.57 0 0 0-.49-.284H8.732a.56.56 0 0 0-.49.284L5.139 5.775h-2.94a.56.56 0 0 0-.49.284L.077 8.887a.56.56 0 0 0 0 .567L3.18 14.83l-1.47 2.545a.56.56 0 0 0 0 .566l1.634 2.83a.57.57 0 0 0 .49.283h6.205l1.47 2.545a.57.57 0 0 0 .49.284h3.266a.57.57 0 0 0 .49-.284l3.104-5.375h2.94a.57.57 0 0 0 .49-.283l1.634-2.828a.55.55 0 0 0-.004-.568M8.733.686l1.634 2.828-1.634 2.828H21.8L20.164 9.17H7.425L5.63 6.06Zm1.306 19.801-6.205-.002 1.634-2.83h3.265L2.201 6.344h3.267q3.182 5.517 6.367 11.032zm10.124-5.66L18.53 12l-6.532 11.315-1.634-2.83c2.129-3.673 4.25-7.351 6.373-11.028h3.592l3.102 5.374z"/></symbol>
+  <symbol id="i-kilo" viewBox="0 0 24 24"><path fill-rule="evenodd" d="M0 0v24h24V0H0zm22.222 22.222H1.778V1.778h20.444v20.444zm-7.555-4.964h2.222v1.778h-2.794L12.89 17.83v-2.794h1.778v2.222zm4 0h-1.778v-2.222h-2.222v-1.778h2.793l1.207 1.207v2.793zm-7.556-2.591H9.333v-1.778h1.778v1.778zm-5.778-1.778h1.778v4h4v1.778H6.54L5.333 17.46V12.89zm13.334-3.556v1.778h-5.778V9.333h1.987V7.111h-1.987V5.333h2.558l1.206 1.207v2.793h2.014zm-11.556-2h2.222l1.778 1.778v2H9.333v-2H7.111v2H5.333V5.333h1.778v2zm4 0H9.333v-2h1.778v2z"/></symbol>
+  <symbol id="i-amp" viewBox="0 0 24 24" fill-rule="evenodd"><path d="M15.087 23.18L12.03 24l-2.097-7.823-5.738 5.738-2.251-2.251 5.718-5.719-7.769-2.082.82-3.057 11.294 3.08 3.08 11.295z"/><path d="M19.505 18.762l-3.057.82-2.564-9.573-9.572-2.564.819-3.057 11.295 3.079 3.08 11.295z"/><path d="M23.893 14.374l-3.057.82-2.565-9.572L8.7 3.057 9.52 0l11.295 3.08 3.079 11.294z"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 7.5a2 2 0 0 1 2-2H10l2 2.5h6.5a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></symbol>
+</svg>
+
+<div class="app" id="app" data-view="overview">
+  <aside class="side">
+    <div class="brand">
+      <span class="logo"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg></span>
+      <div>
+        <div class="wordmark">laya-guard</div>
+        <div class="state" id="state"></div>
+      </div>
+    </div>
+    <nav class="nav" id="nav" aria-label="Views">
+      <button type="button" data-view="overview" aria-current="page"><svg class="ic" aria-hidden="true"><use href="#i-overview"/></svg><span>Overview</span></button>
+      <button type="button" data-view="agents"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg><span>Agents</span></button>
+      <button type="button" data-view="calls"><svg class="ic" aria-hidden="true"><use href="#i-calls"/></svg><span>Calls</span></button>
+      <button type="button" data-view="policies"><svg class="ic" aria-hidden="true"><use href="#i-policies"/></svg><span>Policies</span></button>
+    </nav>
+    <div class="grow"></div>
+    <button type="button" class="cta" id="cta" hidden></button>
+    <div class="foot">
+      <button type="button" class="icon-btn" id="help-btn" aria-label="Keyboard shortcuts"><svg class="ic" aria-hidden="true"><use href="#i-help"/></svg></button>
+      <button type="button" class="icon-btn" id="pause-btn" aria-label="Pause updates"><svg class="ic" aria-hidden="true"><use href="#i-pause" id="pause-use"/></svg></button>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="top">
+      <h1 id="title">Overview</h1>
+      <label class="search"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><input id="q" type="search" placeholder="Search calls" autocomplete="off" spellcheck="false" aria-label="Search calls"></label>
+      <div class="seg push" role="group" aria-label="Time window" id="windows">
+        <button type="button" data-window="1h" aria-pressed="false">1 hour</button>
+        <button type="button" data-window="24h" aria-pressed="true">24 hours</button>
+        <button type="button" data-window="7d" aria-pressed="false">7 days</button>
+        <button type="button" data-window="30d" aria-pressed="false">30 days</button>
+        <button type="button" data-window="all" aria-pressed="false">All time</button>
+      </div>
+    </header>
+
+    <main class="stage">
+      <section class="view pane" id="v-overview" aria-label="Overview">
+        <div class="inner">
+          <h2 id="lede" aria-live="polite">Loading the verdict log.</h2>
+          <p class="split" id="split"></p>
+          <p class="note" id="note"></p>
+          <div class="tape" id="tape"></div>
+          <div class="axis"><span id="tape-from"></span><span id="tape-to"></span></div>
+          <div class="label">Status</div>
+          <div class="cards" id="cards"></div>
+          <p class="foot-note" id="footer"></p>
+        </div>
+      </section>
+
+      <section class="view pane" id="v-agents" aria-label="Agents" hidden>
+        <div class="inner" id="agent-pane"></div>
+      </section>
+
+      <section class="view split-view" id="v-calls" aria-label="Calls" hidden>
+        <div class="listcol">
+          <div class="listhead">
+            <div class="label">Calls</div>
+            <div class="seg" role="group" aria-label="Filter by verdict" id="filters">
+              <button type="button" data-filter="all" aria-pressed="true">All</button>
+              <button type="button" data-filter="allow" aria-pressed="false">Allowed</button>
+              <button type="button" data-filter="review" aria-pressed="false">Review</button>
+              <button type="button" data-filter="block" aria-pressed="false">Blocked</button>
+            </div>
+          </div>
+          <ul class="list" id="calls"></ul>
+          <div class="list-foot" id="calls-foot"></div>
+        </div>
+        <div class="pane" id="call-pane"></div>
+      </section>
+
+      <section class="view pane" id="v-policies" aria-label="Policies" hidden>
+        <div class="inner">
+          <h2 id="pol-lede"></h2>
+          <p class="note" id="pol-note"></p>
+          <div class="stack" id="policies"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div class="help" id="help" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
+  <div class="box">
+    <h2>Keyboard</h2>
+    <dl>
+      <dt>j  k</dt><dd>move through the calls</dd>
+      <dt>a  r  b  0</dt><dd>allowed, review, blocked, all</dd>
+      <dt>1 to 5</dt><dd>1 hour to all time</dd>
+      <dt>/</dt><dd>search the calls</dd>
+      <dt>p</dt><dd>pause or resume updates</dd>
+      <dt>? or esc</dt><dd>open or close this help</dd>
+    </dl>
+  </div>
+</div>
+
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+  <div class="box">
+    <h2 id="sheet-title"></h2>
+    <p class="lead" id="sheet-lead"></p>
+    <pre class="diff" id="sheet-diff" tabindex="0"></pre>
+    <ul class="checks" id="sheet-checks"></ul>
+    <p class="err" id="sheet-err" role="alert"></p>
+    <div class="actions">
+      <button type="button" class="btn" id="sheet-cancel">Cancel</button>
+      <button type="button" class="btn primary" id="sheet-apply">Apply change</button>
+    </div>
+  </div>
+</div>
+
+<script nonce="{{NONCE}}">
+(function () {
+  "use strict";
+  var WINDOWS = ["1h", "24h", "7d", "30d", "all"];
+  var WINDOW_TEXT = { "1h": "in the last hour", "24h": "in the last 24 hours", "7d": "in the last 7 days", "30d": "in the last 30 days", "all": "in total" };
+  var WORD = { allow: "Allowed", review: "Review", block: "Blocked" };
+  var VIEWS = ["overview", "agents", "calls", "policies"];
+  var TITLES = { overview: "Overview", agents: "Agents", calls: "Calls", policies: "Policies" };
+  var state = { agent: null, view: "overview", window: "24h", filter: "all", query: "", paused: false, data: null, sig: "", sel: null, seen: null, drawn: false };
+
+  function $(id) { return document.getElementById(id); }
+  function el(tag, props) {
+    var node = document.createElement(tag);
+    if (props) {
+      Object.keys(props).forEach(function (k) {
+        if (k === "text") node.textContent = props[k];
+        else if (k === "class") node.className = props[k];
+        else node.setAttribute(k, props[k]);
+      });
+    }
+    for (var i = 2; i < arguments.length; i++) {
+      var c = arguments[i];
+      if (c != null) node.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+    }
+    return node;
+  }
+  function svg(tag, attrs) {
+    var node = document.createElementNS("http://www.w3.org/2000/svg", tag);
+    Object.keys(attrs || {}).forEach(function (k) { node.setAttribute(k, attrs[k]); });
+    return node;
+  }
+  function ic(name, cls) {
+    var s = svg("svg", { "class": "ic" + (cls ? " " + cls : ""), "aria-hidden": "true" });
+    s.appendChild(svg("use", { href: "#i-" + name }));
+    return s;
+  }
+  function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+  function fmtInt(n) { return Number(n || 0).toLocaleString(); }
+  function fmtTime(iso) { return new Date(iso).toLocaleTimeString([], { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" }); }
+  function fmtStamp(iso) { return new Date(iso).toLocaleString([], { hour12: false, month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }); }
+  function plural(n, one, many) { return fmtInt(n) + " " + (n === 1 ? one : many); }
+  var LETTER = { allow: "a", review: "r", block: "b" };
+  function callId(r) { return r.ts + "|" + r.tool_sha + "|" + r.action; }
+
+  // --- sidebar ---
+  function renderState(d, ok) {
+    var box = $("state"), h = (d && d.health) || {};
+    clear(box);
+    var cls = "state", text;
+    if (!ok) { cls += " bad"; text = "Server unreachable"; }
+    else if (h.mock) { cls += " warn"; text = "Mock mode"; }
+    else if (!h.logging) { cls += " warn"; text = "Logging is off"; }
+    else text = state.paused ? "Paused" : "Running";
+    box.className = cls;
+    box.appendChild(el("i"));
+    box.appendChild(document.createTextNode(text));
+  }
+
+  // --- agents: install or remove the hook from here ---
+  var TOKEN = (document.querySelector('meta[name="laya-token"]') || {}).content || "";
+  var agentsSig = "", agentList = [], pending = null;
+  var STATES = {
+    "installed": { cls: "ok", pill: "Protected", head: function (a) { return a.name + " is protected."; }, body: function (a) { return "Each shell command is judged before " + a.name + " runs it. You can remove the hook any time; whatever was there is backed up first."; }, btn: "Remove", action: "uninstall", cta: "ok", ctaText: "Protected" },
+    "not-installed": { cls: "warn", pill: "Not protected", head: function (a) { return a.name + " isn't protected yet."; }, body: "Installing adds a hook that sends each shell command to laya-guard before it runs. You see the exact change first, and anything it replaces is backed up.", btn: "Install hook", action: "install", primary: true, cta: "primary", ctaText: "Install hook" },
+    "manual": { cls: "", pill: "Set up by hand", head: "A laya-guard hook is already there.", body: "It wasn't written by `laya-guard install`, so laya-guard leaves it alone. Let laya-guard manage it to get backups and repairs.", btn: "Let laya-guard manage it", action: "install", force: true, cta: "quiet", ctaText: "Review hook" },
+    "broken": { cls: "bad", pill: "Needs repair", head: "The hook needs repairing.", body: function (a) { return (a.detail ? a.detail + ". " : "") + "Repair rewrites it for the current install."; }, btn: "Repair hook", action: "install", primary: true, cta: "bad", ctaText: "Repair hook" },
+    "invalid": { cls: "bad", pill: "Settings unreadable", head: "The settings file isn't valid JSON.", body: "Nothing was changed. Fix the file first, then reload this page.", btn: null, cta: "bad", ctaText: "Settings invalid" }
+  };
+  function stateOf(a) { return STATES[a.state] || STATES.invalid; }
+  function say(v, a) { return typeof v === "function" ? v(a) : v; }
+  var MARKS = { "claude-code": "claudecode", "codex": "codex", "cursor": "cursor-logo", "gemini-cli": "gemini", "qwen-code": "qwen", "windsurf": "windsurf",
+                "copilot-cli": "copilot", "cline": "cline", "opencode": "opencode", "kilo": "kilo", "amp": "amp" };
+  function agentIcon(id) { return MARKS[id] ? ic(MARKS[id], "mark") : ic("shield"); }
+  // the agents the page talks about: found on this machine, or already carrying a hook, or picked from the "+" list
+  function relevant(a) { return !!(a.found || a.state !== "not-installed"); }
+  function shown(a) { return relevant(a) || a.id === state.agent; }
+  function needing() { return agentList.filter(function (a) { return relevant(a) && (a.state === "not-installed" || a.state === "broken"); }); }
+  // the agent the sidebar button acts on: the first relevant one that still needs the hook
+  function primary() { return needing()[0] || null; }
+  function selected() {
+    for (var i = 0; i < agentList.length; i++) if (agentList[i].id === state.agent) return agentList[i];
+    return needing()[0] || agentList.filter(shown)[0] || agentList[0] || null;     // land on what needs the hook
+  }
+  function startChange(a) { var s = stateOf(a); if (s.btn) openSheet(a, s.action, s.force || (s.action === "install" && a.managed === false)); }
+
+  function api(method, url, body) {
+    var opts = { method: method, cache: "no-store", headers: {} };
+    if (body) { opts.headers["Content-Type"] = "application/json"; opts.headers["X-Laya-Token"] = TOKEN; opts.body = JSON.stringify(body); }
+    return fetch(url, opts).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        if (!r.ok) throw new Error(typeof j.detail === "string" ? j.detail : "HTTP " + r.status);
+        return j;
+      });
+    });
+  }
+
+  // the one button pinned under the nav: install the hook where it's missing, or a quiet "Protected"
+  function renderCta() {
+    var b = $("cta"), rel = agentList.filter(relevant), need = needing();
+    clear(b);
+    if (!rel.length) { b.hidden = true; return; }
+    b.hidden = false;
+    if (need.length) {
+      var broken = need.some(function (a) { return a.state === "broken"; });
+      b.className = "cta " + (broken ? "bad" : "primary");
+      b.appendChild(ic("shield"));
+      b.appendChild(el("span", null, document.createTextNode(broken && need.length === 1 ? "Repair hook" : "Install hook"),
+        el("span", { "class": "sub", text: need.length === 1 ? need[0].name : need.length + " agents need it" })));
+    } else {
+      b.className = "cta ok";
+      b.appendChild(ic("check"));
+      b.appendChild(el("span", null, document.createTextNode("Protected"), el("span", { "class": "sub", text: rel.length === 1 ? rel[0].name : rel.length + " agents" })));
+    }
+  }
+
+  function renderAgentsView() {
+    var box = $("agent-pane");
+    clear(box);
+    var a = selected();
+    if (!a) { box.appendChild(el("p", { "class": "muted", text: "Looking for coding agents on this machine." })); return; }
+    state.agent = a.id;
+    var s = stateOf(a), found = a.via && a.via.length ? a.via.join(", ") : "Not found on this machine";
+    box.appendChild(el("div", { "class": "pane-head" },
+      el("span", { "class": "tile-lg ag-" + a.id }, ic("folder")),
+      el("div", null, el("h2", { text: "All projects" }), el("div", { "class": "sub", text: a.path })),
+      el("span", { "class": "pill " + s.cls }, el("i", { "class": "dot " + s.cls }), s.pill)));
+    box.appendChild(el("div", { "class": "label", text: "Agents on this machine" }));
+    var tiles = el("div", { "class": "tiles" });
+    agentList.filter(shown).forEach(function (ag) {
+      var st = stateOf(ag);
+      var tile = el("button", { type: "button", "class": "tile ag-" + ag.id, "aria-pressed": String(ag.id === a.id), title: ag.name + ": " + st.pill }, agentIcon(ag.id), el("i", { "class": "sdot " + st.cls }));
+      tile.addEventListener("click", function () { state.agent = ag.id; renderAgentsView(); });
+      tiles.appendChild(el("div", { "class": "tilebox" }, tile, el("span", { "class": "tilelabel", text: ag.name })));
+    });
+    var hidden = agentList.filter(function (ag) { return !shown(ag); });
+    if (hidden.length) {
+      var plus = el("button", { type: "button", "class": "tile add", title: "Agents laya-guard can protect that weren't found here", "aria-expanded": String(!!state.more), "aria-label": "Show the agents that weren't found on this machine" }, ic("plus"));
+      plus.addEventListener("click", function () { state.more = !state.more; renderAgentsView(); });
+      tiles.appendChild(el("div", { "class": "tilebox" }, plus, el("span", { "class": "tilelabel", text: state.more ? "Hide" : "Not found" })));
+    }
+    box.appendChild(tiles);
+    if (hidden.length && state.more) {
+      var chips = el("div", { "class": "chips" });
+      hidden.forEach(function (ag) {
+        var c = el("button", { type: "button", "class": "chip", text: ag.name });
+        c.addEventListener("click", function () { state.agent = ag.id; renderAgentsView(); });
+        chips.appendChild(c);
+      });
+      box.appendChild(el("div", { "class": "more-agents" }, el("div", { "class": "label", text: "Not found on this machine" }), chips));
+    }
+
+    var body = el("div", { "class": "agent-body" }, el("h3", { text: say(s.head, a) }), el("p", { text: say(s.body, a) }));
+    if (!a.found) body.appendChild(el("p", { text: a.name + " wasn't found on this machine, but you can set the hook up now." }));
+    if (a.state === "invalid" && a.detail) body.appendChild(el("p", { text: a.detail }));
+    if (s.btn) {
+      var b = el("button", { type: "button", "class": "btn" + (s.primary ? " primary" : ""), text: s.btn });
+      b.addEventListener("click", function () { startChange(a); });
+      body.appendChild(el("div", { "class": "row" }, b));
+    }
+    var facts = el("dl", { "class": "agent-facts" }, el("dt", { text: "Found" }), el("dd", { text: found }));
+    facts.appendChild(el("dt", { text: a.kind === "json" ? "File" : "Writes" })); facts.appendChild(el("dd", { text: a.path }));
+    facts.appendChild(el("dt", { text: "Applies to" })); facts.appendChild(el("dd", { text: "Every project you open with " + a.name }));
+    facts.appendChild(el("dt", { text: "Changes" })); facts.appendChild(el("dd", { text: a.kind === "json" ? "Only the laya-guard hook entry; your other settings stay" : "Adds one file; nothing else is touched" }));
+    facts.appendChild(el("dt", { text: "Test calls" })); facts.appendChild(el("dd", { text: a.probes ? "Two run through the hook right after installing" : a.name + " loads this itself, so laya-guard can't run test calls for it" }));
+    if (a.follow_up) { facts.appendChild(el("dt", { text: "Then" })); facts.appendChild(el("dd", { text: a.follow_up })); }
+    body.appendChild(facts);
+    if (a.unverified) body.appendChild(el("p", { "class": "fine", text: "Heads-up: this hook format comes " + a.unverified + ". laya-guard hasn't run it against " + a.name + " itself." }));
+    box.appendChild(body);
+  }
+
+  function loadAgents() {
+    if ($("sheet").classList.contains("show")) return Promise.resolve();
+    return api("GET", "/api/agents").then(function (j) {
+      var sig = JSON.stringify(j.agents);
+      if (sig === agentsSig) return;
+      agentsSig = sig; agentList = j.agents;
+      renderCta();
+      if (state.view === "agents") renderAgentsView();
+      if (state.view === "overview" && state.data) renderCards(state.data);
+    }).catch(function () {});
+  }
+
+  // --- overview ---
+  function renderHero(d, ok) {
+    var lede = $("lede"), split = $("split"), note = $("note"), t = d && d.totals, h = (d && d.health) || {};
+    clear(split); clear(note);
+    if (!ok) {
+      lede.textContent = "The dashboard can't reach the server.";
+      note.appendChild(el("span", { "class": "bad", text: "If the guard is down, hooks fall back to the offline check and let through what it can't judge." }));
+      return;
+    }
+    if (!t.total) {
+      lede.textContent = "No calls were judged " + WINDOW_TEXT[d.window] + ".";
+    } else {
+      lede.textContent = plural(t.total, "call", "calls") + " judged " + WINDOW_TEXT[d.window] + ".";
+      split.appendChild(el("span", { "class": "a", text: fmtInt(t.allow) + " allowed" }));
+      split.appendChild(document.createTextNode(", "));
+      split.appendChild(el("span", { "class": "r", text: fmtInt(t.review) + " held for review" }));
+      split.appendChild(document.createTextNode(" and "));
+      split.appendChild(el("span", { "class": "b", text: fmtInt(t.block) + " blocked" }));
+      split.appendChild(document.createTextNode("."));
+    }
+    if (h.mock) { note.appendChild(el("span", { "class": "warn", text: "Mock mode: " })); note.appendChild(document.createTextNode("verdicts come from regexes and heuristics, not the Laya model.")); }
+    else if (!h.logging) note.appendChild(el("span", { "class": "warn", text: "Verdict logging is off (LAYA_GUARD_LOG=0), so there is nothing to show." }));
+    else if (t.total) note.appendChild(document.createTextNode("The guard is running on the real model. Judging takes " + fmtInt(Math.round(t.avg_latency_ms)) + " ms on average."));
+  }
+
+  function renderTape(d) {
+    var box = $("tape");
+    clear(box);
+    var tape = d.tape || [];
+    var W = Math.max(box.clientWidth || 760, 200), H = 64, step = 7, tw = 3;
+    var cap = Math.max(Math.floor(W / step), 10), items = tape.slice(-cap);
+    $("tape-from").textContent = items.length ? fmtStamp(items[0][1]) : "";
+    $("tape-to").textContent = items.length ? "now" : "";
+    if (!items.length) return;
+    var heights = { a: 16, r: 34, b: 64 }, names = { a: "allow", r: "review", b: "block" };
+    var s = svg("svg", { viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": "The last " + items.length + " calls, oldest on the left. Tall red lines are blocks, amber are reviews, short grey are allowed calls." });
+    s.appendChild(svg("line", { "class": "base", x1: 0, x2: W, y1: H - 0.5, y2: H - 0.5 }));
+    items.forEach(function (c, i) {
+      var h = heights[c[0]] || 8, name = names[c[0]] || "unknown", x = W - (items.length - i) * step + (step - tw);
+      var r = svg("rect", { "class": "tick " + name, x: x, y: H - h, width: tw, height: h, rx: 1.2, "data-ts": c[1], "data-v": c[0] });
+      if (!state.drawn) r.style.animationDelay = Math.round(i / items.length * 420) + "ms";
+      var tip = svg("title", {});
+      tip.textContent = name + ", " + new Date(c[1]).toLocaleString();
+      r.appendChild(tip);
+      s.appendChild(r);
+    });
+    box.classList.toggle("intro", !state.drawn);
+    box.appendChild(s);
+    state.drawn = true;
+  }
+
+  function attentionCard(opts) {
+    var card = el("button", { type: "button", "class": "card" + (opts.cls ? " " + opts.cls : "") }, el("div", { "class": "t", text: opts.title }), el("div", { "class": "s", text: opts.sub }));
+    if (opts.badge) card.appendChild(el("span", { "class": "badge" + (opts.cls === "warn" ? " warn" : ""), text: fmtInt(opts.badge) }));
+    card.addEventListener("click", opts.go);
+    return card;
+  }
+
+  function renderCards(d) {
+    var box = $("cards"), t = d.totals;
+    clear(box);
+    agentList.filter(relevant).forEach(function (a) {
+      var s = stateOf(a);
+      box.appendChild(attentionCard({ title: a.name, sub: s.pill + ", all projects", cls: a.state === "installed" ? "" : (s.cls === "warn" ? "warn" : s.cls === "bad" ? "bad" : ""),
+        go: function () { if (a.state === "not-installed" || a.state === "broken") startChange(a); else { state.agent = a.id; setView("agents"); } } }));
+    });
+    box.appendChild(attentionCard({ title: "Blocked", sub: "Stopped before they ran", cls: t.block ? "bad" : "", badge: t.block, go: function () { setFilter("block"); setView("calls"); } }));
+    box.appendChild(attentionCard({ title: "Held for review", sub: "Waiting for your answer", cls: t.review ? "warn" : "", badge: t.review, go: function () { setFilter("review"); setView("calls"); } }));
+    box.appendChild(attentionCard({ title: "Allowed", sub: "Ran as usual", cls: "", go: function () { setFilter("allow"); setView("calls"); } }));
+  }
+
+  function renderFooter(d, ok) {
+    var f = $("footer");
+    clear(f);
+    if (!ok) { f.textContent = "Disconnected. Trying again every 5 seconds."; return; }
+    f.appendChild(document.createTextNode("Served from this machine only. The log keeps a hash and the length of each call, never the command text (" + (d.health.log_path || "") + "). laya-guard " + (d.health.version || "") + (state.paused ? ", updates paused." : ", refreshing every 5 seconds.") + " Press "));
+    f.appendChild(el("kbd", { text: "?" }));
+    f.appendChild(document.createTextNode(" for keyboard shortcuts."));
+  }
+
+  // --- calls ---
+  function matches(r) {
+    if (state.filter !== "all" && r.action !== state.filter) return false;
+    var q = state.query;
+    if (!q) return true;
+    return [r.policy_id, r.reason, r.source, r.tool_sha, WORD[r.action]].some(function (v) { return String(v || "").toLowerCase().indexOf(q) >= 0; });
+  }
+  function visible() { return state.data ? state.data.recent.filter(matches) : []; }
+  var VICON = { allow: "check", review: "alert", block: "ban" };
+
+  function renderCalls(fresh) {
+    var d = state.data, list = $("calls"), foot = $("calls-foot");
+    clear(list); clear(foot);
+    var rows = visible();
+    if (!rows.some(function (r) { return callId(r) === state.sel; })) state.sel = rows.length ? callId(rows[0]) : null;
+    if (!rows.length) {
+      var li = el("li", { "class": "empty" });
+      if (!d.totals.total) { li.appendChild(document.createTextNode("Nothing has been judged yet. Try ")); li.appendChild(el("code", { text: "laya-guard check \"ls -la\"" })); li.appendChild(document.createTextNode(".")); }
+      else li.textContent = state.query ? "No recent call matches that search." : "None of the recent calls were " + ({ allow: "allowed", review: "held for review", block: "blocked" }[state.filter] || "judged") + ".";
+      list.appendChild(li);
+    }
+    rows.forEach(function (r) {
+      var id = callId(r), isNew = fresh && state.seen && !state.seen[id];
+      var btn = el("button", { type: "button", "class": "card call" + (id === state.sel ? " sel" : "") + (isNew ? " new" : ""), "data-id": id },
+        el("div", { "class": "head" }, el("i", { "class": "dot " + r.action }), el("span", { "class": "verdict " + r.action, text: WORD[r.action] || String(r.action) }), el("span", { "class": "when", text: fmtTime(r.ts) })),
+        el("div", { "class": "s", text: r.reason || r.policy_id || "" }));
+      list.appendChild(el("li", null, btn));
+    });
+    var seen = {};
+    d.recent.forEach(function (r) { seen[callId(r)] = true; });
+    state.seen = seen;
+    if (rows.length && d.totals.total > d.recent.length) foot.textContent = "The latest " + d.recent.length + " of " + fmtInt(d.totals.total) + " calls.";
+    renderCallPane();
+  }
+
+  function renderCallPane() {
+    var pane = $("call-pane"), r = null;
+    clear(pane);
+    visible().forEach(function (x) { if (callId(x) === state.sel) r = x; });
+    if (!r) {
+      pane.appendChild(el("div", { "class": "empty-pane" }, el("div", { "class": "big" }, ic("calls")), el("div", { "class": "title", text: "No call selected" }),
+        el("div", { text: "Pick a call on the left to see why it was allowed, held or blocked." })));
+      return;
+    }
+    var color = { allow: "ok", review: "warn", block: "bad" }[r.action] || "";
+    pane.appendChild(el("div", { "class": "pane-head" },
+      el("span", { "class": "tile-lg" }, ic(VICON[r.action] || "calls")),
+      el("div", null, el("div", { "class": "vbig verdict " + r.action, text: WORD[r.action] || String(r.action) }), el("div", { "class": "sub", text: new Date(r.ts).toLocaleString() })),
+      el("span", { "class": "pill " + color }, el("i", { "class": "dot " + color }), "risk " + (Number(r.risk) || 0).toFixed(2))));
+    var dl = el("dl", { "class": "facts" });
+    [["Policy", r.policy_id || ""], ["Reason", r.reason || ""], ["Source", r.source || ""],
+     ["Judged in", r.latency_ms != null ? Math.round(r.latency_ms) + " ms" : ""],
+     ["Length", r.tool_len != null ? r.tool_len + " characters" : ""], ["Hash", r.tool_sha || "", "mono"]].forEach(function (p) {
+      if (!p[1]) return;
+      dl.appendChild(el("dt", { text: p[0] }));
+      dl.appendChild(el("dd", { "class": p[2] || "", text: p[1] }));
+    });
+    pane.appendChild(dl);
+    pane.appendChild(el("p", { "class": "foot-note", text: "laya-guard keeps only a hash and the length of each call, never the command text." }));
+  }
+
+  function selectCall(id, scroll) {
+    state.sel = id;
+    Array.prototype.forEach.call($("calls").querySelectorAll(".call"), function (b) {
+      var on = b.getAttribute("data-id") === id;
+      b.classList.toggle("sel", on);
+      if (on && scroll) b.scrollIntoView({ block: "nearest" });
+    });
+    renderCallPane();
+  }
+  function move(delta) {
+    var rows = visible();
+    if (!rows.length) return;
+    var i = -1;
+    rows.forEach(function (r, n) { if (callId(r) === state.sel) i = n; });
+    i = Math.max(0, Math.min(rows.length - 1, (i < 0 ? (delta > 0 ? -1 : rows.length) : i) + delta));
+    selectCall(callId(rows[i]), true);
+  }
+
+  // --- policies ---
+  function renderPolicies(d) {
+    var box = $("policies"), rows = d.policies || [];
+    clear(box);
+    $("pol-lede").textContent = rows.length ? plural(rows.length, "policy", "policies") + " decided calls " + WINDOW_TEXT[d.window] + "." : "No policy decided a call " + WINDOW_TEXT[d.window] + ".";
+    $("pol-note").textContent = rows.length ? "Click one to see its calls." : "";
+    if (!rows.length) { box.appendChild(el("div", { "class": "empty", text: "No policies matched in this window." })); return; }
+    rows.slice(0, 12).forEach(function (p) {
+      var meter = el("div", { "class": "meter", "aria-hidden": "true" });
+      [["a", p.allow], ["r", p.review], ["b", p.block]].forEach(function (pair) {
+        if (!p.count || !pair[1]) return;
+        var seg = el("i", { "class": pair[0] });
+        seg.style.width = (pair[1] / p.count * 100) + "%";
+        meter.appendChild(seg);
+      });
+      var card = el("button", { type: "button", "class": "card" + (p.block ? " bad" : p.review ? " warn" : ""), "data-policy": p.policy_id },
+        el("div", { "class": "t", text: p.policy_id }),
+        el("div", { "class": "s", text: plural(p.count, "call", "calls") + ": " + fmtInt(p.allow) + " allowed, " + fmtInt(p.review) + " review, " + fmtInt(p.block) + " blocked" }), meter);
+      card.addEventListener("click", function () { $("q").value = p.policy_id; state.query = p.policy_id.toLowerCase(); setFilter("all"); setView("calls"); });
+      box.appendChild(card);
+    });
+  }
+
+  // --- views and data ---
+  function render(fresh) {
+    var d = state.data;
+    renderCta();
+    if (d) renderState(d, true);
+    if (state.view === "agents") { renderAgentsView(); return; }
+    if (!d) return;
+    if (state.view === "overview") { renderHero(d, true); renderTape(d); renderCards(d); renderFooter(d, true); }
+    else if (state.view === "calls") renderCalls(fresh);
+    else if (state.view === "policies") renderPolicies(d);
+  }
+
+  // "#/calls", not "#calls": a bare fragment would also scroll to the element with that id
+  function hashView() { return (location.hash || "").replace(/^#\/?/, ""); }
+
+  function setView(v, fromHash) {
+    if (VIEWS.indexOf(v) < 0) v = "overview";
+    state.view = v;
+    $("app").setAttribute("data-view", v);
+    VIEWS.forEach(function (n) { $("v-" + n).hidden = n !== v; });
+    Array.prototype.forEach.call($("nav").querySelectorAll("button"), function (b) {
+      if (b.getAttribute("data-view") === v) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
+    });
+    $("title").textContent = TITLES[v];
+    if (!fromHash) { try { history.replaceState(null, "", "#/" + v); } catch (e) { /* the hash is a convenience */ } }
+    render(false);
+  }
+
+  function load(fresh) {
+    var win = state.window;                  // the window this request is for; a slower answer for an old one is dropped
+    return fetch("/api/stats?window=" + encodeURIComponent(win), { cache: "no-store" })
+      .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(function (data) {
+        if (win !== state.window) return;
+        // nothing new: keep the page as it is (no flicker, the selection survives)
+        var last = data.tape.length ? data.tape[data.tape.length - 1][1] : "";
+        var sig = [data.window, data.totals.total, last, data.health.mock, data.health.logging].join("|");
+        var same = state.data && state.sig === sig;
+        state.data = data;
+        if (same) { if (state.view === "overview") renderFooter(data, true); return; }
+        state.sig = sig;
+        render(fresh);
+      })
+      .catch(function () { renderState(null, false); if (state.view === "overview") { renderHero(null, false); renderFooter(null, false); } });
+  }
+
+  function setWindow(w) {
+    state.window = w; state.seen = null; state.sel = null; state.drawn = false;
+    Array.prototype.forEach.call($("windows").querySelectorAll("button"), function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-window") === w)); });
+    load(false);
+  }
+  function setFilter(f) {
+    state.filter = f;
+    Array.prototype.forEach.call($("filters").querySelectorAll("button"), function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-filter") === f)); });
+    if (state.data && state.view === "calls") renderCalls(false);
+  }
+  function togglePause() {
+    state.paused = !state.paused;
+    $("pause-use").setAttribute("href", state.paused ? "#i-play" : "#i-pause");
+    $("pause-btn").setAttribute("aria-label", state.paused ? "Resume updates" : "Pause updates");
+    if (state.data) { renderState(state.data, true); if (state.view === "overview") renderFooter(state.data, true); }
+    if (!state.paused) load(true);
+  }
+  function toggleHelp(show) { var h = $("help"); h.classList.toggle("show", show == null ? !h.classList.contains("show") : show); }
+
+  // --- the change sheet ---
+  function paintDiff(text) {
+    var pre = $("sheet-diff");
+    clear(pre);
+    text.split("\n").forEach(function (line) {
+      var cls = (line.indexOf("+++") === 0 || line.indexOf("---") === 0 || line.indexOf("@@") === 0) ? "meta" : line.charAt(0) === "+" ? "add" : line.charAt(0) === "-" ? "del" : "";
+      pre.appendChild(el("span", { "class": cls, text: line }));
+      pre.appendChild(document.createTextNode("\n"));
+    });
+  }
+
+  function openSheet(a, action, force) {
+    pending = { agent: a.id, name: a.name, kind: a.kind, action: action, force: !!force, diffId: null };
+    $("sheet-title").textContent = (action === "install" ? "Install the hook for " : "Remove the hook from ") + a.name;
+    $("sheet-lead").textContent = "Checking what would change in " + a.path + ".";
+    clear($("sheet-diff")); $("sheet-diff").hidden = true; clear($("sheet-checks")); $("sheet-err").textContent = "";
+    $("sheet-apply").hidden = false; $("sheet-apply").disabled = true; $("sheet-cancel").textContent = "Cancel";
+    $("sheet").classList.add("show");
+    api("POST", "/api/agents/" + a.id + "/" + action, { scope: "user", mode: "preview", force: !!force }).then(function (j) {
+      if (!j.changed) {
+        $("sheet-lead").textContent = "Nothing to change in " + j.path + ".";
+        $("sheet-apply").hidden = true; $("sheet-cancel").textContent = "Close";
+        return;
+      }
+      pending.diffId = j.diff_id;
+      var what = a.kind === "json"
+        ? (action === "install" ? "This adds a hook to " : "This removes the hook from ") + j.path + ". Your other settings stay as they are and the file is backed up first. The JSON is re-indented, so some lines may show as changed."
+        : (action === "install" ? "This writes " : "This removes ") + j.path + ". Nothing else is touched, and anything it replaces is backed up first.";
+      $("sheet-lead").textContent = what + ((j.notes || []).length ? " " + j.notes.join(" ") : "");
+      paintDiff(j.diff);
+      $("sheet-diff").hidden = false; $("sheet-apply").disabled = false; $("sheet-apply").focus();
+    }).catch(function (e) {
+      $("sheet-lead").textContent = ""; $("sheet-err").textContent = e.message;
+      $("sheet-apply").hidden = true; $("sheet-cancel").textContent = "Close";
+    });
+  }
+
+  function closeSheet() {
+    $("sheet").classList.remove("show");
+    pending = null; agentsSig = "";
+    loadAgents();
+  }
+  $("sheet-cancel").addEventListener("click", closeSheet);
+  $("sheet").addEventListener("click", function (ev) { if (ev.target === this) closeSheet(); });
+  $("sheet-apply").addEventListener("click", function () {
+    if (!pending || !pending.diffId) return;
+    var btn = this, p = pending;
+    btn.disabled = true; $("sheet-err").textContent = "";
+    api("POST", "/api/agents/" + p.agent + "/" + p.action, { scope: "user", mode: "apply", diff_id: p.diffId, force: p.force }).then(function (j) {
+      $("sheet-title").textContent = p.action === "install" ? "Hook installed" : "Hook removed";
+      $("sheet-lead").textContent = (p.action === "install" ? "Saved to " : "Removed from ") + j.path + (j.backup ? ". The previous file is at " + j.backup + "." : ".") +
+        (p.action === "install" && j.follow_up ? " " + j.follow_up : "");
+      $("sheet-diff").hidden = true; btn.hidden = true; $("sheet-cancel").textContent = "Close";
+      var list = $("sheet-checks");
+      clear(list);
+      (j.probes || []).forEach(function (c) { list.appendChild(el("li", { "class": c.ok ? "ok" : "no", text: (c.ok ? "Passed: " : "Failed: ") + c.label })); });
+      if (p.action === "install" && !(j.probes || []).length) list.appendChild(el("li", { text: "No test calls: " + p.name + " loads this itself, so laya-guard can't run it from here." }));
+      pending = null;
+    }).catch(function (e) { btn.disabled = false; $("sheet-err").textContent = e.message; });
+  });
+
+  // --- wiring ---
+  $("nav").addEventListener("click", function (ev) { var b = ev.target.closest("button"); if (b) setView(b.getAttribute("data-view")); });
+  $("windows").addEventListener("click", function (ev) { var b = ev.target.closest("button"); if (b) setWindow(b.getAttribute("data-window")); });
+  $("filters").addEventListener("click", function (ev) { var b = ev.target.closest("button"); if (b) setFilter(b.getAttribute("data-filter")); });
+  $("cta").addEventListener("click", function () { var a = primary(); if (!a) return; state.agent = a.id; if (a.state === "not-installed" || a.state === "broken") startChange(a); else setView("agents"); });
+  $("help-btn").addEventListener("click", function () { toggleHelp(); });
+  $("pause-btn").addEventListener("click", togglePause);
+  $("help").addEventListener("click", function (ev) { if (ev.target === this) toggleHelp(false); });
+  $("calls").addEventListener("click", function (ev) { var b = ev.target.closest(".call"); if (b) selectCall(b.getAttribute("data-id"), false); });
+  $("q").addEventListener("input", function () { state.query = this.value.trim().toLowerCase(); if (state.data) renderCalls(false); });
+  $("tape").addEventListener("click", function (ev) {
+    var t = ev.target.closest(".tick");
+    if (!t || !state.data) return;
+    var ts = t.getAttribute("data-ts"), v = t.getAttribute("data-v"), hit = null;
+    state.data.recent.forEach(function (r) { if (r.ts === ts && LETTER[r.action] === v) hit = r; });
+    state.filter = "all"; state.query = ""; $("q").value = "";
+    Array.prototype.forEach.call($("filters").querySelectorAll("button"), function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-filter") === "all")); });
+    if (hit) state.sel = callId(hit);
+    setView("calls");
+    var cur = $("calls").querySelector(".call.sel");
+    if (cur) cur.scrollIntoView({ block: "center" });
+  });
+
+  document.addEventListener("keydown", function (ev) {
+    if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+    if ($("sheet").classList.contains("show")) { if (ev.key === "Escape") { closeSheet(); ev.preventDefault(); } return; }
+    if (ev.target && ev.target.id === "q") { if (ev.key === "Escape") { ev.target.blur(); ev.preventDefault(); } return; }
+    var k = ev.key, handled = true;
+    if (k === "Escape") { if ($("help").classList.contains("show")) toggleHelp(false); else handled = false; }
+    else if (k === "?") toggleHelp();
+    else if (k === "/") { setView("calls"); $("q").focus(); }
+    else if (k === "j" || k === "ArrowDown") { if (state.view === "calls") move(1); else handled = false; }
+    else if (k === "k" || k === "ArrowUp") { if (state.view === "calls") move(-1); else handled = false; }
+    else if (k === "p") togglePause();
+    else if (k === "a" || k === "r" || k === "b" || k === "0") { setFilter({ a: "allow", r: "review", b: "block", "0": "all" }[k]); setView("calls"); }
+    else if (k >= "1" && k <= "5") setWindow(WINDOWS[Number(k) - 1]);
+    else handled = false;
+    if (handled) ev.preventDefault();
+  });
+
+  var resizeTimer = null;
+  window.addEventListener("resize", function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () { if (state.data && state.view === "overview") { state.drawn = true; renderTape(state.data); } }, 150);
+  });
+  window.addEventListener("hashchange", function () { setView(hashView(), true); });
+  setInterval(function () { if (!state.paused && !document.hidden) { load(true); loadAgents(); } }, 5000);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden && !state.paused) { load(true); loadAgents(); } });
+  setView(hashView(), true);
+  load(false);
+  loadAgents();
+})();
+</script>
+</body>
+</html>

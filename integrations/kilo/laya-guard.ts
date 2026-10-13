@@ -54,7 +54,7 @@ function judgeOffline(text: string, cwd: string): Verdict {
   return v;
 }
 
-export const LayaGuard = async ({ directory }: { directory?: string } = {}) => ({
+const LayaGuard = async ({ directory }: { directory?: string } = {}) => ({
   "tool.execute.before": async (input: { tool: string }, output: { args: Record<string, unknown> }) => {
     const text = `${input.tool}(${JSON.stringify(output.args)})`;
     const workdir = typeof output.args["workdir"] === "string" ? (output.args["workdir"] as string) : ".";
@@ -68,3 +68,6 @@ export const LayaGuard = async ({ directory }: { directory?: string } = {}) => (
     }
   },
 });
+
+// Kilo registers a plugin from its default export; a bare named export is only accepted as a legacy form.
+export default { id: "laya-guard", server: LayaGuard };
