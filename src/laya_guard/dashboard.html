@@ -183,6 +183,8 @@ button.card:hover { background: var(--card-hi); }
 .call .verdict { font-weight: 600; font-size: 13.5px; }
 .verdict.allow { color: var(--ok); } .verdict.review { color: var(--warn); } .verdict.block { color: var(--bad); }
 .call .when { margin-left: auto; color: var(--faint); font-size: 12px; }
+.call .nomodel { color: var(--warn); border: 1px solid var(--warn); border-radius: 999px; padding: 0 7px; font-size: 11px; }
+.pane-head ~ .note { margin-top: 22px; }
 .call .s { margin-top: 3px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .call.new { animation: arrive 0.5s ease-out; }
 .list-foot { padding: 14px 6px 6px; color: var(--faint); font-size: 12px; }
@@ -219,7 +221,7 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
 .sheet .err { color: var(--bad); font-size: 14px; margin: -4px 0 16px; }
 .sheet .actions { display: flex; gap: 12px; justify-content: flex-end; flex-wrap: wrap; }
 .checks { list-style: none; margin: 0 0 20px; padding: 0; font-size: 14px; }
-.checks li { padding: 3px 0; } .checks .ok { color: var(--ok); } .checks .no { color: var(--bad); }
+.checks li { padding: 3px 0; } .checks .note { color: var(--muted); } .checks .ok { color: var(--ok); } .checks .no { color: var(--bad); }
 
 @keyframes draw { from { transform: scaleY(0); } to { transform: scaleY(1); } }
 @keyframes arrive { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
@@ -439,12 +441,18 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
   var LETTER = { allow: "a", review: "r", block: "b" };
   function callId(r) { return r.ts + "|" + r.tool_sha + "|" + r.action; }
 
+  // --- calls judged without the model ---
+  var VIA = { model: "Laya model", regex: "Regex rule", allowlist: "Safe list", heuristic: "Heuristics", limit: "Length limit", offline: "Offline check" };
+  var NO_MODEL = { offline: "The server was down or too slow, so only the regexes and the safe list ran.", model_error: "The model failed, so regexes and heuristics decided." };
+  function lastHour(d) { return (d && d.degraded && d.degraded.last_hour) || { offline: 0, model_error: 0, total: 0, latest: null }; }
+
   // --- sidebar ---
   function renderState(d, ok) {
     var box = $("state"), h = (d && d.health) || {};
     clear(box);
     var cls = "state", text;
     if (!ok) { cls += " bad"; text = "Server unreachable"; }
+    else if (lastHour(d).total) { cls += " warn"; text = "Degraded"; }
     else if (h.mock) { cls += " warn"; text = "Mock mode"; }
     else if (!h.logging) { cls += " warn"; text = "Logging is off"; }
     else text = state.paused ? "Paused" : "Running";
@@ -478,7 +486,7 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
     for (var i = 0; i < agentList.length; i++) if (agentList[i].id === state.agent) return agentList[i];
     return needing()[0] || agentList.filter(shown)[0] || agentList[0] || null;     // land on what needs the hook
   }
-  function startChange(a) { var s = stateOf(a); if (s.btn) openSheet(a, s.action, s.force || (s.action === "install" && a.managed === false)); }
+  function startChange(a) { var s = stateOf(a); if (s.btn) openSheet(agentChange(a, s.action, s.force || (s.action === "install" && a.managed === false))); }
 
   function api(method, url, body) {
     var opts = { method: method, cache: "no-store", headers: {} };
@@ -565,6 +573,27 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
     box.appendChild(body);
   }
 
+  var serviceSig = "", serviceInfo = null;
+  function loadService() {
+    if ($("sheet").classList.contains("show")) return Promise.resolve();
+    return api("GET", "/api/service").then(function (j) {
+      var sig = JSON.stringify(j);
+      if (sig === serviceSig) return;
+      serviceSig = sig; serviceInfo = j.supported ? j : null;
+      if (state.view === "overview" && state.data) renderCards(state.data);
+    }).catch(function () {});
+  }
+  function serviceCard(s) {
+    var sub, cls = "";
+    if (s.state === "not-installed") sub = "Off. After a restart the server stays down until you start it";
+    else if (s.state === "manual") sub = "A file is already there that laya-guard didn't write";
+    else if (s.state === "broken") { sub = "Needs repair. " + (s.detail || ""); cls = "bad"; }
+    else if (s.running === false) { sub = "On, but not running yet. " + (s.detail || ""); cls = "warn"; }
+    else sub = s.warmup ? "On: starts at every login, model loaded" : "On: starts at every login, model loads on first use";
+    return attentionCard({ title: "Start at login", sub: sub, cls: cls,
+      go: function () { openSheet(serviceChange(s, s.state === "installed" ? "uninstall" : "install")); } });
+  }
+
   function loadAgents() {
     if ($("sheet").classList.contains("show")) return Promise.resolve();
     return api("GET", "/api/agents").then(function (j) {
@@ -597,8 +626,16 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
       split.appendChild(el("span", { "class": "b", text: fmtInt(t.block) + " blocked" }));
       split.appendChild(document.createTextNode("."));
     }
-    if (h.mock) { note.appendChild(el("span", { "class": "warn", text: "Mock mode: " })); note.appendChild(document.createTextNode("verdicts come from regexes and heuristics, not the Laya model.")); }
+    if (lastHour(d).total) {
+      var lh = lastHour(d);
+      note.appendChild(el("span", { "class": "warn", text: "Degraded: " }));
+      note.appendChild(document.createTextNode(plural(lh.total, "call was", "calls were") + " judged without the model in the last hour (" + fmtInt(lh.offline) + " while the server was down, " + fmtInt(lh.model_error) + " after a model error), the latest at " + fmtTime(lh.latest) + ". Start the server again with "));
+      note.appendChild(el("code", { text: "laya-guard serve" }));
+      note.appendChild(document.createTextNode("; hooks use the model again as soon as it answers."));
+    }
+    else if (h.mock) { note.appendChild(el("span", { "class": "warn", text: "Mock mode: " })); note.appendChild(document.createTextNode("verdicts come from regexes and heuristics, not the Laya model.")); }
     else if (!h.logging) note.appendChild(el("span", { "class": "warn", text: "Verdict logging is off (LAYA_GUARD_LOG=0), so there is nothing to show." }));
+    else if (d.degraded && d.degraded.total) note.appendChild(document.createTextNode(plural(d.degraded.total, "call was", "calls were") + " judged without the model " + WINDOW_TEXT[d.window] + ", none in the last hour. Otherwise the guard is running on the real model."));
     else if (t.total) note.appendChild(document.createTextNode("The guard is running on the real model. Judging takes " + fmtInt(Math.round(t.avg_latency_ms)) + " ms on average."));
   }
 
@@ -643,6 +680,10 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
       box.appendChild(attentionCard({ title: a.name, sub: s.pill + ", all projects", cls: a.state === "installed" ? "" : (s.cls === "warn" ? "warn" : s.cls === "bad" ? "bad" : ""),
         go: function () { if (a.state === "not-installed" || a.state === "broken") startChange(a); else { state.agent = a.id; setView("agents"); } } }));
     });
+    if (serviceInfo) box.appendChild(serviceCard(serviceInfo));
+    var dg = d.degraded || { total: 0 };
+    if (dg.total) box.appendChild(attentionCard({ title: "Judged without the model", sub: "Offline check or heuristics only", cls: lastHour(d).total ? "warn" : "", badge: dg.total,
+      go: function () { setQuery("degraded"); setFilter("all"); setView("calls"); } }));
     box.appendChild(attentionCard({ title: "Blocked", sub: "Stopped before they ran", cls: t.block ? "bad" : "", badge: t.block, go: function () { setFilter("block"); setView("calls"); } }));
     box.appendChild(attentionCard({ title: "Held for review", sub: "Waiting for your answer", cls: t.review ? "warn" : "", badge: t.review, go: function () { setFilter("review"); setView("calls"); } }));
     box.appendChild(attentionCard({ title: "Allowed", sub: "Ran as usual", cls: "", go: function () { setFilter("allow"); setView("calls"); } }));
@@ -662,7 +703,7 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
     if (state.filter !== "all" && r.action !== state.filter) return false;
     var q = state.query;
     if (!q) return true;
-    return [r.policy_id, r.reason, r.source, r.tool_sha, WORD[r.action]].some(function (v) { return String(v || "").toLowerCase().indexOf(q) >= 0; });
+    return [r.policy_id, r.reason, r.source, r.tool_sha, WORD[r.action], VIA[r.via], r.via, r.degraded ? "degraded without the model" : ""].some(function (v) { return String(v || "").toLowerCase().indexOf(q) >= 0; });
   }
   function visible() { return state.data ? state.data.recent.filter(matches) : []; }
   var VICON = { allow: "check", review: "alert", block: "ban" };
@@ -681,7 +722,7 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
     rows.forEach(function (r) {
       var id = callId(r), isNew = fresh && state.seen && !state.seen[id];
       var btn = el("button", { type: "button", "class": "card call" + (id === state.sel ? " sel" : "") + (isNew ? " new" : ""), "data-id": id },
-        el("div", { "class": "head" }, el("i", { "class": "dot " + r.action }), el("span", { "class": "verdict " + r.action, text: WORD[r.action] || String(r.action) }), el("span", { "class": "when", text: fmtTime(r.ts) })),
+        el("div", { "class": "head" }, el("i", { "class": "dot " + r.action }), el("span", { "class": "verdict " + r.action, text: WORD[r.action] || String(r.action) }), r.degraded ? el("span", { "class": "nomodel", text: "no model" }) : null, el("span", { "class": "when", text: fmtTime(r.ts) })),
         el("div", { "class": "s", text: r.reason || r.policy_id || "" }));
       list.appendChild(el("li", null, btn));
     });
@@ -707,7 +748,7 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
       el("div", null, el("div", { "class": "vbig verdict " + r.action, text: WORD[r.action] || String(r.action) }), el("div", { "class": "sub", text: new Date(r.ts).toLocaleString() })),
       el("span", { "class": "pill " + color }, el("i", { "class": "dot " + color }), "risk " + (Number(r.risk) || 0).toFixed(2))));
     var dl = el("dl", { "class": "facts" });
-    [["Policy", r.policy_id || ""], ["Reason", r.reason || ""], ["Source", r.source || ""],
+    [["Policy", r.policy_id || ""], ["Reason", r.reason || ""], ["Judged by", r.via ? (VIA[r.via] || r.via) : ""], ["Source", r.source || ""],
      ["Judged in", r.latency_ms != null ? Math.round(r.latency_ms) + " ms" : ""],
      ["Length", r.tool_len != null ? r.tool_len + " characters" : ""], ["Hash", r.tool_sha || "", "mono"]].forEach(function (p) {
       if (!p[1]) return;
@@ -715,6 +756,7 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
       dl.appendChild(el("dd", { "class": p[2] || "", text: p[1] }));
     });
     pane.appendChild(dl);
+    if (r.degraded) pane.appendChild(el("p", { "class": "note" }, el("span", { "class": "warn", text: "Judged without the model. " }), document.createTextNode(NO_MODEL[r.degraded] || "")));
     pane.appendChild(el("p", { "class": "foot-note", text: "laya-guard keeps only a hash and the length of each call, never the command text." }));
   }
 
@@ -795,14 +837,14 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
         if (win !== state.window) return;
         // nothing new: keep the page as it is (no flicker, the selection survives)
         var last = data.tape.length ? data.tape[data.tape.length - 1][1] : "";
-        var sig = [data.window, data.totals.total, last, data.health.mock, data.health.logging].join("|");
+        var sig = [data.window, data.totals.total, last, data.health.mock, data.health.logging, lastHour(data).total, data.degraded ? data.degraded.total : 0].join("|");
         var same = state.data && state.sig === sig;
         state.data = data;
         if (same) { if (state.view === "overview") renderFooter(data, true); return; }
         state.sig = sig;
         render(fresh);
       })
-      .catch(function () { renderState(null, false); if (state.view === "overview") { renderHero(null, false); renderFooter(null, false); } });
+      .catch(function () { state.sig = ""; renderState(null, false); if (state.view === "overview") { renderHero(null, false); renderFooter(null, false); } });
   }
 
   function setWindow(w) {
@@ -810,6 +852,7 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
     Array.prototype.forEach.call($("windows").querySelectorAll("button"), function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-window") === w)); });
     load(false);
   }
+  function setQuery(q) { state.query = q; $("q").value = q; }
   function setFilter(f) {
     state.filter = f;
     Array.prototype.forEach.call($("filters").querySelectorAll("button"), function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-filter") === f)); });
@@ -835,25 +878,67 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
     });
   }
 
-  function openSheet(a, action, force) {
-    pending = { agent: a.id, name: a.name, kind: a.kind, action: action, force: !!force, diffId: null };
-    $("sheet-title").textContent = (action === "install" ? "Install the hook for " : "Remove the hook from ") + a.name;
-    $("sheet-lead").textContent = "Checking what would change in " + a.path + ".";
+  // what the sheet needs to know about a change: an agent's hook, or starting the server at login
+  function agentChange(a, action, force) {
+    return {
+      url: "/api/agents/" + a.id + "/" + action, extra: { scope: "user", force: !!force }, action: action,
+      title: (action === "install" ? "Install the hook for " : "Remove the hook from ") + a.name,
+      checking: "Checking what would change in " + a.path + ".",
+      explain: function (j) {
+        return a.kind === "json"
+          ? (action === "install" ? "This adds a hook to " : "This removes the hook from ") + j.path + ". Your other settings stay as they are and the file is backed up first. The JSON is re-indented, so some lines may show as changed."
+          : (action === "install" ? "This writes " : "This removes ") + j.path + ". Nothing else is touched, and anything it replaces is backed up first.";
+      },
+      notesAsList: false,
+      doneTitle: action === "install" ? "Hook installed" : "Hook removed",
+      saved: function (j) {
+        return (action === "install" ? "Saved to " : "Removed from ") + j.path + (j.backup ? ". The previous file is at " + j.backup + "." : ".") + (action === "install" && j.follow_up ? " " + j.follow_up : "");
+      },
+      noProbes: action === "install" ? "No test calls: " + a.name + " loads this itself, so laya-guard can't run it from here." : ""
+    };
+  }
+  function serviceChange(s, action) {
+    return {
+      url: "/api/service/" + action, extra: {}, action: action,
+      title: action === "install" ? "Start laya-guard at login" : "Stop starting laya-guard at login",
+      checking: "Checking what would change in " + s.path + ".",
+      explain: function (j) {
+        return action === "install" ? "This writes " + j.path + " (a " + s.how + ") and starts the server now. Nothing else is touched."
+          : "This stops the service and removes " + j.path + ". Hooks fall back to the offline check until you start the server yourself.";
+      },
+      notesAsList: true,
+      doneTitle: action === "install" ? "Starts at login" : "No longer starts at login",
+      saved: function (j) {
+        return (action === "install" ? "Saved to " : "Removed ") + j.path + (j.backups && j.backups.length ? ". The previous file is at " + j.backups[0] + "." : ".") +
+          (j.detached ? " The server restarts in a moment; this page picks up again by itself." : (action === "install" ? " " + (j.follow_up || "") : ""));
+      },
+      noProbes: ""
+    };
+  }
+
+  function openSheet(p) {
+    pending = p; p.diffId = null;
+    $("sheet-title").textContent = p.title;
+    $("sheet-lead").textContent = p.checking;
     clear($("sheet-diff")); $("sheet-diff").hidden = true; clear($("sheet-checks")); $("sheet-err").textContent = "";
     $("sheet-apply").hidden = false; $("sheet-apply").disabled = true; $("sheet-cancel").textContent = "Cancel";
     $("sheet").classList.add("show");
-    api("POST", "/api/agents/" + a.id + "/" + action, { scope: "user", mode: "preview", force: !!force }).then(function (j) {
+    function showNotes(j) {
+      if (!p.notesAsList) return;
+      clear($("sheet-checks"));
+      (j.notes || []).forEach(function (n) { $("sheet-checks").appendChild(el("li", { "class": "note", text: n })); });
+    }
+    api("POST", p.url, Object.assign({ mode: "preview" }, p.extra)).then(function (j) {
       if (!j.changed) {
-        $("sheet-lead").textContent = "Nothing to change in " + j.path + ".";
+        $("sheet-lead").textContent = "Nothing to change in " + j.path + "." + (p.notesAsList ? "" : ((j.notes || []).length ? " " + j.notes.join(" ") : ""));
+        showNotes(j);
         $("sheet-apply").hidden = true; $("sheet-cancel").textContent = "Close";
         return;
       }
-      pending.diffId = j.diff_id;
-      var what = a.kind === "json"
-        ? (action === "install" ? "This adds a hook to " : "This removes the hook from ") + j.path + ". Your other settings stay as they are and the file is backed up first. The JSON is re-indented, so some lines may show as changed."
-        : (action === "install" ? "This writes " : "This removes ") + j.path + ". Nothing else is touched, and anything it replaces is backed up first.";
-      $("sheet-lead").textContent = what + ((j.notes || []).length ? " " + j.notes.join(" ") : "");
+      p.diffId = j.diff_id;
+      $("sheet-lead").textContent = p.explain(j) + (!p.notesAsList && (j.notes || []).length ? " " + j.notes.join(" ") : "");
       paintDiff(j.diff);
+      showNotes(j);
       $("sheet-diff").hidden = false; $("sheet-apply").disabled = false; $("sheet-apply").focus();
     }).catch(function (e) {
       $("sheet-lead").textContent = ""; $("sheet-err").textContent = e.message;
@@ -863,8 +948,9 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
 
   function closeSheet() {
     $("sheet").classList.remove("show");
-    pending = null; agentsSig = "";
+    pending = null; agentsSig = ""; serviceSig = "";
     loadAgents();
+    loadService();
   }
   $("sheet-cancel").addEventListener("click", closeSheet);
   $("sheet").addEventListener("click", function (ev) { if (ev.target === this) closeSheet(); });
@@ -872,15 +958,14 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
     if (!pending || !pending.diffId) return;
     var btn = this, p = pending;
     btn.disabled = true; $("sheet-err").textContent = "";
-    api("POST", "/api/agents/" + p.agent + "/" + p.action, { scope: "user", mode: "apply", diff_id: p.diffId, force: p.force }).then(function (j) {
-      $("sheet-title").textContent = p.action === "install" ? "Hook installed" : "Hook removed";
-      $("sheet-lead").textContent = (p.action === "install" ? "Saved to " : "Removed from ") + j.path + (j.backup ? ". The previous file is at " + j.backup + "." : ".") +
-        (p.action === "install" && j.follow_up ? " " + j.follow_up : "");
+    api("POST", p.url, Object.assign({ mode: "apply", diff_id: p.diffId }, p.extra)).then(function (j) {
+      $("sheet-title").textContent = p.doneTitle;
+      $("sheet-lead").textContent = p.saved(j);
       $("sheet-diff").hidden = true; btn.hidden = true; $("sheet-cancel").textContent = "Close";
       var list = $("sheet-checks");
       clear(list);
       (j.probes || []).forEach(function (c) { list.appendChild(el("li", { "class": c.ok ? "ok" : "no", text: (c.ok ? "Passed: " : "Failed: ") + c.label })); });
-      if (p.action === "install" && !(j.probes || []).length) list.appendChild(el("li", { text: "No test calls: " + p.name + " loads this itself, so laya-guard can't run it from here." }));
+      if (p.noProbes && !(j.probes || []).length) list.appendChild(el("li", { text: p.noProbes }));
       pending = null;
     }).catch(function (e) { btn.disabled = false; $("sheet-err").textContent = e.message; });
   });
@@ -931,11 +1016,12 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
     resizeTimer = setTimeout(function () { if (state.data && state.view === "overview") { state.drawn = true; renderTape(state.data); } }, 150);
   });
   window.addEventListener("hashchange", function () { setView(hashView(), true); });
-  setInterval(function () { if (!state.paused && !document.hidden) { load(true); loadAgents(); } }, 5000);
-  document.addEventListener("visibilitychange", function () { if (!document.hidden && !state.paused) { load(true); loadAgents(); } });
+  setInterval(function () { if (!state.paused && !document.hidden) { load(true); loadAgents(); if (state.view === "overview") loadService(); } }, 5000);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden && !state.paused) { load(true); loadAgents(); loadService(); } });
   setView(hashView(), true);
   load(false);
   loadAgents();
+  loadService();
 })();
 </script>
 </body>

@@ -5,6 +5,34 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- **`laya-guard service install | uninstall | status`**: opt-in start at login, a macOS LaunchAgent or a Linux systemd
+  user unit that runs `laya-guard serve` (restarted after a crash, 30 seconds apart at most). The file is shown as a
+  diff first (`--dry-run`, `--yes`), is readable only by you, and a file that `laya-guard` didn't write is left alone
+  unless `--force` (it is then backed up). `--port`, `--no-warmup` (load the model on the first call: about 90 MB
+  idle instead of 1.4 GB) and `--bin` are options; the `LAYA_GUARD_*` settings the server reads are copied in. The
+  dashboard's Overview has the same switch ("Start at login", `GET /api/service`, `POST /api/service/{install|uninstall}`
+  with the same token, same-origin and diff-id checks as the agents). A dashboard served by the service itself gets its
+  answer before the server is restarted or stopped. Windows isn't supported yet.
+- **Degraded indicator.** The dashboard turns amber ("Degraded", with a note and a "Judged without the model" card)
+  when calls in the last hour were judged by the offline check or after a model error; each call shows who judged it
+  ("Judged by") and the Calls search finds them. `GET /api/stats` gains `degraded` and, per recent call, `via` and
+  `degraded`.
+- **`LAYA_GUARD_ALERT_CMD`**: a shell command started in the background when calls are judged without the model, once
+  per kind of outage (`server-down` from the hook's offline fallback, `model-error` from the server) per
+  `LAYA_GUARD_ALERT_COOLDOWN` seconds (default 600). The text comes in `LAYA_GUARD_ALERT_KIND` and
+  `LAYA_GUARD_ALERT_MESSAGE`; a hook never waits for it or fails because of it.
+
+### Changed
+
+- `laya-guard serve` exits with an error right away when something already answers on the port, instead of loading
+  the model and then failing to bind.
+
+### Fixed
+
+- The dashboard kept saying "Server unreachable" after one failed refresh until a new call arrived.
+
 ## [0.3.0] - 2026-10-13
 
 A local dashboard, one-command setup for all eleven supported agents, and failure modes that tell an outage from

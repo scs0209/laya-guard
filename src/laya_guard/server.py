@@ -2,6 +2,7 @@
 from __future__ import annotations
 import hmac
 import os
+import re
 import time
 import secrets
 from datetime import datetime, timezone
@@ -9,7 +10,7 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
-from . import dashboard, install
+from . import alerts, dashboard, install, service
 from .guard import judge, is_mock
 from .log import load_entries, log_enabled, log_path, log_verdict
 
@@ -28,6 +29,8 @@ def _judge_and_log(text: str, source: str, cwd: str | None = None):
         mock=v.mock, source=source,
         latency_ms=(time.perf_counter() - t0) * 1000.0, tool_call=text, via=v.verdict_source,
     )
+    if v.verdict_source == "heuristic" and not v.mock:
+        alerts.maybe_alert("model-error")  # the model failed and heuristics stood in; mock mode is a choice
     return v
 
 class GuardReq(BaseModel):
@@ -121,6 +124,71 @@ class AgentReq(BaseModel):
     mode: str = "preview"        # preview: show the change; apply: make it (needs the preview's diff_id)
     diff_id: str | None = None
     force: bool = False
+
+class ServiceReq(BaseModel):
+    mode: str = "preview"        # preview: show the change; apply: make it (needs the preview's diff_id)
+    diff_id: str | None = None
+    warmup: bool = True
+    force: bool = False
+
+def _own_port(request: Request) -> int:
+    """The port this page was served from: the login service should answer where the dashboard does."""
+    m = re.search(r":(\d+)$", request.headers.get("host", ""))
+    return int(m.group(1)) if m else service.DEFAULT_PORT
+
+@app.get("/api/service")
+def api_service(request: Request):
+    """Whether the server starts at login (a LaunchAgent / systemd user unit), and whether that service is running."""
+    _require_loopback_host(request)
+    home = Path.home()
+    try:
+        st = service.status(home)
+    except service.ServiceError as exc:
+        return JSONResponse({"supported": False, "detail": str(exc)}, headers=dashboard.api_headers())
+    return JSONResponse({"supported": True, "kind": st.kind, "how": service.how(st.kind), "state": st.state,
+                         "running": st.running, "detail": st.detail, "port": st.port, "warmup": st.warmup,
+                         "path": dashboard.display_path(st.path), "log": service.log_hint(st.kind, home)},
+                        headers=dashboard.api_headers())
+
+@app.post("/api/service/{action}", dependencies=[Depends(_require_write_access)])
+def api_service_action(action: str, request: Request, req: ServiceReq):
+    if action not in ("install", "uninstall"):
+        raise HTTPException(status_code=404, detail="unknown action")
+    if req.mode not in ("preview", "apply"):
+        raise HTTPException(status_code=400, detail="mode must be preview or apply")
+    home, port = Path.home(), _own_port(request)
+    try:
+        st = service.status(home)
+        # the service is already running and this page is its: stopping or restarting it ends this request,
+        # so those commands run a moment after the answer
+        mine = st.running is True and st.port == port
+        plan = service.make_plan(action, home, port=port, warmup=req.warmup, force=req.force, port_busy=not mine)
+    except service.ServiceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    notes = list(plan.notes)
+    if plan.outcome == "manual":
+        notes.append(plan.existing)
+    if mine and plan.changed:
+        notes.append("This page is served by that service, so it goes away for a few seconds while the server "
+                     "restarts." if action == "install" else
+                     "This page is served by that service, so it stops with it. Start the server again with "
+                     "`laya-guard dashboard`.")
+    shown = dashboard.display_path(plan.path)
+    diff = _shorten_paths(plan.diff, plan)
+    body = {"outcome": plan.outcome, "path": shown, "changed": plan.changed, "notes": notes, "diff": diff,
+            "diff_id": plan.diff_id if plan.changed else None, "follow_up": plan.follow_up}
+    if req.mode == "preview" or not plan.changed:
+        return JSONResponse({**body, "applied": False}, headers=dashboard.api_headers())
+    if not req.diff_id or not hmac.compare_digest(req.diff_id, plan.diff_id):
+        raise HTTPException(status_code=409, detail="the service file changed since the preview; review the change again")
+    try:
+        backups, ran = service.apply_plan(plan, detach=mine)
+    except service.ServiceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"couldn't write the service file: {exc.strerror or exc}")
+    return JSONResponse({**body, "applied": True, "backups": [dashboard.display_path(b) for b in backups],
+                         "ran": ran, "detached": mine}, headers=dashboard.api_headers())
 
 def _shorten_paths(diff: str, plan) -> str:
     """Swap the full paths in each file's ---/+++ header lines for ~/... ones."""

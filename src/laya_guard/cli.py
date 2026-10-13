@@ -26,15 +26,22 @@ def cmd_check(args):
 def _log_offline(v, text: str, latency_ms: float) -> None:
     """An offline verdict is an outage, not a real judgment: record it (hash and length only, like every
     entry) so it can be counted. A log that can't be written must never stop a hook."""
+    from .alerts import maybe_alert
     from .log import log_verdict
     try:
         log_verdict(action=v.action, risk=v.risk, policy_id=v.policy_id, reason=v.reason, mock=False,
                     source="tool", latency_ms=latency_ms, tool_call=text, via="offline")
     except OSError:
         pass
+    maybe_alert("server-down")             # LAYA_GUARD_ALERT_CMD, once per outage; never raises, never waits
 
 def cmd_serve(args):
     from .server import run
+    if _server_up(args.host, args.port):
+        # nothing to start: the port would be taken. (A login service lands here while a hand-started server
+        # holds the port, exits non-zero, and is started again later.)
+        print(f"laya-guard is already running on http://{args.host}:{args.port}", file=sys.stderr)
+        return 1
     # Load before listening: hooks time out (and fail open) if the first
     # request has to wait for the checkpoint download.
     if not args.no_warmup and not is_mock():
@@ -108,8 +115,8 @@ def _plan(args, action):
                               bin_override=getattr(args, "bin", None), matcher=getattr(args, "matcher", None),
                               force=args.force)
 
-def _apply(ins, plan, args) -> tuple[int, bool]:
-    """Show the diff and, once confirmed, write it. Returns (exit code, wrote)."""
+def _apply(apply, plan, args) -> tuple[int, bool]:
+    """Show the diff and, once confirmed, write it with `apply(plan)`. Returns (exit code, wrote)."""
     if not plan.changed:
         print("Nothing to change.")
         return 0, False
@@ -129,7 +136,7 @@ def _apply(ins, plan, args) -> tuple[int, bool]:
         if input("\nApply this change? [y/N] ").strip().lower() not in ("y", "yes"):
             print("Cancelled.")
             return 1, False
-    backups, _ = ins.apply_plan(plan, verify=False)
+    backups, _ = apply(plan)
     for a in (a for a in plan.artifacts if a.changed):
         print(f"\n{'Removed' if a.after is None else 'Wrote'} {_short(a.path)}")
     for b in backups:
@@ -163,7 +170,7 @@ def cmd_install(args):
     print(f"{verb} the laya-guard hook for {spec.name} ({args.scope} scope{how}) in {_short(plan.path)}:\n")
     if spec.unverified:
         print(f"(Heads-up: this format is {spec.unverified}; it hasn't been run against the app itself.)\n")
-    code, wrote = _apply(ins, plan, args)
+    code, wrote = _apply(lambda p: ins.apply_plan(p, verify=False), plan, args)
     if code or not wrote:
         return code
     if not ins.server_health():
@@ -196,10 +203,65 @@ def cmd_uninstall(args):
         print(f"No hook written by `laya-guard install` found in {_short(plan.path)}.{extra}")
         return 0
     print(f"Removing the laya-guard hook for {plan.spec.name} from {_short(plan.path)}:\n")
-    code, _ = _apply(ins, plan, args)
+    code, _ = _apply(lambda p: ins.apply_plan(p, verify=False), plan, args)
     if code == 0 and plan.left:
         print(f"{plan.left} hand-written laya-guard entr{'y' if plan.left == 1 else 'ies'} left in place (use --force).")
     return code
+
+def cmd_service(args):
+    """Keep the server running from login on: install, uninstall or show the LaunchAgent / systemd unit."""
+    import json
+    from pathlib import Path
+    from . import service as svc
+    home = Path.home()
+    try:
+        if args.service_cmd == "status":
+            st = svc.status(home)
+            up = svc.port_answers("127.0.0.1", st.port)
+            if args.json:
+                print(json.dumps({"kind": st.kind, "path": str(st.path), "state": st.state, "running": st.running,
+                                  "server_up": up, "port": st.port, "warmup": st.warmup, "detail": st.detail}, indent=1))
+                return 0
+            label = {"installed": "installed", "broken": "BROKEN", "manual": "a file is there that isn't ours",
+                     "not-installed": "not installed"}[st.state]
+            print(f"{svc.how(st.kind)}: {label}  ({_short(st.path)})" + (f"\n  {st.detail}" if st.detail else ""))
+            if st.state in ("installed", "broken"):
+                print(f"  starts at login; model {'loaded at start' if st.warmup else 'loaded on the first call'}; port {st.port}")
+                print(f"  service manager: {'running' if st.running else 'not running' if st.running is False else 'unknown'}")
+                print(f"  log: {svc.log_hint(st.kind, home)}")
+            print(f"server on port {st.port}: {'answering' if up else 'not answering'}")
+            return 0
+        busy = args.service_cmd == "install" and svc.port_answers(args.host, args.port)
+        plan = svc.make_plan(args.service_cmd, home, bin_override=getattr(args, "bin", None),
+                             host=getattr(args, "host", "127.0.0.1"), port=getattr(args, "port", svc.DEFAULT_PORT),
+                             warmup=not getattr(args, "no_warmup", False), force=args.force, port_busy=busy)
+        if plan.outcome == "manual":
+            print(f"{plan.existing}.\nLeft as it is. Re-run with --force to replace it (the old file is backed up).")
+            return 0
+        if plan.outcome == "nothing":
+            print(f"Not installed: there is no {_short(plan.path)}.")
+            return 0
+        if plan.outcome == "unchanged":
+            print(f"Already installed and up to date in {_short(plan.path)}.")
+            return 0
+        print(f"{'Adding' if plan.outcome == 'added' else 'Updating' if plan.outcome == 'updated' else 'Removing'} "
+              f"the {svc.how(plan.kind)} for the laya-guard server ({_short(plan.path)}):\n")
+        code, wrote = _apply(svc.apply_plan, plan, args)
+        if code or not wrote:
+            return code
+        if plan.ran:
+            print("\nCommands run:\n  " + "\n  ".join(plan.ran))
+        if plan.action == "install":
+            print(f"\n{plan.follow_up}")
+        else:
+            print("\nThe service is stopped and removed. `laya-guard serve` still starts the server by hand.")
+        return 0
+    except InstallError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    except OSError as exc:
+        print(f"error: {exc.strerror or exc}", file=sys.stderr)
+        return 1
 
 def cmd_status(args):
     import json
@@ -299,6 +361,20 @@ def main(argv=None):
     u.add_argument("-y", "--yes", action="store_true", help="apply without asking")
     u.add_argument("--force", action="store_true", help="also remove a hand-written laya-guard hook entry")
     u.set_defaults(fn=cmd_uninstall)
+    sv = sub.add_parser("service", help="start the server at login (macOS LaunchAgent / Linux systemd user unit); opt-in")
+    svs = sv.add_subparsers(dest="service_cmd", required=True)
+    si = svs.add_parser("install", help="start the server now and at every login (shows the file first)")
+    si.add_argument("--host", default="127.0.0.1"); si.add_argument("--port", type=int, default=8787)
+    si.add_argument("--no-warmup", action="store_true", help="load the model on the first call instead of at start (about 90 MB idle instead of 1.4 GB)")
+    si.add_argument("--bin", default=None, help="absolute path of the laya-guard executable (default: found automatically)")
+    su = svs.add_parser("uninstall", help="stop the service and remove its file")
+    for q in (si, su):
+        q.add_argument("--dry-run", action="store_true", help="print the file, change nothing")
+        q.add_argument("-y", "--yes", action="store_true", help="apply without asking")
+        q.add_argument("--force", action="store_true", help="also replace or remove a file that `laya-guard service install` didn't write (backed up)")
+    ss = svs.add_parser("status", help="whether the service is installed and running")
+    ss.add_argument("--json", action="store_true")
+    sv.set_defaults(fn=cmd_service)
     st = sub.add_parser("status", help="where the hook is installed, whether the server is up")
     _scope_args(st, None)
     st.add_argument("--agent", default=None, help="only this agent (default: the ones found on this machine)")

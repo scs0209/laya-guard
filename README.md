@@ -410,6 +410,8 @@ All patterns live in [policy.yaml](src/laya_guard/policy.yaml) — edit, add you
 | `LAYA_GUARD_REVIEW` | env (Claude Code hook) | `ask` — `review` becomes a permission prompt; `pass` lets it through without asking |
 | `LAYA_GUARD_BIN` | env (hooks/adapters) | `laya-guard` — CLI used for the offline check |
 | `--no-warmup` | `laya-guard serve` | off — the model loads before the server listens |
+| `LAYA_GUARD_ALERT_CMD` | env (hooks and server) | unset — a shell command run (once per outage, in the background) when calls are judged without the model; see [Keep it running](#keep-it-running-and-hear-about-outages) |
+| `LAYA_GUARD_ALERT_COOLDOWN` | env | `600` — seconds before the same kind of alert can run again |
 | block/review thresholds | `policy.yaml` → `defaults` | 0.8 / 0.45 |
 | model checkpoint | `policy.yaml` → `defaults.model` | `multilingual` |
 
@@ -440,6 +442,31 @@ with `via: "offline"` (hash and length only, like every entry), the server recor
 (`via: "model"`, `"regex"`, `"allowlist"`, `"heuristic"` after a model error, `"limit"`), and `laya-guard stats`
 prints how many calls were judged without the model, with the server down or after a model error. Mock mode doesn't
 count: that is a choice, not an outage.
+
+### Keep it running, and hear about outages
+
+A guard whose server you have to remember to start has a single point of failure, so laya-guard can start it for you,
+**if you ask**: `laya-guard service install` writes a macOS LaunchAgent (`~/Library/LaunchAgents/com.laya-guard.server.plist`)
+or a Linux systemd user unit (`~/.config/systemd/user/laya-guard.service`), shows the file first, and starts the server
+now and at every login (restarting it after a crash, at most every 30 seconds). The model is loaded up front, about
+1.4 GB and 5 seconds per start; `--no-warmup` loads it on the first call instead (about 90 MB while idle). A server
+you started by hand keeps the port; the service takes over once it stops. `laya-guard service status` shows where it
+stands and `laya-guard service uninstall` removes it. The dashboard's Overview has the same switch ("Start at login").
+Hooks don't depend on any of this: without the server they use the offline check, as before. Windows isn't
+supported yet. The environment the server reads (`LAYA_GUARD_ALERT_CMD`, `LAYA_GUARD_LOG_PATH`, ...) is copied into the
+file when you install, and the file is readable only by you.
+
+The dashboard turns **Degraded** (amber, with a note and a "Judged without the model" card) when calls in the last hour
+were judged without the model, and each call says who judged it. To be told when it happens, set
+`LAYA_GUARD_ALERT_CMD` to any shell command: it is started in the background, at most once per
+`LAYA_GUARD_ALERT_COOLDOWN` seconds for each kind of outage (`server-down`, from the hook's offline fallback, the one
+piece of code still running when the server is down; `model-error`, from the server). The text is in
+`LAYA_GUARD_ALERT_KIND` and `LAYA_GUARD_ALERT_MESSAGE`, never in the command line, and a hook never waits for the
+command or fails because of it. For example, on macOS:
+
+```bash
+export LAYA_GUARD_ALERT_CMD='osascript -e "display notification \"$LAYA_GUARD_ALERT_MESSAGE\" with title \"laya-guard\""'
+```
 
 Inputs over 256K characters, or with a line over 16K, are blocked without being
 read: some regexes are quadratic in line length, and a 200KB line used to take

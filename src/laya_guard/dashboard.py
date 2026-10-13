@@ -15,6 +15,8 @@ from importlib import resources
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from .log import degraded_kind
+
 ALLOWED_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 WINDOWS = {"1h": timedelta(hours=1), "24h": timedelta(hours=24), "7d": timedelta(days=7),
            "30d": timedelta(days=30), "all": None}
@@ -83,6 +85,21 @@ def _iso(ts: datetime) -> str:
     return ts.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _last_hour(entries: list[dict], now: datetime) -> dict:
+    """Calls judged without the model in the hour up to `now`, and when the latest one happened."""
+    cutoff = now - timedelta(hours=1)
+    counts = {"offline": 0, "model_error": 0}
+    latest: datetime | None = None
+    for e in entries:
+        kind = degraded_kind(e)
+        ts = parse_ts(e.get("ts"))
+        if kind is None or ts is None or ts < cutoff or ts > now:
+            continue
+        counts[kind] += 1
+        latest = ts if latest is None or ts > latest else latest
+    return {**counts, "total": counts["offline"] + counts["model_error"], "latest": _iso(latest) if latest else None}
+
+
 def build_stats(entries: list[dict], now: datetime, window: str = "24h") -> dict:
     """Aggregate verdict entries for one window. Entries without a parsable timestamp only
     count in the `all` window."""
@@ -101,7 +118,7 @@ def build_stats(entries: list[dict], now: datetime, window: str = "24h") -> dict
     latencies: list[float] = []
     policies: dict[str, dict[str, int]] = {}
     sources: dict[str, int] = {}
-    mocks = 0
+    mocks = offline = model_error = 0
     for _, e in rows:
         action = e.get("action") if e.get("action") in counts else None
         if action:
@@ -112,6 +129,9 @@ def build_stats(entries: list[dict], now: datetime, window: str = "24h") -> dict
             pol[action] += 1
         sources[str(e.get("source", "?"))] = sources.get(str(e.get("source", "?")), 0) + 1
         mocks += 1 if e.get("mock") else 0
+        kind = degraded_kind(e)
+        offline += kind == "offline"
+        model_error += kind == "model_error"
         try:
             latencies.append(float(e.get("latency_ms", 0.0)))
         except (TypeError, ValueError):
@@ -143,7 +163,7 @@ def build_stats(entries: list[dict], now: datetime, window: str = "24h") -> dict
         "ts": _iso(ts), "action": e.get("action"), "risk": e.get("risk"),
         "policy_id": e.get("policy_id"), "reason": e.get("reason"), "source": e.get("source"),
         "latency_ms": e.get("latency_ms"), "tool_len": e.get("tool_len"),
-        "tool_sha": str(e.get("tool_sha", ""))[:8],
+        "tool_sha": str(e.get("tool_sha", ""))[:8], "via": e.get("via") or None, "degraded": degraded_kind(e),
     } for ts, e in recent_rows]
 
     # the verdict tape: the latest calls in order, oldest first, as [letter, time]
@@ -164,6 +184,10 @@ def build_stats(entries: list[dict], now: datetime, window: str = "24h") -> dict
         },
         "timeline": timeline,
         "tape": tape,
+        # calls judged without the model, kept apart from real verdicts: an outage is not a denial.
+        # `recent` always looks at the last hour, whatever the window, so the page can show "right now".
+        "degraded": {"offline": offline, "model_error": model_error, "total": offline + model_error,
+                     "share": rate(offline + model_error), "last_hour": _last_hour(entries, now)},
         "policies": [{"policy_id": k, **v} for k, v in top[:POLICY_LIMIT]],
         "sources": [{"source": k, "count": v} for k, v in sorted(sources.items(), key=lambda kv: -kv[1])],
         "recent": recent,

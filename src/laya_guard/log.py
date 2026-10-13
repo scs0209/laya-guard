@@ -94,6 +94,17 @@ def load_entries(path: Path | str | None = None) -> list[dict]:
     return entries
 
 
+def degraded_kind(entry: dict) -> str | None:
+    """How a call was judged without the model, or None if it wasn't: "offline" (the server was down or too
+    slow: regexes and the safe list only) or "model_error" (the server was up but the model failed: heuristics
+    stood in). Mock mode is a choice, not a failure."""
+    if entry.get("via") == "offline":
+        return "offline"
+    if entry.get("via") == "heuristic" and not entry.get("mock"):
+        return "model_error"
+    return None
+
+
 def summarize(entries: list[dict]) -> dict:
     """Aggregate verdict distribution + latency. Pure function (testable)."""
     total = len(entries)
@@ -112,10 +123,9 @@ def summarize(entries: list[dict]) -> dict:
             pass
         if e.get("mock"):
             mocks += 1
-        if e.get("via") == "offline":
-            offline += 1            # the server was down or too slow: regexes and the safe list only
-        elif e.get("via") == "heuristic" and not e.get("mock"):
-            model_error += 1        # the server was up but the model failed: heuristics stood in
+        kind = degraded_kind(e)
+        offline += kind == "offline"
+        model_error += kind == "model_error"
 
     def rate(n: int) -> float:
         return round(n / total, 3) if total else 0.0

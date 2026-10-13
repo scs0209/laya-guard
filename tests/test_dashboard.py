@@ -110,6 +110,38 @@ def test_unknown_window_and_odd_entries_are_handled():
     assert s["totals"]["review"] == 0 and s["totals"]["block"] == 0
 
 
+def test_degraded_counts_calls_judged_without_the_model_and_leaves_mock_out():
+    entries = [_entry(5, via="model"), _entry(6, via="regex"), _entry(7, via="allowlist"),
+               _entry(8, via="offline"), _entry(9, via="offline"), _entry(10, via="heuristic"),
+               _entry(11, via="heuristic", mock=True), _entry(12)]                        # old entries have no `via`
+    d = dashboard.build_stats(entries, NOW, "24h")["degraded"]
+    assert (d["offline"], d["model_error"], d["total"]) == (2, 1, 3)
+    assert d["share"] == round(3 / 8, 4)
+
+
+def test_degraded_last_hour_ignores_the_window_and_old_or_future_entries():
+    entries = [_entry(10, via="offline"), _entry(30, via="heuristic"), _entry(90, via="offline"),
+               _entry(-30, via="offline"), _entry(20)]
+    stats = dashboard.build_stats(entries, NOW, "1h")
+    assert stats["degraded"]["total"] == 3                                     # the future entry's minute is in the window too
+    hour = dashboard.build_stats(entries, NOW, "7d")["degraded"]["last_hour"]
+    assert (hour["offline"], hour["model_error"], hour["total"]) == (1, 1, 2)
+    assert hour["latest"] == (NOW - timedelta(minutes=10)).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def test_degraded_is_zero_when_everything_was_judged_normally():
+    d = dashboard.build_stats([_entry(5, via="model"), _entry(6)], NOW, "24h")["degraded"]
+    assert d["total"] == 0 and d["share"] == 0.0
+    assert d["last_hour"] == {"offline": 0, "model_error": 0, "total": 0, "latest": None}
+    empty = dashboard.build_stats([], NOW, "24h")["degraded"]
+    assert empty["total"] == 0 and empty["last_hour"]["latest"] is None
+
+
+def test_recent_rows_say_who_judged_them():
+    rows = dashboard.build_stats([_entry(1, via="offline"), _entry(2, via="model"), _entry(3)], NOW)["recent"]
+    assert [r["via"] for r in rows] == ["offline", "model", None]
+
+
 # --- page and headers ---------------------------------------------------------------------------
 
 def test_csp_allows_only_the_nonce_and_nothing_external():
@@ -389,3 +421,10 @@ def test_page_drops_a_response_for_a_window_that_is_no_longer_selected():
     body = html[start:html.index("function setWindow", start)]
     assert "var win = state.window;" in body and 'encodeURIComponent(win)' in body
     assert body.index("if (win !== state.window) return;") < body.index("state.data = data;")
+
+
+def test_page_has_the_degraded_indicator_and_the_start_at_login_card():
+    html = dashboard.render_page("N0NC3", "T0K3N")
+    for needle in ("Degraded", "Judged without the model", "Judged by", "Start at login", "/api/service/", "no model"):
+        assert needle in html, needle
+    assert html.count("<script") == 1 and html.count("<style") == 1 and "style=" not in html and "innerHTML" not in html

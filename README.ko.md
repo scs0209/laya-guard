@@ -387,6 +387,8 @@ laya-guard dashboard   # 같은 내용을 로컬 웹 페이지로 (대시보드 
 | `LAYA_GUARD_REVIEW` | 환경변수 (Claude Code 훅) | `ask` — `review`를 권한 프롬프트로 사람에게 묻기, `pass`면 묻지 않고 통과 |
 | `LAYA_GUARD_BIN` | 환경변수 (훅/어댑터) | `laya-guard` — 오프라인 검사에 쓰는 CLI |
 | `--no-warmup` | `laya-guard serve` | off — 서버가 대기하기 전에 모델을 먼저 올림 |
+| `LAYA_GUARD_ALERT_CMD` | 환경변수 (훅·서버) | 없음 — 모델 없이 판정한 호출이 생기면 (장애마다 한 번, 백그라운드로) 실행하는 셸 명령. [계속 실행해 두기](#계속-실행해-두기와-장애-알림) 참고 |
+| `LAYA_GUARD_ALERT_COOLDOWN` | 환경변수 | `600` — 같은 종류의 알림이 다시 실행되기까지의 초 |
 | block/review 임계값 | `policy.yaml` → `defaults` | 0.8 / 0.45 |
 | 모델 체크포인트 | `policy.yaml` → `defaults.model` | `multilingual` |
 
@@ -415,6 +417,29 @@ laya-guard dashboard   # 같은 내용을 로컬 웹 페이지로 (대시보드 
 길이만), 서버는 어떻게 판정했는지(`via: "model"`, `"regex"`, `"allowlist"`, 모델 오류 뒤의 `"heuristic"`, `"limit"`)를
 기록하며, `laya-guard stats`는 서버가 꺼져 있거나 모델이 오류를 낸 상태에서 모델 없이 판정한 호출 수를 보여줍니다. MOCK
 모드는 장애가 아니라 선택이므로 세지 않습니다.
+
+### 계속 실행해 두기와 장애 알림
+
+서버를 직접 기억해서 켜야 하는 가드는 그 자체가 단일 장애점이므로, **원하시면** laya-guard가 서버를 대신 켜 줍니다.
+`laya-guard service install`은 macOS LaunchAgent(`~/Library/LaunchAgents/com.laya-guard.server.plist`)나 Linux systemd
+사용자 유닛(`~/.config/systemd/user/laya-guard.service`)을 파일 내용을 먼저 보여준 뒤 작성하고, 서버를 지금과 로그인할
+때마다 시작하며(비정상 종료 뒤에는 30초 간격으로 다시 시작), 모델은 미리 올립니다(시작마다 약 1.4 GB, 5초).
+`--no-warmup`이면 첫 호출 때 올리고 대기 중에는 약 90 MB만 씁니다. 직접 켜 둔 서버가 포트를 쥐고 있으면 그대로 두고,
+그 서버가 멈추면 서비스가 이어받습니다. `laya-guard service status`로 상태를, `laya-guard service uninstall`로 제거를
+할 수 있고, 대시보드 Overview의 "Start at login"도 같은 스위치입니다. 훅은 이와 무관하게, 서버가 없으면 지금처럼 오프라인
+검사를 씁니다. Windows는 아직 지원하지 않습니다. 서버가 읽는 환경변수(`LAYA_GUARD_ALERT_CMD`, `LAYA_GUARD_LOG_PATH` 등)는
+설치할 때 파일로 복사되고, 파일은 본인만 읽을 수 있습니다.
+
+최근 1시간 안에 모델 없이 판정한 호출이 있으면 대시보드가 **Degraded**(주황색, 안내 문구와 "Judged without the model"
+카드)로 바뀌고, 각 호출에는 누가 판정했는지가 표시됩니다. 알림을 받으려면 `LAYA_GUARD_ALERT_CMD`에 아무 셸 명령이나
+지정하세요. 장애 종류(`server-down`: 서버가 꺼졌을 때도 살아 있는 유일한 코드인 훅의 오프라인 대체 경로에서, `model-error`:
+서버에서)마다 `LAYA_GUARD_ALERT_COOLDOWN`초에 한 번만 백그라운드로 실행됩니다. 내용은 명령줄이 아니라
+`LAYA_GUARD_ALERT_KIND`와 `LAYA_GUARD_ALERT_MESSAGE` 환경변수로 전달되고, 훅은 이 명령을 기다리지도, 실패 때문에 실패하지도
+않습니다. macOS 예시:
+
+```bash
+export LAYA_GUARD_ALERT_CMD='osascript -e "display notification \"$LAYA_GUARD_ALERT_MESSAGE\" with title \"laya-guard\""'
+```
 
 전체 256K자 또는 한 줄 16K자를 넘는 입력은 읽지 않고 차단합니다. 일부 정규식은 한 줄
 길이에 대해 제곱 시간이라, 200KB 한 줄이 48초 걸려 훅 타임아웃을 넘길 수 있었습니다.
