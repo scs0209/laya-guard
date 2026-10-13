@@ -502,6 +502,26 @@ def test_english_prose_with_a_hash_reaches_the_model_intact(monkeypatch):
     assert guard._strip_comments("find . -name x  # note") == "find . -name x"
     assert guard._strip_comments("if true; then rm -rf x; fi  # note") == "if true; then rm -rf x; fi"
 
+def test_heredoc_bodies_are_kept_verbatim():
+    # heredoc 본문은 데이터(쓰는 파일·넘기는 스크립트)라 `#` 줄도 모델이 봐야 한다
+    text = "cat > run.sh <<'EOF'  # write the script\n#!/bin/sh\n# keep me\nrm -rf build\nEOF\nls  # after"
+    assert guard._strip_comments(text) == "cat > run.sh <<'EOF'\n#!/bin/sh\n# keep me\nrm -rf build\nEOF\nls"
+    assert guard._strip_comments("cat <<-X\n\t# keep\n\tX\nls  # c") == "cat <<-X\n\t# keep\n\tX\nls"
+    assert guard._strip_comments("cat <<A <<B\n# a\nA\n# b\nB\nls # c") == "cat <<A <<B\n# a\nA\n# b\nB\nls"
+
+def test_decoys_that_look_like_heredocs_do_not_stop_stripping():
+    # here-string, 산술 시프트, 종결자 없는 `<<EOF`는 heredoc이 아니다: 뒤의 주석은 계속 뗀다
+    assert guard._strip_comments("echo <<<hello  # note") == "echo <<<hello"
+    assert guard._strip_comments("echo $((1<<y))\n# routine\nls") == "echo $((1<<y))\n\nls"
+    assert guard._strip_comments("cat <<EOF\n# c\nls") == "cat <<EOF\n\nls"
+
+def test_model_sees_heredoc_bodies_with_their_hash_lines(monkeypatch):
+    seen = _fake_model(monkeypatch)
+    monkeypatch.setattr(guard, "is_mock", lambda: False)
+    text = "cat > x <<'EOF'\n# keep me\nEOF"
+    judge(text)
+    assert seen == [text]
+
 def test_offline_judge_strips_comments_for_the_safe_lane():
     # 서버가 꺼진 폴백도 주석이 안전 명령 판정을 깨뜨리지 않아야 한다 (fail-closed에서도 통과)
     v = guard.judge_offline("make  # build it", fail_closed=True)

@@ -363,16 +363,47 @@ def _looks_like_shell(text: str) -> bool:
             return bool(_CMD_HEAD.match(s)) and first not in _PROSE_STARTERS
     return False
 
+_HEREDOC = re.compile(r"<<(-?)[ \t]*(?:'([^'\n]+)'|\"([^\"\n]+)\"|\\?([A-Za-z_][A-Za-z0-9_]*))")
+
+def _heredoc_at(text: str, i: int):
+    """(delimiter, tabs_allowed) if a heredoc operator starts at text[i], else None.
+
+    A heredoc only counts if a terminator line exists: bash would read an unterminated one to
+    the end, but treating that as a heredoc would stop us stripping the comments after it, and
+    an attacker could use that as a decoy."""
+    m = _HEREDOC.match(text, i)
+    if not m:
+        return None
+    delim, tabs = m.group(2) or m.group(3) or m.group(4), bool(m.group(1))
+    terminator = re.compile(r"^" + ("\t*" if tabs else "") + re.escape(delim) + r"$", re.M)
+    return (delim, tabs) if terminator.search(text, m.end()) else None
+
+def _copy_heredoc_bodies(text: str, i: int, heredocs: list, out: list[str]) -> int:
+    """Copy the bodies of the heredocs opened on the line that just ended, verbatim."""
+    n = len(text)
+    for delim, tabs in heredocs:
+        while i < n:
+            end = text.find("\n", i)
+            line = text[i:] if end == -1 else text[i:end]
+            out.append(line + ("\n" if end != -1 else ""))
+            i = n if end == -1 else end + 1
+            if (line.lstrip("\t") if tabs else line) == delim:
+                break
+    heredocs.clear()
+    return i
+
 def _strip_comments(text: str) -> str:
     """Drop shell comments (`# …` to end of line); return text unchanged if it isn't shell.
 
     Quote-aware, same rule as the shell: `#` only starts a comment at the start of a word,
-    so `'…#…'`, `"…#…"`, `\\#`, `$#`, `${#x}`, `a#b` and `http://x/#frag` stay. The result is
-    only ever judged, never executed, so a stray heredoc line being dropped is harmless."""
+    so `'…#…'`, `"…#…"`, `\\#`, `$#`, `${#x}`, `a#b` and `http://x/#frag` stay. Heredoc bodies
+    are data (a file the command writes, a script it pipes), so they are kept verbatim,
+    including their `#` lines; `<<<` and `$((1<<y))` are not heredocs."""
     if _is_korean(text) or not _looks_like_shell(text):
         return text
     out: list[str] = []
-    quote, i, n = "", 0, len(text)
+    heredocs: list[tuple[str, bool]] = []     # opened on the current line, read after its newline
+    quote, i, n, arith_end = "", 0, len(text), -1
     while i < n:
         c = text[i]
         if c == "\\" and quote != "'" and i + 1 < n:
@@ -384,6 +415,13 @@ def _strip_comments(text: str) -> str:
                 quote = ""
         elif c in "'\"":
             quote = c
+        elif c == "$" and text.startswith("$((", i):
+            end = text.find("))", i)
+            arith_end = n if end == -1 else end + 2
+        elif c == "<" and i >= arith_end and (i == 0 or text[i - 1] != "<"):
+            opened = _heredoc_at(text, i)
+            if opened:
+                heredocs.append(opened)
         elif c == "#" and (i == 0 or text[i - 1] in _COMMENT_AFTER):
             end = text.find("\n", i)
             if end == -1:
@@ -392,6 +430,8 @@ def _strip_comments(text: str) -> str:
             continue
         out.append(c)
         i += 1
+        if c == "\n" and heredocs:
+            i = _copy_heredoc_bodies(text, i, heredocs, out)
     stripped = "\n".join(line.rstrip() for line in "".join(out).split("\n")).strip()
     return stripped or text
 
