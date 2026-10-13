@@ -224,6 +224,7 @@ def agents(client, tmp_path, monkeypatch):
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)          # CI runners set it; plugin paths must stay under HOME
     stub = tmp_path / "laya-guard"
     stub.write_text(f'#!/bin/sh\nPYTHONPATH="{Path(__file__).resolve().parent.parent / "src"}" '
                     f'exec "{sys.executable}" -m laya_guard.cli "$@"\n')
@@ -379,3 +380,12 @@ def test_a_hand_written_entry_needs_force_and_bad_requests_are_refused(agents):
     agents.settings.write_text("{nope", encoding="utf-8")
     assert agents.post("install", {"mode": "preview"}).status_code == 400                     # invalid JSON is refused
     assert agents.settings.read_text() == "{nope"
+
+
+def test_page_drops_a_response_for_a_window_that_is_no_longer_selected():
+    # a slow 24h poll must not overwrite the page after the user pressed 1 for the last hour
+    html = dashboard.render_page("N0NC3")
+    start = html.index("function load(fresh)")
+    body = html[start:html.index("function setWindow", start)]
+    assert "var win = state.window;" in body and 'encodeURIComponent(win)' in body
+    assert body.index("if (win !== state.window) return;") < body.index("state.data = data;")
