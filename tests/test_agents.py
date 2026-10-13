@@ -153,6 +153,18 @@ def test_gemini_entry_and_its_hooks_switch(home):
     assert fix.outcome == "updated" and read_json(path)["tools"]["enableHooks"] is True
 
 
+def test_gemini_says_when_the_switch_also_wakes_up_other_tools_hooks(home):
+    path = home / ".gemini" / "settings.json"                # a real settings.json: another tool's hooks, no switch
+    path.parent.mkdir()
+    path.write_text(json.dumps({"hooks": {"BeforeTool": [{"matcher": "x", "hooks": [OTHER_HOOK]}], "SessionStart": []}}))
+    p = plan("install", "gemini-cli", home)
+    assert any("BeforeTool" in n and "start running too" in n for n in p.notes)
+    assert not any("SessionStart" in n for n in p.notes)     # an empty event isn't a hook that would start running
+    clean = home / "other" / ".gemini" / "settings.json"
+    clean.parent.mkdir(parents=True)
+    assert not any("start running" in n for n in plan("install", "gemini-cli", home / "other").notes)
+
+
 def test_qwen_windsurf_and_codex_json_entries(home):
     apply("install", "qwen-code", home)
     hook = _grouped(read_json(home / ".qwen" / "settings.json"), "PreToolUse", "^run_shell_command$")

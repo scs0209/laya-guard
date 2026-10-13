@@ -798,6 +798,11 @@ def _plan_json(action, spec, scope, home, project_dir, bin_override, matcher, fo
         data, outcome = plan_install(settings, command, matcher or spec.matcher, force, spec)
         notes = [f"Turns on `{'.'.join(p)}`, which {spec.name} needs for hooks to run."
                  for p in _flag_paths_missing(settings.data, spec)] if outcome in ("added", "updated") else []
+        hooks = settings.data.get("hooks")
+        already = [e for e, items in hooks.items() if items] if notes and isinstance(hooks, dict) else []
+        if already:                         # a switch that was off also kept the other tools' hooks from running
+            notes.append(f"The hooks already in this file ({', '.join(already)}) were switched off until now, so "
+                         "they start running too.")
         existing = find_entries(settings.data, spec)[0][2][spec.command_key] if outcome == "manual" else ""
         return Plan(action, spec.id, scope, [_json_artifact(settings, data, spec)], outcome, command,
                     existing=existing, notes=notes)
