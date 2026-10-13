@@ -35,6 +35,9 @@ each tool call and exits 2 on `block`. On `review` it prints a `permissionDecisi
 JSON so Claude Code asks you; set `LAYA_GUARD_REVIEW=pass` to let `review` through.
 In non-interactive runs (`claude -p`) nobody can answer, so the `ask` is denied.
 
+To measure wrong verdicts from your own usage (overblocks, missed attacks), add the
+opt-in observer and label CLI from [`observe/`](observe/); they never block or ask.
+
 ## OpenCode
 
 Copy `opencode/laya-guard.ts` to `.opencode/plugins/laya-guard.ts` (project)

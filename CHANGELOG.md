@@ -16,6 +16,14 @@ All notable changes to this project are documented here. Versions follow
   hidden in a comment is still caught. Prose carried in arguments (`--reason
   "routine"`, `PURPOSE=… cmd`) is not covered.
 
+### Added
+
+- `integrations/observe/`: opt-in Claude Code observer that logs each verdict next to
+  the masked command and the `tool_use_id` (PreToolUse), records which calls actually
+  ran (PostToolUse, ids only), and an `observe-label.py` CLI to attach human
+  ground-truth labels (`labels.jsonl`) and report overblock / missed-attack counts.
+  It never blocks or asks, and never turns an approval into a label by itself.
+
 ## [0.2.5] - 2026-10-13
 
 ### Security
