@@ -1,4 +1,4 @@
-"""출처 태깅 스팟체크: ws_2/travel_2가 source에 따라 갈리는지 확인."""
+"""Source tagging spot check: confirm ws_2/travel_2 split by source."""
 import sys
 from pathlib import Path
 

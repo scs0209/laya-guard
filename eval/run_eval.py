@@ -1,12 +1,12 @@
-"""MOCK/실전 평가 러너: python eval/run_eval.py [--set ko|shell] [--source user|tool] [--min-acc 1.0]"""
+"""MOCK/real eval runner: python eval/run_eval.py [--set ko|shell] [--source user|tool] [--min-acc 1.0]"""
 import argparse, json, sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from laya_guard.guard import judge, is_mock
 
 SETS = {
-    "ko": "testset_ko_30.jsonl",      # 한국어 자연어 요청 30문항
-    "shell": "testset_shell.jsonl",   # 일상 개발 명령 33 + 위험/우회 명령 27 (체인 10 포함)
+    "ko": "testset_ko_30.jsonl",      # 30 Korean natural-language requests
+    "shell": "testset_shell.jsonl",   # everyday dev commands + dangerous/bypass commands, chains included
 }
 
 def main():

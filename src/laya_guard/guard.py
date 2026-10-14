@@ -96,8 +96,8 @@ def _regex_hit(text: str) -> Policy | None:
             first_review = first_review or pol
     return first_review
 
-# 안전 레인은 단일 명령에만 열린다: 체이닝·파이프·리다이렉트·치환 금지,
-# 임의 프로그램 실행/파일 쓰기 플래그 금지 (go test -exec, git log --output 등).
+# The safe lane only opens for a single command: no chaining, pipes, redirects or
+# substitution, and no flags that run programs or write files (go test -exec, git log --output, …).
 _SHELL_META = re.compile(r"[;&|`$<>(){}\\\n\r]")
 _RISKY_FLAG = re.compile(
     r"(?:^|\s)--?(?:exec|toolexec|config|output|upload-pack|receive-pack"
@@ -127,7 +127,7 @@ _WRITE_HINTS = ["실행", "진행", "승인", "보내", "전송", "삭제", "결
 def _mock_score(text: str, hit: Policy | None) -> tuple[str, float]:
     if hit is None:
         t = text.lower()
-        # 읽기 전용 의도가 명확하면 suspicious 단어 포함해도 allow (조회/요약/문서찾기)
+        # Clearly read-only intent (look up, summarize, find docs) is allowed even with a suspicious word
         if any(h in text for h in _READONLY_HINTS) and not any(w in text for w in _WRITE_HINTS):
             return "allow", 0.1
         suspicious = ["결제", "송금", "환불", "refund", "sudo", "삭제", "drop", "curl", "rm ", "인증"]
@@ -139,16 +139,16 @@ def _mock_score(text: str, hit: Policy | None) -> tuple[str, float]:
         return "block", 0.92
     return "review", 0.65
 
-# 결정성: 기본 CPU 고정. MPS 자동선택은 프로세스마다 확률이 미세하게
-# 달라져 경계 케이스가 뒤집히는 것을 4-프로세스 실험으로 확인.
-# LAYA_GUARD_DEVICE=mps 등으로 덮어쓸 수 있음(속도 우선 시), 단 재현성 포기.
+# Determinism: CPU by default. With MPS auto-selected, probabilities drift slightly
+# between processes and borderline cases flip (confirmed with a 4-process run).
+# Override with LAYA_GUARD_DEVICE=mps etc. for speed, at the cost of reproducibility.
 GUARD_DEVICE = os.environ.get("LAYA_GUARD_DEVICE", "cpu")
 
-# 모델 한 번 호출이 읽는 최대 길이. 예전에는 text[:4000]만 넘겨 4000자 뒤는 모델이 못 봤다
-# (위험 명령 앞에 무해한 긴 앞부분을 붙이면 block이 review로 내려갔다).
+# Max length one model call reads. Only text[:4000] used to be passed, so the model never
+# saw anything past 4000 chars (a long harmless preamble turned a block into a review).
 MODEL_WINDOW_CHARS = 4_000
-MODEL_WINDOW_OVERLAP = 200       # 한 줄이 창보다 길 때 자른 경계에 걸친 명령을 놓치지 않도록
-MAX_MODEL_WINDOWS = 6            # 창당 ~0.1~0.8초: 훅 타임아웃 안에서 끝나도록 상한을 둔다
+MODEL_WINDOW_OVERLAP = 200       # so a command straddling a cut in an over-long line isn't missed
+MAX_MODEL_WINDOWS = 6            # ~0.1-0.8s per window: capped to finish within the hook timeout
 
 def _model_windows(text: str) -> tuple[list[str], bool]:
     """Split text into windows the model can read: (windows, truncated).
@@ -162,7 +162,7 @@ def _model_windows(text: str) -> tuple[list[str], bool]:
     windows: list[str] = []
     cur = ""
     for line in text.split("\n"):
-        while len(line) > MODEL_WINDOW_CHARS:           # 긴 한 줄: 겹치게 자른다
+        while len(line) > MODEL_WINDOW_CHARS:           # over-long line: cut with overlap
             if cur:
                 windows.append(cur); cur = ""
             windows.append(line[:MODEL_WINDOW_CHARS])
@@ -230,7 +230,7 @@ def _laya_predict(text: str) -> tuple[str, float]:
         p_review = float(probs.get("review", 0.0))
         risk = p_block + 0.5 * p_review
     except Exception:
-        # fallback: score는 legend 인덱스 기대값(0..N) → 0..1로 정규화
+        # fallback: score is the expected legend index (0..N), normalized to 0..1
         risk_raw = ans.get("risk", {}).get("score", 0.5)
         legend = ans.get("risk", {}).get("legend", {}) or {}
         try:
@@ -283,9 +283,9 @@ def warmup() -> bool:
         log.warning("Laya model warmup failed (%s: %s)", type(e).__name__, e)
         return False
 
-# 출처별 임계값: 사용자는 관대하게, 외부 주입원(tool/email/web)은 엄격하게.
-# ws_2(외부인 초대), travel_2(주입된 캘린더 생성)처럼 문장만으로 구분 불가한
-# 간접 인젝션은 출처가 유일한 단서다.
+# Per-source thresholds: lenient for the user, strict for injection sources (tool/email/web).
+# For indirect injections the text alone can't separate, like ws_2 (inviting an outsider)
+# and travel_2 (an injected calendar event), the source is the only signal.
 SOURCE_PROFILES = {
     "user": {"block": 0.8, "review": 0.45},
     "tool": {"block": 0.6, "review": 0.30},
@@ -296,8 +296,8 @@ SOURCE_PROFILES = {
 def _is_korean(text: str) -> bool:
     return bool(re.search("[가-힣]", text))
 
-# 체인 분할: 최상위 ; && || & 에서만 자른다 (따옴표·$()·``·괄호 안은 그대로).
-# 각 조각이 소문자 명령(또는 VAR=값 접두)으로 시작할 때만 셸 체인으로 본다.
+# Chain split: only at top-level ; && || & (never inside quotes, $(), `` or parentheses).
+# It counts as a shell chain only if every part starts with a lowercase command (or a VAR=value prefix).
 _CHAIN_MAX = 8
 _CMD_HEAD = re.compile(r"(?:[A-Za-z_]\w*=\S*\s+)*[a-z0-9_./~-]+(?:\s|$)")
 _ACTION_RANK = {"allow": 0, "review": 1, "block": 2}
@@ -340,16 +340,18 @@ def _split_chain(text: str) -> list[str]:
         return [text]
     return parts
 
-# 셸 주석(`# …`)은 에이전트가 마음대로 쓸 수 있는 문장인데 모델이 그것에 반응한다:
-# `kubectl delete namespace prod  # clean stale build output`은 block(0.98)에서 allow(0.45)로
-# 내려갔다. 그래서 모델과 안전 레인은 주석을 뗀 명령만 보고, 정규식은 원문 전체를 계속 본다.
-# 셸처럼 보이는 입력(첫 비주석 줄이 소문자 명령으로 시작)과 user/tool 출처에만 적용한다.
-# 이메일·웹 같은 비신뢰 본문과 한국어 자연어에서는 `#`이 주석이 아니라 데이터다.
+# Shell comments (`# …`) are prose the agent can write freely, and the model reacts to them:
+# `kubectl delete namespace prod  # clean stale build output` dropped from block (0.98) to
+# allow (0.45). So the model and the safe lane see the command without comments, while the
+# regexes keep seeing the whole original text. Applies only to shell-looking input (the first
+# non-comment line starts with a lowercase command) from user/tool sources. In untrusted
+# email/web bodies and in Korean natural language, `#` is data, not a comment.
 _COMMENT_AFTER = " \t\n;&|()"
 
-# 영어 문장은 소문자 단어로 시작해도 셸이 아니다 ("please review #123 …"의 `#123 …`은 주석이
-# 아니다). 흔한 문장 시작 단어만 걸러내는 최선 노력 휴리스틱이다. 실제 명령이거나 셸 키워드인
-# 단어(find, which, who, let, help, if, do …)는 넣지 않는다.
+# An English sentence isn't shell just because it starts with a lowercase word (the `#123 …`
+# in "please review #123 …" is not a comment). This is a best-effort filter on common sentence
+# starters. Words that are real commands or shell keywords (find, which, who, let, help, if,
+# do …) are deliberately left out.
 _PROSE_STARTERS = frozenset({
     "please", "can", "could", "would", "should", "will", "what", "how", "why", "when", "where",
     "i", "we", "you", "show", "tell", "explain", "summarize", "summarise", "describe", "review",
@@ -435,8 +437,8 @@ def _strip_comments(text: str) -> str:
     stripped = "\n".join(line.rstrip() for line in "".join(out).split("\n")).strip()
     return stripped or text
 
-# 정규식 일부(X.*Y)는 한 줄 길이에 대해 제곱 시간이다: `curl `×4만(200KB)이 48초.
-# 훅 타임아웃(30초)을 넘기면 fail-open 우회가 되므로, 읽기 전에 길이로 차단한다.
+# Some regexes (X.*Y) are quadratic in line length: 40,000 × `curl ` (200KB) took 48s.
+# Running past the hook timeout (30s) becomes a fail-open bypass, so block by length before reading.
 MAX_INPUT_CHARS = 256_000
 MAX_LINE_CHARS = 16_000
 
@@ -451,25 +453,25 @@ def _oversized_verdict(text: str, mock: bool) -> Verdict:
     return Verdict(action="block", risk=1.0, policy_id="oversized", reason=reason,
                    mock=mock, verdict_source="limit")
 
-# 패키지 스크립트 검사: `npm test`는 안전 명령이지만 실제로는 package.json의
-# scripts.test를 실행한다. 그 스크립트를 정규식 정책으로 검사한다.
-# 모델은 쓰지 않는다: next build, vite build, jest 같은 평범한 스크립트를 block한다.
+# Package script check: `npm test` is a safe command, but what it actually runs is
+# scripts.test in package.json, so those scripts are checked against the regex policies.
+# Not the model: it blocks ordinary scripts like next build, vite build and jest.
 _RUNNER = re.compile(r"(npm|pnpm|yarn|bun) (?:run (\S+)|(test|build|lint))((?: \S+)*)")
-# 다른 디렉터리의 package.json을 쓰게 하는 플래그: 어떤 스크립트가 도는지 알 수 없다.
+# Flags that use another directory's package.json: we can't tell which scripts run.
 _LOCATION_FLAG = re.compile(
     r"--(?:prefix|dir|cwd|workspaces?|filter|recursive|global)(?:=.*)?|-(?:C|w|F)\S*|-(?:r|g|ws)")
-_LOST_CWD = "<unknown cwd>"  # 체인 중간에 cd -, pushd 등으로 위치를 놓친 경우
-# 악성 package.json이 검사 시간을 늘려 훅 타임아웃(→ fail open)을 노리지 못하게
-# 스크립트는 한 번씩만, 길이·크기 상한 안에서만 검사한다.
+_LOST_CWD = "<unknown cwd>"  # location lost mid-chain via cd -, pushd, etc.
+# Each script is checked once and within length/size caps, so a malicious package.json
+# can't stretch the check past the hook timeout (and fail open).
 MAX_SCRIPT_DEPTH = 3
 MAX_SCRIPT_CHARS = 4_000
 MAX_PACKAGE_JSON_BYTES = 256_000
 
 @dataclass
 class _ScriptFinding:
-    key: str                        # 문제가 된 스크립트 (test, pretest …)
-    hit: Policy | None = None       # 스크립트 본문이 걸린 정규식 정책
-    unresolved: str | None = None   # 무엇이 실행될지 알 수 없는 이유 (en)
+    key: str                        # the offending script (test, pretest …)
+    hit: Policy | None = None       # regex policy the script body matched
+    unresolved: str | None = None   # why we can't tell what runs (en)
 
     def rank(self) -> int:
         if self.hit is not None and self.hit.action_on_regex == "block":
@@ -483,7 +485,7 @@ def _runner_script(cmd: str) -> tuple[str, list[str]] | None:
         return None
     tool, name = m[1], m[2] or m[3]
     if tool == "bun" and m[3] in ("test", "build"):
-        return None  # bun 자체 테스트 러너·번들러: package.json 스크립트가 아니다
+        return None  # bun's own test runner/bundler, not a package.json script
     return name, m[4].split()
 
 def _next_cwd(segment: str, cwd: str | None) -> str | None:
@@ -523,7 +525,7 @@ def _package_scripts(cwd: str) -> tuple[str, dict[str, str]] | None:
         except (OSError, UnicodeDecodeError):
             return None
         except ValueError:
-            return str(d), {}  # 깨진 JSON이면 패키지 매니저가 실패한다
+            return str(d), {}  # broken JSON: the package manager fails
         scripts = data.get("scripts") if isinstance(data, dict) else None
         if not isinstance(scripts, dict):
             return str(d), {}
@@ -572,7 +574,7 @@ def _scan_script(key: str, body: str, pkg_dir: str, depth: int,
     worst = _ScriptFinding(key, hit=hit) if hit is not None else None
     if worst is not None and worst.rank() == 2:
         return worst
-    # 스크립트 안의 `npm run build` 같은 중첩 실행도 따라간다
+    # Follow nested runs inside a script, like `npm run build`
     seg_cwd: str | None = pkg_dir
     for seg in _split_chain(body):
         nested = _check_scripts(" ".join(seg.split()), seg_cwd, depth + 1, seen)
@@ -611,7 +613,7 @@ def judge_offline(tool_call: str, fail_closed: bool = False, cwd: str | None = N
                        verdict_source="offline")
     judged = True
     seg_cwd = cwd
-    # 안전 레인은 주석을 뗀 명령으로 판단한다 (정규식은 위에서 원문 전체에 적용)
+    # The safe lane judges the command without comments (the regexes above saw the whole original)
     for seg in _split_chain(_strip_comments(tool_call)):
         if not _safe_command(seg):
             judged = False
@@ -641,13 +643,13 @@ def judge(tool_call: str, source: str = "user", cwd: str | None = None) -> Verdi
     that run package.json scripts have those scripts checked too."""
     if _oversized(tool_call):
         return _oversized_verdict(tool_call, mock=is_mock())
-    # 모델·안전 레인은 주석을 뗀 명령만 본다 (정규식은 원문 전체를 본다)
+    # The model and the safe lane only see the command without comments (the regexes see the whole original)
     text = _strip_comments(tool_call) if source in ("user", "tool") else tool_call
     segments = _split_chain(text)
     if len(segments) == 1:
         return _judge_one(text, source, cwd, regex_text=tool_call)
-    # 체인은 명령마다 따로 심판해 가장 나쁜 결과를 쓴다.
-    # 명령 경계를 넘는 패턴(curl …; … | sh)은 전체 문자열 정규식이 잡는다.
+    # Each command in a chain is judged on its own and the worst verdict wins.
+    # Patterns spanning commands (curl …; … | sh) are caught by the whole-string regexes.
     verdicts = []
     seg_cwd = cwd
     for seg in segments:
@@ -670,7 +672,7 @@ def _judge_one(tool_call: str, source: str, cwd: str | None = None,
     if safe and cwd is not None:
         finding = _check_scripts(" ".join(tool_call.split()), cwd)
         if finding is not None:
-            # 정규식 결과만 쓰므로 위험도는 정책 단락과 같은 고정값 (review는 출처 보정에도 review 유지)
+            # Regex result only, so risk is the same fixed value as the policy short-circuit (a review stays review after the source adjustment)
             blocked = finding.rank() == 2
             return Verdict(
                 action="block" if blocked else "review", risk=0.92 if blocked else 0.55,
@@ -686,10 +688,10 @@ def _judge_one(tool_call: str, source: str, cwd: str | None = None,
         action, risk = "block", 0.92
     else:
         action, risk, model_ok = _model_or_fallback(tool_call, hit)
-        # 정규식 review 적중은 하한선: Laya가 allow라도 review로 올림 (상향만 가능)
+        # A review-level regex hit is a floor: raise Laya's allow to review (only ever upward)
         if hit is not None and hit.action_on_regex == "review" and action == "allow":
             action, risk = "review", max(risk, 0.55)
-    # 출처 보정: 비신뢰 출처는 임계값 강화 (상향만)
+    # Source adjustment: stricter thresholds for untrusted sources (only ever upward)
     prof = SOURCE_PROFILES.get(source, SOURCE_PROFILES["user"])
     if action == "allow" and risk >= prof["review"]:
         action = "review"
@@ -704,7 +706,7 @@ def _judge_one(tool_call: str, source: str, cwd: str | None = None,
     else:
         src_detail = "model"
     pid = hit.id if hit else "general"
-    # reason 언어: 입력에 한글이 있으면 한국어, 아니면 영어 (API 기본값은 영어권 대응)
+    # Reason language: Korean if the input contains Hangul, English otherwise (the API default)
     ko = _is_korean(tool_call)
     if hit:
         reason = hit.message if (ko and hit.message) else (hit.message_en or hit.message)
