@@ -1,5 +1,6 @@
 """laya-guard core: regex prefilter + Laya judge (local, free)."""
 from __future__ import annotations
+import contextlib
 import contextvars
 import json
 import logging
@@ -489,6 +490,25 @@ def _runner_script(cmd: str) -> tuple[str, list[str]] | None:
         return None  # bun's own test runner/bundler, not a package.json script
     return name, m[4].split()
 
+_ROOT: contextvars.ContextVar[str | None] = contextvars.ContextVar("laya_guard_root", default=None)
+
+
+@contextlib.contextmanager
+def confined(root: str):
+    """Inside this block package.json is only looked for within `root`, and a `cd` that leaves it loses the location (so
+    the evaluator says it can't tell where the command runs, instead of reading a real directory). The simulation judges
+    commands of a virtual repository this way; the hooks don't use it."""
+    token = _ROOT.set(os.path.normpath(root))
+    try:
+        yield
+    finally:
+        _ROOT.reset(token)
+
+
+def _inside(path: str, root: str) -> bool:
+    return path == root or path.startswith(root.rstrip(os.sep) + os.sep)
+
+
 def _next_cwd(segment: str, cwd: str | None) -> str | None:
     """Directory the next command in a chain runs in, after `segment` ran in `cwd`."""
     if cwd is None or cwd == _LOST_CWD:
@@ -500,10 +520,13 @@ def _next_cwd(segment: str, cwd: str | None) -> str | None:
         return cwd
     if words[0] == "cd":
         if len(words) == 1:
-            return str(Path.home())
-        if len(words) == 2 and not words[1].startswith("-"):
-            return os.path.normpath(os.path.join(cwd, os.path.expanduser(words[1])))
-        return _LOST_CWD
+            target = str(Path.home())
+        elif len(words) == 2 and not words[1].startswith("-"):
+            target = os.path.normpath(os.path.join(cwd, os.path.expanduser(words[1])))
+        else:
+            return _LOST_CWD
+        root = _ROOT.get()
+        return _LOST_CWD if root is not None and not _inside(target, root) else target
     if words[0] in ("pushd", "popd", "source", ".", "eval", "exec", "builtin", "command"):
         return _LOST_CWD
     return cwd
@@ -515,23 +538,27 @@ def _package_scripts(cwd: str) -> tuple[str, dict[str, str]] | None:
     (the package manager fails, nothing runs).
     """
     start = Path(cwd).expanduser()
+    root = _ROOT.get()
+    if root is not None and not _inside(os.path.normpath(str(start)), root):
+        return None
     for d in (start, *start.parents):
         f = d / "package.json"
-        if not f.is_file():
-            continue
-        try:
-            if f.stat().st_size > MAX_PACKAGE_JSON_BYTES:
+        if f.is_file():
+            try:
+                if f.stat().st_size > MAX_PACKAGE_JSON_BYTES:
+                    return None
+                data = json.loads(f.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError):
                 return None
-            data = json.loads(f.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError):
-            return None
-        except ValueError:
-            return str(d), {}  # broken JSON: the package manager fails
-        scripts = data.get("scripts") if isinstance(data, dict) else None
-        if not isinstance(scripts, dict):
-            return str(d), {}
-        return str(d), {k: v for k, v in scripts.items()
-                        if isinstance(k, str) and isinstance(v, str)}
+            except ValueError:
+                return str(d), {}  # broken JSON: the package manager fails
+            scripts = data.get("scripts") if isinstance(data, dict) else None
+            if not isinstance(scripts, dict):
+                return str(d), {}
+            return str(d), {k: v for k, v in scripts.items()
+                            if isinstance(k, str) and isinstance(v, str)}
+        if root is not None and os.path.normpath(str(d)) == root:
+            break                                     # never look above the root
     return str(start), {}
 
 def _check_scripts(cmd: str, cwd: str, depth: int = 0,
@@ -718,6 +745,12 @@ def _judge_one(tool_call: str, source: str, cwd: str | None = None,
                 policy_id=finding.hit.id if finding.hit is not None else "package-scripts",
                 reason=_script_reason(finding, _is_korean(tool_call)), mock=mock,
                 verdict_source="regex" if finding.hit is not None else "allowlist")
+    if safe and cwd is not None:
+        runner = _runner_script(" ".join(tool_call.split()))
+        if runner is not None:
+            found = _package_scripts(cwd)
+            present = bool(found and any(found[1].get(k) for k in (f"pre{runner[0]}", runner[0], f"post{runner[0]}")))
+            _emit("package-script", key=runner[0], clean=True, found=present)       # `found`: a script of that name was there to read, and nothing in it matched
     model_ok = True
     # What the observer is told is what really happened: rules decided (a safe command or a block-level match, with
     # or without the model), the model isn't in use (mock mode), or the model was called.

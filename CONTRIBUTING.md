@@ -133,6 +133,13 @@ node tests that need no browser (`tests/test_sim_js.py` runs them when `node` is
 `tests/test_sim_browser.py` drives a real headless Chrome through the whole view, with and without WebGL (it needs node 22
 and Chrome or Chromium, and is skipped otherwise; set `LAYA_TEST_CHROME` to point at a binary).
 
+The AI scenario feature (`aisim.py`, `agentbridge.py`, `static/sim/ai-*.js`) is tested without a model: `tests/fake_claude.py`
+writes a stand-in `claude` executable, so the bridge runs as a real child process (argv, stdin, JSON on stdout) and
+`tests/test_ai_routes.py` and `tests/test_sim_ai_browser.py` drive the whole path, including the page. The engine itself is
+tested with a scripted in-process agent in `tests/test_aisim.py`. A new agent adapter (anything with `id`, `name`,
+`detect()` and `complete()`) must be able to turn every tool off; if the agent can read or run things, it doesn't belong
+in `agentbridge`. The engine must keep importing nothing that starts a process (a test enforces it).
+
 If the view starts using another three.js class, or you want to bump three.js, rebuild the bundle (needs node, npm and
 network access) and commit the result:
 

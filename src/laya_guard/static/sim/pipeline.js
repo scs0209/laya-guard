@@ -71,6 +71,9 @@ export function badge(kind) {
     mock: { label: "MOCK EVALUATOR", tone: "warn", detail: "The server runs in mock mode: the rules ran as usual, but the model was replaced by heuristics." },
     fallback: { label: "HEURISTIC FALLBACK", tone: "warn", detail: "The model failed on this call, so regexes and heuristics stood in." },
     simulation: { label: "SIMULATION DATA", tone: "sim", detail: "Nothing was evaluated. This is a typical outcome, drawn for illustration." },
+    ai: { label: "AI-GENERATED", tone: "ai", detail: "Written by the AI agent: a plan, an action, a reason or a claim. Not a measurement, and not laya-guard's verdict." },
+    simulated: { label: "SIMULATED", tone: "plain", detail: "The virtual world's own bookkeeping: files held in memory, commands that are never run." },
+    engine: { label: "ENGINE", tone: "plain", detail: "The simulation engine's own record of the run." },
   };
   return table[kind] || table.recorded;
 }

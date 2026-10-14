@@ -149,6 +149,60 @@ for the page's modules and a tree-shaken, minified [three.js](https://threejs.or
 served read-only from inside the package. The page's CSP gains `'self'` for scripts and styles for that, and still allows
 no external host.
 
+### AI scenarios: describe any situation
+
+The **AI scenario** tab (next to **Attack lab**) takes a situation in your own words, for example *"A coding agent is asked
+to clean up build artifacts in a monorepo, but its cleanup command is far too broad. Show how far it gets."* An AI agent
+interprets it, builds a small virtual repository, and then plays the coding agent step by step while the diorama shows what
+actually happens: it reads and writes the virtual files, and **every command it proposes is judged by the real laya-guard
+evaluator**. The verdict goes back to the agent, which adapts (another route, a message, giving up).
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/scs0209/laya-guard/main/docs/images/ai-scenario-demo.gif" width="860" alt="A recorded AI scenario: the agent reads and changes package.json in a virtual repository, laya-guard blocks npm test, a curl command is held for review and denied, and the outcome card separates the run's facts from the AI's account">
+</p>
+<p align="center"><sub>One run: a poisoned <code>npm test</code> script is blocked, a download is held and denied. Recorded with a scripted stand-in for the agent (so it can be repeated) and the mock evaluator; the labels on screen say so. A real agent takes a few seconds per decision.</sub></p>
+
+- **Your own agent, nothing to configure**: it runs the Claude Code you already have (`claude` on your PATH and logged
+  in) headless, once per decision. No API key, no hosted service, no Ollama, nothing to copy or paste. Only Claude Code is
+  wired in, because it is the one agent CLI with a switch that turns every tool off (`--tools ""`, plus no settings, hooks,
+  MCP servers, skills or saved session, in an empty temporary directory), so it can only answer in text. Gemini CLI,
+  Cursor and OpenCode have no such switch; `laya_guard.agentbridge.register()` is where another adapter would go.
+- **The loop**: interpret the prompt into a plan and virtual files, then up to *N* steps of *observe, ask the agent, validate,
+  apply*. The agent picks exactly one action per step from a fixed list (`read_file`, `write_file`, `list_dir`,
+  `run_command`, `message`, `finish`); anything that doesn't fit the schema is rejected and asked again (twice at most),
+  and the page shows the rejection. An allowed command is recorded as an inert execution, a **held** command waits for you
+  (**Approve** or **Deny**; no answer in 120 s means denied, or choose the policy up front), a blocked command is reported
+  back to the agent.
+- **Nothing is ever run**: the files exist only in memory, a command is only judged (in a throwaway directory holding the
+  virtual files, so a script the *agent* wrote into `package.json` is what gets read), an allowed command's "output" comes from the
+  virtual files for a few read-only commands (`ls`, `cat`, `pwd`, the text of an npm script) and is an `[inert]` notice for
+  everything else, and a run is never written to the verdict log or raises an alert.
+- **Controls, all in the window**: prompt box and examples, **Start**, live streaming, **Pause / Resume**, **Step** (or a
+  step-by-step run), **Stop**, **Run again** after editing the prompt, replay of earlier runs from this session, a history
+  of every action and decision (click a row: files and commands open in the Inspector), and an outcome card.
+- **What is whose**: `AI-GENERATED` is what the agent wrote (plan, actions, reasons, its account); `SIMULATED` is the
+  virtual world's bookkeeping; `REAL` or `MOCK EVALUATOR` is laya-guard's verdict; `ENGINE` is the run's own facts. The
+  outcome card keeps *From the run (facts)* apart from *The AI's account (not a measurement)*; its "if it had been allowed"
+  lines are hypotheses, and nothing was run, so none of it happened.
+- **Limits and cost**: 8 steps by default (up to 20), 10 minutes of working time (time spent paused or waiting for you
+  doesn't count, up to 30 minutes), $2 of reported cost, 120 s per decision, at most 14
+  files of 6000 characters, 2000 characters of prompt. Each decision is one Claude Code call under your own login and
+  plan: a typical 8-step run takes one to two minutes and cost about $0.05 to $0.15 with the cheap model in our checks.
+  Closing the tab doesn't stop a run: press **Stop**, or it ends at its limits or when the server exits (the agent process
+  goes with it).
+- **Consent**: the page asks before the first use per server session. What goes to Claude Code is what you type, the
+  virtual files and laya-guard's verdicts for the run; Claude Code adds its own context to every request (for example your
+  account details and any organisation instructions), which laya-guard doesn't control. Your own `CLAUDE.md` and memory
+  files are switched off for these calls.
+
+Known limits: a model may decline to play an adversarial agent, in which case the run ends early and says so (the outcome
+card states that no command was judged); the AI's story is not a measurement; and laya-guard's own gaps show as they are,
+so a poisoned `npm test` script that the rules don't match is *allowed* and drawn that way.
+
+Under the hood: `GET /api/sim/ai/status`, `POST /api/sim/ai/consent`, `POST /api/sim/ai/runs`,
+`GET /api/sim/ai/runs/<id>/events?after=<n>` (NDJSON, resumable) and `POST /api/sim/ai/runs/<id>/control`, with the same
+token, origin and JSON checks as the installers.
+
 ## 15-second demo (no model download)
 
 ```bash

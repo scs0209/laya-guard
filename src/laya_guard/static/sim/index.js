@@ -17,6 +17,7 @@ import { createLab } from "./ui-lab.js";
 import { createInspector } from "./ui-inspector.js";
 import { createTour, tourSeen } from "./ui-tour.js";
 import { createFallback } from "./fallback.js";
+import { createAiSession } from "./ai-session.js";
 
 var MAX_RECORDED_RUNS = 100, MAX_SCENARIO_RUNS = 40;
 var MAX_ANIMATED_PER_SYNC = 6;
@@ -31,7 +32,7 @@ export async function mount(root, bridge) {
     scenarioId: null, mode: "evaluator", busy: false, lastError: null, inFlight: 0, waiting: false, reduced: mq.matches,
     paused: false, evalMock: false, zoneCounts: [0, 0, 0], webgl: true, active: false, synced: false, window: null,
   };
-  var flights = new Map(), stage = null, ui = {}, raf = 0, last = 0, liveSeq = 0;
+  var flights = new Map(), stage = null, aiWorld = null, ui = {}, raf = 0, last = 0, liveSeq = 0;
 
   // ---- the page ------------------------------------------------------------------------------------------------
   root.classList.add("sim");
@@ -62,9 +63,11 @@ export async function mount(root, bridge) {
   var fbEl = el("div", { "class": "sim-fallback", hidden: true });
   var labPanel = el("div", { "class": "sim-panel", id: "sim-panel-lab", role: "tabpanel" });
   var inspPanel = el("div", { "class": "sim-panel", id: "sim-panel-inspector", role: "tabpanel", hidden: true });
+  var aiPanelEl = el("div", { "class": "sim-panel", id: "sim-panel-ai", role: "tabpanel", hidden: true });
   var tabLab = el("button", { type: "button", role: "tab", "aria-selected": "true", "aria-controls": "sim-panel-lab", onclick: function () { showTab("lab"); } }, icon("flask"), "Attack lab");
+  var tabAi = el("button", { type: "button", role: "tab", "aria-selected": "false", "aria-controls": "sim-panel-ai", onclick: function () { showTab("ai"); } }, icon("tour"), "AI scenario");
   var tabInsp = el("button", { type: "button", role: "tab", "aria-selected": "false", "aria-controls": "sim-panel-inspector", onclick: function () { showTab("inspector"); } }, "Inspector");
-  var side = el("div", { "class": "sim-side" }, el("div", { "class": "sim-tabs", role: "tablist" }, tabLab, tabInsp), labPanel, inspPanel);
+  var side = el("div", { "class": "sim-side" }, el("div", { "class": "sim-tabs", role: "tablist" }, tabLab, tabAi, tabInsp), labPanel, aiPanelEl, inspPanel);
   var main = el("div", { "class": "sim-main" }, el("div", { "class": "sim-view" }, wrap, fbEl, tourBox), side);
   var controlsEl = el("div", { "class": "sim-controls" });
   var stripEl = el("ol", { "class": "sim-strip", "aria-label": "Pipeline stations" });
@@ -72,9 +75,9 @@ export async function mount(root, bridge) {
   root.appendChild(bar); root.appendChild(kpisEl); root.appendChild(main); root.appendChild(controlsEl); root.appendChild(stripEl); root.appendChild(eventsEl);
 
   function showTab(name) {
-    var lab = name === "lab";
-    tabLab.setAttribute("aria-selected", String(lab)); tabInsp.setAttribute("aria-selected", String(!lab));
-    labPanel.hidden = !lab; inspPanel.hidden = lab;
+    tabLab.setAttribute("aria-selected", String(name === "lab")); tabAi.setAttribute("aria-selected", String(name === "ai")); tabInsp.setAttribute("aria-selected", String(name === "inspector"));
+    labPanel.hidden = name !== "lab"; aiPanelEl.hidden = name !== "ai"; inspPanel.hidden = name !== "inspector";
+    if (name === "ai" && ui.ai) ui.ai.activate();
   }
 
   // ---- config ---------------------------------------------------------------------------------------------------
@@ -102,6 +105,17 @@ export async function mount(root, bridge) {
     selectPolicy: function (id) {
       app.selection = { kind: "policy", id: id };
       if (stage) { stage.focusPolicy(id); stage.world.clearPolicies(); stage.world.lightPolicy(id, true); }
+      showTab("inspector"); renderAll();
+    },
+    selectFile: function (path) {
+      if (!app.ai.files[path]) return;
+      app.selection = { kind: "file", id: path };
+      if (stage && aiWorld && aiWorld.has(path)) stage.focusPoint(aiWorld.positionOf(path), 2.6, 0.9);
+      showTab("inspector"); renderAll();
+    },
+    selectAgent: function () {
+      app.selection = { kind: "agent", id: "agent" };
+      if (stage && aiWorld && aiWorld.visible) stage.focusStation("agent");
       showTab("inspector"); renderAll();
     },
     selectRun: function (id) { selectRun(id, true); },
@@ -140,6 +154,13 @@ export async function mount(root, bridge) {
   ui.lab = createLab(labPanel, actions);
   ui.insp = createInspector(inspPanel, actions);
   ui.tour = createTour(tourBox, actions);
+  ui.ai = createAiSession({
+    app: app, bridge: bridge, panelRoot: aiPanelEl, stage: function () { return stage; }, world: function () { return aiWorld; },
+    beginLive: beginLive, liveEvent: liveEvent, endLive: endLive, flightDone: flightDone,
+    selectRun: function (id) { selectRun(id, true); }, selectFile: function (path) { actions.selectFile(path); },
+    clearAiRuns: clearAiRuns, showTab: showTab, renderAll: function () { renderAll(); },
+  });
+  setInterval(function () { if (app.active && !aiPanelEl.hidden) ui.ai.update(); }, 1000);          // the "thinking … 12 s" clock
 
   // ---- the stage (3D) or the text fallback ---------------------------------------------------------------------------
   try {
@@ -147,6 +168,7 @@ export async function mount(root, bridge) {
     if (!gl.webglAvailable()) throw new Error("WebGL isn't available in this browser");
     stage = gl.createStage(canvas, labelsEl, app.config, { onPick: onPick, beforeFrame: tick, onLost: function () { useFallback("the WebGL context was lost"); } });
     stage.setReducedMotion(app.reduced);
+    aiWorld = (await import("./ai-world.js")).createAiWorld(stage.world);
     msgEl.hidden = true;
     root.dataset.simMode = "webgl";
   } catch (e) {
@@ -310,8 +332,28 @@ export async function mount(root, bridge) {
     app.lastError = null;
     if (app.mode === "simulation") { finishSimulation(scn); return; }
     app.busy = true;
+    var live = beginLive(scn);
+    var result;
+    try {
+      result = await api.evaluate(scn.id, function (e) { liveEvent(live, e); });
+    } catch (err) {
+      flights.delete(live.run.id); delete app.byId[live.run.id];
+      if (stage) stage.packets.forget(live.run);
+      app.busy = false;
+      app.lastError = (err.answered ? "The scenario couldn't be evaluated" : "The guard service didn't answer") + " (" + err.message + "), so this is simulation data, not an evaluation.";
+      finishSimulation(scn);
+      return;
+    }
+    endLive(live, scn, result);
+    app.busy = false;
+    renderAll();
+  }
+
+  // ---- a command being judged, drawn as a packet (the lab's scenarios and an AI run's commands alike) --------------------------
+  /** The packet leaves the scenario terminal and waits where the evaluator has got to. `scn` carries the command's title. */
+  function beginLive(scn) {
     var run = { id: "scn|" + scn.id + "|live" + (++liveSeq), kind: "scenario", source: "pending", scenario: scn, terminal: 2, label: scn.title,
-                ts: new Date().toISOString(), steps: [], verdict: null, latency_ms: null, result: null };
+                ts: new Date().toISOString(), steps: [], verdict: null, latency_ms: null, result: null, ai: !!scn.ai };
     var prefix = fromRoute(["terminal", "queue", "policy"], [], { reduced: app.reduced });
     var f = makeFlight(run, prefix);
     f.live = true;
@@ -321,33 +363,44 @@ export async function mount(root, bridge) {
     app.focused = run; app.player = f.player; app.selection = { kind: "run", id: run.id };
     if (stage) { stage.packets.place(run, f.player.pose(), app.reduced); stage.focusRun(run.id); }
     renderAll();
-    var result;
-    try {
-      result = await api.evaluate(scn.id, function (e) {
-        if (e.stage === "engine" && e.status === "running") {         // the model really is running now: the call goes to the engine and waits there
-          var tl = fromRoute(["terminal", "queue", "policy", "engine"], [], { reduced: app.reduced });
-          f.player.setTimeline(tl);
-          f.player.hold(holdTime(tl));
-        }
-      });
-    } catch (err) {
-      flights.delete(run.id); delete app.byId[run.id];
-      if (stage) stage.packets.forget(run);
-      app.busy = false;
-      app.lastError = (err.answered ? "The scenario couldn't be evaluated" : "The guard service didn't answer") + " (" + err.message + "), so this is simulation data, not an evaluation.";
-      finishSimulation(scn);
-      return;
+    return { run: run, f: f, scn: scn };
+  }
+  /** A pipeline event from the evaluator: when the model really starts, the packet goes to the engine and waits there. */
+  function liveEvent(live, e) {
+    if (e.stage === "engine" && e.status === "running") {
+      var tl = fromRoute(["terminal", "queue", "policy", "engine"], [], { reduced: app.reduced });
+      live.f.player.setTimeline(tl);
+      live.f.player.hold(holdTime(tl));
     }
+  }
+  /** The real verdict is in: the packet carries on to its zone. */
+  function endLive(live, scn, result) {
     var final = scenarioRun(app.config, scn, result);
-    final.id = run.id;
-    Object.assign(run, final);
-    run.source = result.mode;
-    addRun(run);
-    f.live = false;
-    f.player.setTimeline(timelineOf(run));
-    f.player.release();
-    app.busy = false;
+    final.id = live.run.id;
+    Object.assign(live.run, final);
+    live.run.source = result.mode;
+    live.run.ai = !!scn.ai;
+    addRun(live.run);
+    live.f.live = false;
+    live.f.player.setTimeline(timelineOf(live.run));
+    live.f.player.release();
     renderAll();
+  }
+  /** Resolves when the packet has reached its zone (or at once without a scene to wait for). */
+  function flightDone(live) {
+    return new Promise(function (resolve) {
+      function check() { if (live.f.player.ended && !live.f.live) resolve(); }
+      live.f.player.onChange(check);
+      check();
+    });
+  }
+
+  /** A new AI run starts clean: its earlier packets and tokens go (recorded calls and the lab's runs stay). */
+  function clearAiRuns() {
+    app.runs = app.runs.filter(function (r) { if (r.ai) { delete app.byId[r.id]; flights.delete(r.id); return false; } return true; });
+    if (stage) stage.packets.clearWhere(function (r) { return r.ai; });
+    if (app.focused && app.focused.ai) { app.focused = null; app.player = null; }
+    if (app.selection && (app.selection.kind === "file" || app.selection.kind === "agent")) app.selection = null;
   }
 
   // ---- data from the dashboard (the verdict log) ------------------------------------------------------------------------
@@ -388,6 +441,8 @@ export async function mount(root, bridge) {
     if (pick.kind === "station") actions.selectStation(pick.id);
     else if (pick.kind === "policy") actions.selectPolicy(pick.id);
     else if (pick.kind === "run") actions.selectRun(pick.id);
+    else if (pick.kind === "file") actions.selectFile(pick.id);
+    else if (pick.kind === "agent") actions.selectAgent();
   }
 
   // ---- drawing the panels ---------------------------------------------------------------------------------------------
@@ -402,7 +457,7 @@ export async function mount(root, bridge) {
     else setChip(chipEval, "Local Laya model", "ok", "Judgments run on this machine.");
     if (app.stats) setChip(chipSvc, "Guard service · running" + (app.stats.health && app.stats.health.version && app.stats.health.version !== "unknown" ? " v" + app.stats.health.version : ""), "ok");
     else setChip(chipSvc, "Guard service · unreachable", "bad", "Scenario runs fall back to simulation data.");
-    ui.kpis.update(app); ui.lab.update(app); ui.insp.update(app); ui.events.update(app);
+    ui.kpis.update(app); ui.lab.update(app); ui.insp.update(app); ui.events.update(app); ui.ai.update();
     renderFast();
   }
   function renderFast() {
@@ -428,6 +483,6 @@ export async function mount(root, bridge) {
       if (on && !tourSeen() && !ui.tour.active()) ui.tour.start();
     },
     /** For tests and debugging: the view's state and its 3D stage (null without WebGL). */
-    inspect: function () { return { app: app, stage: stage, flights: flights }; },
+    inspect: function () { return { app: app, stage: stage, flights: flights, ai: ui.ai }; },
   };
 }

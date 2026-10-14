@@ -21,6 +21,18 @@ All notable changes to this project are documented here. Versions follow
 - `guard.judge_traced()`: `judge()` that reports each stage (segment, policy, package script, engine) to an observer as it
   happens. Nothing is recorded unless an observer is installed, and the verdict is unchanged.
 
+- **AI scenarios** (Simulation, "AI scenario" tab): describe any situation in the window and the coding agent you already
+  have (Claude Code, headless, all tools off, under your own login; no API key, hosted service or Ollama) interprets it,
+  builds a virtual repository and plays the coding agent step by step. Each action is one of a fixed list, validated, and
+  applied to an in-memory world; each proposed command is judged by the real evaluator and the verdict is fed back. Nothing
+  is run, logged or alerted. Pause, resume, step, stop, run again, replay, a history of actions and decisions, held commands
+  you approve or deny, and an outcome card that keeps the run's facts apart from the AI's account. The 3D scene plays the
+  actual event sequence (the agent walks to the repository, a command leaves the terminal and waits for the real verdict).
+  Limits: steps, time, cost, files. Consent is asked before first use. Routes: `/api/sim/ai/{status,consent,runs}`.
+- `laya_guard.agentbridge` (adapter registry; Claude Code adapter) and `laya_guard.aisim` (the engine).
+- A package script that was read and matched nothing now says so in the trace (`package-script`, clean), instead of
+  looking like a script that was never read.
+
 ### Changed
 
 - The dashboard serves the simulation's modules and a bundled, tree-shaken three.js r186 (MIT) from `/static/` inside the
