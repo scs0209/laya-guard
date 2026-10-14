@@ -3,15 +3,18 @@
 
 var EVALUATE_TIMEOUT_MS = 90000;       // a cold model can take a while to load; a stream that never ends shouldn't hang the lab
 
+/** The server did answer: this error came from its reply (a status, or an error line in the stream), not from a missing one. */
+function answered(err) { err.answered = true; return err; }
+
 export function createApi(bridge) {
   function fail(res, body) {
     var msg = body && typeof body.detail === "string" ? body.detail : "HTTP " + res.status;
-    return new Error(msg);
+    return answered(new Error(msg));
   }
   return {
     config: function () {
       return fetch("/api/sim/config", { cache: "no-store" }).then(function (r) {
-        if (!r.ok) throw new Error("HTTP " + r.status);
+        if (!r.ok) throw answered(new Error("HTTP " + r.status));
         return r.json();
       });
     },
@@ -32,7 +35,7 @@ export function createApi(bridge) {
           var msg = JSON.parse(text);
           if (msg.type === "event") onEvent(msg);
           else if (msg.type === "result") result = msg;
-          else if (msg.type === "error") error = new Error(msg.message);
+          else if (msg.type === "error") error = answered(new Error(msg.message));
         }
         function done() {
           if (error) throw error;
