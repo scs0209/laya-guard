@@ -95,6 +95,12 @@ async function main() {
   await waitFor(`${root}.querySelector('.lab-error')`, "the service-down notice");
   S.down = await js(`const { app } = ${root}.simApi.inspect(); return {error: ${root}.querySelector('.lab-error').textContent, source: app.runs[0].source, badge: ${root}.querySelector('.scn-result .src').textContent,
                        decided: ${root}.querySelector('.scn-result .facts').textContent, busy: app.busy}`);
+  // the service answers, but with an error (a wrong token, an evaluator failure): the text must not claim it didn't answer
+  await js(`window.fetch = (u, o) => String(u).includes('/api/sim/evaluate') ? Promise.resolve(new Response(JSON.stringify({detail: 'bad token'}), {status: 403, headers: {'Content-Type': 'application/json'}})) : window.__realFetch(u, o); return true`);
+  await click(".scn", "Harmless");
+  await click(".sim-run", "Run scenario");
+  await waitFor(`${root}.querySelector('.lab-error')?.textContent.startsWith("The scenario couldn't be evaluated")`, "the service-error notice");
+  S.answeredWithError = await js(`return ${root}.querySelector('.lab-error').textContent`);
   await js(`window.fetch = window.__realFetch; return true`);
 
   // simulation data is labelled as such and has no measured numbers

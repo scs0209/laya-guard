@@ -83,7 +83,7 @@ export async function mount(root, bridge) {
   } catch (e) {
     // the view can't start without its config; "Try again" builds it for real and the stub hands over to it
     var wanted = false, real = null;
-    setText(msgEl, "The guard service didn't answer, so the pipeline can't be loaded (" + e.message + ").");
+    setText(msgEl, (e.answered ? "The guard service answered with an error, so the pipeline can't be loaded (" : "The guard service didn't answer, so the pipeline can't be loaded (") + e.message + ").");
     msgEl.appendChild(el("button", { type: "button", "class": "sim-run", onclick: function () {
       mount(root, bridge).then(function (api) { real = api; api.activate(wanted); });
     } }, "Try again"));
@@ -334,7 +334,7 @@ export async function mount(root, bridge) {
       flights.delete(run.id); delete app.byId[run.id];
       if (stage) stage.packets.forget(run);
       app.busy = false;
-      app.lastError = "The guard service didn't answer (" + err.message + "), so this is simulation data, not an evaluation.";
+      app.lastError = (err.answered ? "The scenario couldn't be evaluated" : "The guard service didn't answer") + " (" + err.message + "), so this is simulation data, not an evaluation.";
       finishSimulation(scn);
       return;
     }

@@ -100,6 +100,7 @@ def check_common(server, r):
     assert s["pending"]["stuckAt"] == "policy" and s["pending"]["busy"] is True
     assert s["afterPending"] == {"source": "mock", "action": "allow", "controlsOn": True}
     assert s["down"]["error"].startswith("The guard service didn't answer (connection refused)") and "not an evaluation" in s["down"]["error"]
+    assert s["answeredWithError"].startswith("The scenario couldn't be evaluated (bad token)") and "didn't answer" not in s["answeredWithError"]
     assert s["down"]["source"] == "simulation" and s["down"]["badge"] == "SIMULATION DATA" and "Typically" in s["down"]["decided"] and s["down"]["busy"] is False
     assert s["retryNotice"].startswith("The guard service didn't answer, so the pipeline can't be loaded")
     assert s["retry"]["before"] != s["retry"]["after"] and s["errorsAfterRetry"] == []          # the retried view really runs
