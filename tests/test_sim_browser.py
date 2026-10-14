@@ -2,8 +2,9 @@
 the stations and replay controls work, a recorded call opens in Calls, picking works in the 3D scene, and nothing
 logs a console error. Once with WebGL and once without it (the text fallback).
 
-Skipped when node (22+, for its built-in WebSocket) or a Chrome/Chromium isn't installed."""
+Skipped when node (22+, for its built-in WebSocket), a Chrome/Chromium or uvicorn isn't installed."""
 import hashlib
+import importlib.util
 import json
 import os
 import shutil
@@ -39,7 +40,8 @@ def _node22():
 
 
 NODE, CHROME = _node22(), _chrome()
-pytestmark = pytest.mark.skipif(not (NODE and CHROME), reason="needs node 22+ and Chrome or Chromium")
+UVICORN = importlib.util.find_spec("uvicorn") is not None          # `laya-guard serve` runs on it
+pytestmark = pytest.mark.skipif(not (NODE and CHROME and UVICORN), reason="needs node 22+, Chrome or Chromium, and uvicorn")
 
 
 @pytest.fixture(scope="module")
