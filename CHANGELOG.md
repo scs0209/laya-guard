@@ -5,6 +5,28 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- **Simulation view** in the dashboard (`/dashboard#/simulation`): the pipeline as an interactive isometric miniature
+  built with three.js in the page (terminals, command queue, policy gate with one column per policy, the Laya engine, the
+  decision gate, and the execution, review and incident zones). Calls from the verdict log fly through as they arrive
+  (`RECORDED`); the engine is only visited when the model was really called. Real, mock and simulated data carry different
+  labels everywhere (`REAL`, `MOCK EVALUATOR`, `HEURISTIC FALLBACK`, `SIMULATION DATA`, `RECORDED`).
+- **Attack lab**: eight predefined scenarios judged by the real evaluator and never executed or logged. Each shows the
+  verdict, risk score, policy and reason as returned, which relevant policy checks matched, who decided and the stages
+  passed, with a comparison table. `GET /api/sim/config` and `POST /api/sim/evaluate/<scenario>` (NDJSON: a line per
+  pipeline event, then the result; same token, origin and JSON checks as the installers; only scenarios, never free text).
+- Inspector, replay (play, pause, restart, step, scrub), a guided tour, camera controls (pan, rotate, zoom, buttons and
+  keyboard), reduced-motion support, and a text fallback when WebGL isn't available.
+- `guard.judge_traced()`: `judge()` that reports each stage (segment, policy, package script, engine) to an observer as it
+  happens. Nothing is recorded unless an observer is installed, and the verdict is unchanged.
+
+### Changed
+
+- The dashboard serves the simulation's modules and a bundled, tree-shaken three.js r186 (MIT) from `/static/` inside the
+  package (read-only, `.js`/`.css`/`.txt` only). Its CSP now lists `'self'` for scripts and styles next to the nonce;
+  nothing external is allowed. Rebuild the bundle with `scripts/vendor_three.sh`.
+
 ## [0.4.0] - 2026-10-13
 
 An outage no longer turns the guard off. With the server down, what it can't judge is asked about or blocked instead

@@ -94,6 +94,61 @@ the page carries, and the id of the diff you were shown (if the file changed sin
 the user scope only; use `laya-guard install --scope project` for a project. `--no-open` prints the URL instead of
 opening a browser.
 
+## Simulation
+
+Open **Simulation** in the dashboard's sidebar (`laya-guard dashboard`, then the second entry) to watch the pipeline
+work: a small isometric diorama (built in the page with three.js, no models or assets to download) where each call
+leaves an agent terminal, reaches the local guard, passes the **policy gate**, goes to the **Laya engine** only if the
+rules didn't decide it, and ends in the execution zone (allow), the review queue or the incident and audit area.
+
+<p align="center">
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/scs0209/laya-guard/main/docs/images/dashboard-simulation-light.png">
+  <img src="https://raw.githubusercontent.com/scs0209/laya-guard/main/docs/images/dashboard-simulation-dark.png" width="860" alt="The simulation view: a 3D miniature of the pipeline with a scenario replaying in the policy gate, and the inspector showing the verdict the evaluator returned">
+</picture>
+</p>
+
+What is drawn is always labelled by where it came from, and the three kinds are never styled alike:
+
+| Label | What it is |
+|---|---|
+| `RECORDED` | A call read from your local verdict log (a hash and a length, never the command). New ones fly through as they arrive. |
+| `REAL` | An attack-lab scenario judged just now by this machine's evaluator: the policy rules and the local Laya model. |
+| `MOCK EVALUATOR` | The same, but the server runs in mock mode, so heuristics stand in for the model. The rules are still the real rules, and the result says which parts were which. |
+| `HEURISTIC FALLBACK` | The model was called on a scenario and failed, so regexes and heuristics stood in. |
+| `SIMULATION DATA` | Nothing was evaluated: the scenario's typical outcome, drawn for illustration. Used when you pick it, or when the server doesn't answer. |
+
+- **Attack lab**: eight scenarios (a harmless `ls`, `rm -rf /`, a remote script piped into a shell, privilege
+  escalation, a secret upload, a package script, a chain that hides a dangerous command behind a harmless one, an
+  ambiguous deploy). A scenario is **judged, never run**: it goes through the evaluator only, a run isn't written to the
+  verdict log (so it isn't a call and doesn't move your numbers), and only the scenarios in the lab can be judged, never
+  free text. You see the verdict, risk score, policy and reason exactly as returned, which relevant policy checks matched,
+  who decided (rules or the model) and the stages it passed through. The **comparison table** keeps the latest run of
+  each scenario side by side.
+- **The scene is truthful, not decorative**: a call only enters the engine if the model was really called (it waits there
+  until the real answer arrives), a rules-decided call never goes near it, and the policy column of the matching
+  policy lights up. Nothing moves to look busy: with no calls there is no motion.
+- **Inspector**: click any terminal, the queue, a gate, a zone, a policy column or a call (or use the station buttons under
+  the scene, which do the same without 3D). The camera glides there, a ring marks it, and the panel shows what is known:
+  recorded counts, timings, the stage path of a call with a sentence for each stage. **Open in Calls** jumps to that call
+  in the Calls view.
+- **Replay**: play, pause, restart, step stage by stage, and scrub. Selecting a call replays it from its recorded stages.
+- **Controls**: drag pans, right-drag (or shift-drag) rotates, the wheel and a pinch zoom, arrows, `+` `-` `[` `]` `0` work
+  with the scene focused, and the same moves are buttons. A guided tour starts the first time and can be replayed.
+  Reduced-motion preferences remove the travel and make the camera jump. Without WebGL the same pipeline is shown as
+  cards.
+
+What it deliberately doesn't show: the evaluator returns a risk score and **no confidence value** and exposes no model
+reasoning, so none is drawn; the stages of a recorded call come from how the verdict was made (`via`), which is all the
+log keeps; laya-guard has no waiting line, so the "queue" is the moment between a call's arrival and its judgment; and the
+log doesn't say which agent made a call, so recorded calls are only spread over the two agent terminals by their hash.
+
+Under the hood: `GET /api/sim/config` (stages, policies, scenarios), `POST /api/sim/evaluate/<scenario>` (same token,
+origin and JSON checks as the installers; streams one NDJSON line per pipeline event, then the result) and `/static/...`
+for the page's modules and a tree-shaken, minified [three.js](https://threejs.org) r186 (MIT, `THREE_LICENSE.txt`),
+served read-only from inside the package. The page's CSP gains `'self'` for scripts and styles for that, and still allows
+no external host.
+
 ## 15-second demo (no model download)
 
 ```bash

@@ -8,9 +8,9 @@ import secrets
 from datetime import datetime, timezone
 from pathlib import Path
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
-from . import alerts, dashboard, install, service
+from . import alerts, dashboard, install, service, simulation
 from .guard import judge, is_mock
 from .log import load_entries, log_enabled, log_path, log_verdict
 
@@ -78,6 +78,19 @@ def dashboard_page(request: Request):
     nonce = secrets.token_urlsafe(16)
     return HTMLResponse(dashboard.render_page(nonce, _WRITE_TOKEN), headers=dashboard.page_headers(nonce))
 
+@app.get("/static/{path:path}")
+def static_file(path: str, request: Request):
+    """The simulation view's modules and the bundled three.js: read-only files from inside the package."""
+    _require_loopback_host(request)
+    found = dashboard.read_static(path)
+    if found is None:
+        raise HTTPException(status_code=404, detail="not found")
+    body, ctype, etag = found
+    headers = {"ETag": f'"{etag}"', "Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"}
+    if request.headers.get("if-none-match") == f'"{etag}"':
+        return Response(status_code=304, headers=headers)
+    return Response(content=body, media_type=ctype, headers=headers)
+
 @app.get("/api/stats")
 def api_stats(request: Request, window: str = "24h"):
     _require_loopback_host(request)
@@ -124,6 +137,23 @@ class AgentReq(BaseModel):
     mode: str = "preview"        # preview: show the change; apply: make it (needs the preview's diff_id)
     diff_id: str | None = None
     force: bool = False
+
+@app.get("/api/sim/config")
+def api_sim_config(request: Request):
+    """The pipeline's stages, the scenarios of the attack lab and the policies, for the simulation view."""
+    _require_loopback_host(request)
+    return JSONResponse(simulation.config(), headers=dashboard.api_headers())
+
+@app.post("/api/sim/evaluate/{scenario_id}", dependencies=[Depends(_require_write_access)])
+def api_sim_evaluate(scenario_id: str):
+    """Judge a predefined scenario with the real evaluator and stream what the pipeline does, as NDJSON: one
+    `event` line per stage as it happens, then one `result` line. The command is judged, never run, and the run
+    is not written to the verdict log. Only scenarios from /api/sim/config can be judged, never free text."""
+    scenario = simulation.get(scenario_id)
+    if scenario is None:
+        raise HTTPException(status_code=404, detail="unknown scenario")
+    return StreamingResponse(simulation.ndjson(scenario), media_type="application/x-ndjson",
+                             headers=dashboard.api_headers())
 
 class ServiceReq(BaseModel):
     mode: str = "preview"        # preview: show the change; apply: make it (needs the preview's diff_id)

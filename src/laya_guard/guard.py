@@ -1,5 +1,6 @@
 """laya-guard core: regex prefilter + Laya judge (local, free)."""
 from __future__ import annotations
+import contextvars
 import json
 import logging
 import os
@@ -638,25 +639,58 @@ def judge_offline(tool_call: str, fail_closed: bool = False, cwd: str | None = N
     return Verdict(action=action, risk=0.5, policy_id="offline", reason=reason,
                    verdict_source="offline")
 
+# Observers of the judging pipeline (the simulation view). Nothing is recorded unless a caller installs one with
+# judge_traced(), and an observer only ever sees what happened: which stage ran, what it found, what it skipped.
+_TRACE: contextvars.ContextVar = contextvars.ContextVar("laya_guard_trace", default=None)
+
+def _emit(stage: str, **info) -> None:
+    observer = _TRACE.get()
+    if observer is not None:
+        observer({"stage": stage, **info})
+
+def policy_matches(text: str) -> list[Policy]:
+    """Every policy whose pattern matches `text`, in policy.yaml order. For display only: judging stops at the first
+    block-level match, so this is how to tell which other policies would also have matched."""
+    _ensure()
+    assert _policies is not None
+    return [pol for pol in _policies if any(rx.search(text) for rx in pol.compiled)]
+
+def judge_traced(tool_call: str, source: str = "user", cwd: str | None = None, emit=None) -> Verdict:
+    """judge(), reporting each stage to emit(event) as it happens.
+
+    Events (dicts with a "stage" key): "segment" (which command of a chain is being judged), "policy"
+    (result: hit-block | hit-review | safe | clear | limit, plus policy_id), "package-script" (a package.json
+    script finding), "engine" (status: skipped with why | running | done | failed). The verdict itself is the
+    return value, exactly what judge() returns."""
+    token = _TRACE.set(emit)
+    try:
+        return judge(tool_call, source=source, cwd=cwd)
+    finally:
+        _TRACE.reset(token)
+
 def judge(tool_call: str, source: str = "user", cwd: str | None = None) -> Verdict:
     """Judge one tool call. With cwd (the directory it runs in), safe commands
     that run package.json scripts have those scripts checked too."""
     if _oversized(tool_call):
+        _emit("policy", result="limit", policy_id="oversized")
         return _oversized_verdict(tool_call, mock=is_mock())
     # The model and the safe lane only see the command without comments (the regexes see the whole original)
     text = _strip_comments(tool_call) if source in ("user", "tool") else tool_call
     segments = _split_chain(text)
     if len(segments) == 1:
+        _emit("segment", index=0, total=1, text=text)
         return _judge_one(text, source, cwd, regex_text=tool_call)
     # Each command in a chain is judged on its own and the worst verdict wins.
     # Patterns spanning commands (curl …; … | sh) are caught by the whole-string regexes.
     verdicts = []
     seg_cwd = cwd
-    for seg in segments:
+    for i, seg in enumerate(segments):
+        _emit("segment", index=i, total=len(segments), text=seg)
         verdicts.append(_judge_one(seg, source, seg_cwd))
         seg_cwd = _next_cwd(seg, seg_cwd)
     hit = _regex_hit(tool_call)
     if hit is not None and all(v.policy_id != hit.id for v in verdicts):
+        _emit("segment", index=len(segments), total=len(segments), text=None, whole=True)
         verdicts.append(_judge_one(text, source, regex_text=tool_call))
     return max(verdicts, key=lambda v: (_ACTION_RANK[v.action], v.risk))
 
@@ -669,9 +703,14 @@ def _judge_one(tool_call: str, source: str, cwd: str | None = None,
     regex_block = hit is not None and hit.action_on_regex == "block"
     safe = hit is None and _safe_command(tool_call)
     mock = is_mock()
+    _emit("policy", policy_id=hit.id if hit is not None else None,
+          result="hit-block" if regex_block else "hit-review" if hit is not None else "safe" if safe else "clear")
     if safe and cwd is not None:
         finding = _check_scripts(" ".join(tool_call.split()), cwd)
         if finding is not None:
+            _emit("package-script", key=finding.key, policy_id=finding.hit.id if finding.hit is not None else None,
+                  unresolved=finding.unresolved, blocked=finding.rank() == 2)
+            _emit("engine", status="skipped", why="package-script")
             # Regex result only, so risk is the same fixed value as the policy short-circuit (a review stays review after the source adjustment)
             blocked = finding.rank() == 2
             return Verdict(
@@ -680,6 +719,16 @@ def _judge_one(tool_call: str, source: str, cwd: str | None = None,
                 reason=_script_reason(finding, _is_korean(tool_call)), mock=mock,
                 verdict_source="regex" if finding.hit is not None else "allowlist")
     model_ok = True
+    # What the observer is told is what really happened: rules decided (a safe command or a block-level match, with
+    # or without the model), the model isn't in use (mock mode), or the model was called.
+    if safe:
+        _emit("engine", status="skipped", why="safe-list")
+    elif regex_block:
+        _emit("engine", status="skipped", why="regex-block")
+    elif mock:
+        _emit("engine", status="skipped", why="mock")
+    else:
+        _emit("engine", status="running")
     if safe:
         action, risk = "allow", 0.05
     elif mock:
@@ -688,6 +737,7 @@ def _judge_one(tool_call: str, source: str, cwd: str | None = None,
         action, risk = "block", 0.92
     else:
         action, risk, model_ok = _model_or_fallback(tool_call, hit)
+        _emit("engine", status="done" if model_ok else "failed")
         # A review-level regex hit is a floor: raise Laya's allow to review (only ever upward)
         if hit is not None and hit.action_on_regex == "review" and action == "allow":
             action, risk = "review", max(risk, 0.55)

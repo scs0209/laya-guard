@@ -124,3 +124,19 @@ Scopes are optional; use the area you touched: `policy`, `guard`, `adapter`,
   on) get a `!` after the type or scope, e.g. `feat(server)!: return 403 on block`,
   and a `BREAKING CHANGE:` line in the PR description.
 - Reference issues in the PR description (`Fixes #4`), not in the title.
+
+## The simulation view
+
+The dashboard's Simulation view is plain ES modules in `src/laya_guard/static/sim/` plus a bundled, tree-shaken three.js
+in `static/vendor/` (MIT). There is no build step for the modules. The pure logic (stages, replay, runs, layout) has
+node tests that need no browser (`tests/test_sim_js.py` runs them when `node` is installed), and
+`tests/test_sim_browser.py` drives a real headless Chrome through the whole view, with and without WebGL (it needs node 22
+and Chrome or Chromium, and is skipped otherwise; set `LAYA_TEST_CHROME` to point at a binary).
+
+If the view starts using another three.js class, or you want to bump three.js, rebuild the bundle (needs node, npm and
+network access) and commit the result:
+
+```bash
+scripts/vendor_three.sh            # the pinned release
+scripts/vendor_three.sh 0.187.0    # another one
+```

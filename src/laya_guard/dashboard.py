@@ -7,6 +7,7 @@ command text (only a hash and a length), so neither does the dashboard.
 """
 from __future__ import annotations
 
+import hashlib
 import hmac
 import math
 import os
@@ -202,10 +203,12 @@ def display_path(path: Path) -> str:
 
 
 def page_headers(nonce: str) -> dict[str, str]:
-    """Headers for the HTML page: a nonce-only CSP (no external resource can load) and no framing."""
+    """Headers for the HTML page: a CSP that lets nothing external load and no framing. Scripts and styles come
+    from the page itself (its nonce) or from this server's own /static/ files, the simulation view's modules and the
+    bundled three.js, which `read_static` serves read-only from inside the package."""
     return {
         "Content-Security-Policy": (
-            f"default-src 'none'; script-src 'nonce-{nonce}'; style-src 'nonce-{nonce}'; "
+            f"default-src 'none'; script-src 'nonce-{nonce}' 'self'; style-src 'nonce-{nonce}' 'self'; "
             "connect-src 'self'; img-src data:; base-uri 'none'; form-action 'none'; "
             "frame-ancestors 'none'"),
         "Cache-Control": "no-store",
@@ -216,6 +219,31 @@ def page_headers(nonce: str) -> dict[str, str]:
 
 def api_headers() -> dict[str, str]:
     return {"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"}
+
+
+STATIC_TYPES = {".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
+                ".txt": "text/plain; charset=utf-8"}
+
+
+def read_static(path: str) -> tuple[bytes, str, str] | None:
+    """(body, content type, etag) of a file under the package's static/ folder, or None.
+
+    Only plain relative paths to .js, .css and .txt files qualify: no empty, `.`, `..` or dotted parts, no
+    backslashes or NULs, so a request can't leave the folder or reach anything else in the package."""
+    parts = path.split("/")
+    if not path or any(p == "" or p.startswith(".") or "\\" in p or "\0" in p for p in parts):
+        return None
+    ctype = STATIC_TYPES.get(os.path.splitext(parts[-1])[1].lower())
+    if ctype is None:
+        return None
+    node = resources.files("laya_guard").joinpath("static", *parts)
+    try:
+        if not node.is_file():
+            return None
+        body = node.read_bytes()
+    except OSError:
+        return None
+    return body, ctype, hashlib.sha256(body).hexdigest()[:16]
 
 
 def render_page(nonce: str, token: str = "") -> str:
