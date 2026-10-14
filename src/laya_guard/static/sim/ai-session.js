@@ -3,7 +3,7 @@
 // the repository for a file action, a command leaves the terminal and is judged by the real evaluator (the packet waits at the
 // engine for the real answer), a blocked command drops the barrier. Nothing in here decides anything: the server's run does.
 
-import { initialAiState, reduceAiEvent, isTerminal } from "./ai-reduce.js";
+import { initialAiState, reduceAiEvent, isTerminal, pickAgent } from "./ai-reduce.js";
 import { createSequencer } from "./ai-sequencer.js";
 import { createAiRunner } from "./ai-runner.js";
 import { createAiPanel } from "./ai-panel.js";
@@ -15,7 +15,7 @@ function delay(ms, ctx) { return new Promise(function (res) { setTimeout(res, ct
 export function createAiSession(ctx) {
   var app = ctx.app, runner = createAiRunner(ctx.bridge);
   app.ai = initialAiState();
-  app.aiUi = { status: null, recent: [], notice: null };
+  app.aiUi = { status: null, recent: [], notice: null, agent: null };     // agent: the id the user picked, if they did
   var live = null, scnOfStep = {}, runOfStep = {}, current = 0;
 
   var seq = createSequencer(play, function (e) { return e.type === "step.end"; });
@@ -90,10 +90,26 @@ export function createAiSession(ctx) {
   }
 
   // ---- events from the server ------------------------------------------------------------------------------------------
+  var relayTimer = null;
+  function stopRelayPoll() { if (relayTimer) { clearInterval(relayTimer); relayTimer = null; } }
+  function ensureRelayPoll() {
+    if (relayTimer) return;
+    relayTimer = setInterval(function () {
+      var liveStatuses = ["interpreting", "running", "paused", "waiting-review"];
+      if (liveStatuses.indexOf(app.ai.status) < 0 || app.ai.relay) return;
+      var agent = currentAgent();
+      if (!agent || agent.id !== "manual-relay") return;
+      runner.relayPending().then(function (j) {
+        if (app.ai.relay || !j.pending || !j.pending.length) return;
+        var p = j.pending[0];
+        onEvent({ type: "relay.wait", seq: 0, t: new Date().toISOString(), phase: "act", step: app.ai.step || 0, attempt: 1, decision_id: p.decision_id, deadline_s: 120 });
+      }).catch(function () {});
+    }, 2500);
+  }
   function onEvent(e) {
     reduceAiEvent(app.ai, e);
     seq.push(e);
-    if (isTerminal(e.type)) refreshRecent();
+    if (isTerminal(e.type)) { refreshRecent(); stopRelayPoll(); }
     ctx.renderAll();
   }
   function onProblem(err) {
@@ -125,16 +141,17 @@ export function createAiSession(ctx) {
     formChanged: function () { ctx.renderAll(); },
     example: function (text) { panel.setPrompt(text); },
     edit: function () {},
+    chooseAgent: function (id) { app.aiUi.agent = id; ctx.renderAll(); },
     consent: function (allow) {
-      var agent = app.aiUi.status && app.aiUi.status.agents[0];
+      var agent = currentAgent();
       if (!agent) return;
       runner.consent(agent.id, allow).then(refreshStatus).catch(function (err) { app.aiUi.notice = err.message; ctx.renderAll(); });
     },
     start: function (form) {
-      var agent = app.aiUi.status && app.aiUi.status.agents[0];
+      var agent = currentAgent();
       if (!agent || !form.prompt) return;
       begin(null, form);
-      runner.start(Object.assign({ agent: agent.id }, form), onEvent, onProblem).then(function (id) { app.ai.id = app.ai.id || id; ctx.showTab("ai"); })
+      runner.start(Object.assign({ agent: agent.id }, form), onEvent, onProblem).then(function (id) { app.ai.id = app.ai.id || id; ctx.showTab("ai"); ensureRelayPoll(); })
         .catch(function (err) { app.ai.status = "idle"; app.aiUi.notice = err.message; ctx.renderAll(); });
     },
     pause: function () { control("pause"); seq.pause(); },
@@ -145,6 +162,10 @@ export function createAiSession(ctx) {
     },
     stop: function () { control("stop"); seq.clear(); seq.resume(); },
     review: function (decision) { control("review", { decision: decision, step: app.ai.review ? app.ai.review.step : undefined }); },
+    relayAnswer: function (decisionId, text) {
+      runner.relayAnswer(decisionId, text).then(function () { app.aiUi.notice = null; ctx.renderAll(); })
+        .catch(function (err) { app.aiUi.notice = err.message; ctx.renderAll(); });
+    },
     replay: function (id) {
       begin(id);
       runner.replay(id, onEvent, onProblem);
@@ -155,6 +176,7 @@ export function createAiSession(ctx) {
       else if (row.kind === "world" && row.text) { var p = row.text.split(" ")[0]; if (app.ai.files[p]) ctx.selectFile(p); }
     },
   };
+  function currentAgent() { return app.aiUi.status ? pickAgent(app.aiUi.status.agents, app.aiUi.agent) : null; }
   function control(action, extra) {
     if (!app.ai.id) return;
     runner.control(app.ai.id, action, extra).catch(function (err) { app.aiUi.notice = err.message; ctx.renderAll(); });
@@ -167,7 +189,7 @@ export function createAiSession(ctx) {
     update: function () { panel.update(app); },
     /** The AI tab was opened: look for an agent and earlier runs. */
     activate: function () { if (!app.aiUi.status) refreshStatus(); refreshRecent(); },
-    dispose: function () { runner.detach(); seq.dispose(); },
+    dispose: function () { stopRelayPoll(); runner.detach(); seq.dispose(); },
     sequencer: seq,
   };
 }

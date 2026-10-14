@@ -5,6 +5,8 @@ one of them would otherwise write into the developer's own log. Tests that want 
 LAYA_GUARD_LOG_PATH themselves; everything else lands in a temporary file. Subprocesses inherit it.
 
 The service manager: no test may start, stop or query the developer's launchd / systemd (see below).
+
+Model API keys: the developer's own are removed, so no test calls a real API or bills a real key.
 """
 import os
 import subprocess
@@ -14,6 +16,8 @@ from pathlib import Path
 import pytest
 
 os.environ["LAYA_GUARD_LOG_PATH"] = str(Path(tempfile.mkdtemp(prefix="laya-guard-test-log-")) / "verdicts.jsonl")
+for _key in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "CODEX_API_KEY"):
+    os.environ.pop(_key, None)
 
 
 @pytest.fixture(autouse=True)

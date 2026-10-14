@@ -33,7 +33,13 @@ RESTART_DELAY = 30            # seconds between starts: a crash loop or a busy p
 DEFAULT_PORT = 8787
 # what the server reads from its environment; a login service doesn't inherit the shell's, so these are copied in
 ENV_KEYS = ("LAYA_GUARD_ALERT_CMD", "LAYA_GUARD_ALERT_COOLDOWN", "LAYA_GUARD_LOG", "LAYA_GUARD_LOG_PATH",
-            "LAYA_GUARD_DEVICE")
+            "LAYA_GUARD_DEVICE", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY",
+            "CODEX_API_KEY")
+# copied in like the rest, but never shown: a diff prints them as [hidden]
+SECRET_KEYS = ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "CODEX_API_KEY")
+_SECRET_NAMES = "|".join(SECRET_KEYS)
+_SECRET_VALUES = (re.compile(rf"(<key>(?:{_SECRET_NAMES})</key>\s*<string>)[^<]*"),     # a plist
+                  re.compile(rf'(Environment="(?:{_SECRET_NAMES})=)(?:[^"\\]|\\.)*'))     # a systemd unit
 
 
 class ServiceError(InstallError):
@@ -108,6 +114,15 @@ def service_env(environ) -> dict[str, str]:
     return env
 
 
+def hide_secrets(text: str | None) -> str | None:
+    """A service file as it may be shown: the API keys in it replaced with [hidden]."""
+    if text is None:
+        return None
+    for pattern in _SECRET_VALUES:
+        text = pattern.sub(r"\1[hidden]", text)
+    return text
+
+
 def render_plist(args: list[str], env: dict[str, str], log: Path) -> str:
     data = {"Label": LABEL, "ProgramArguments": args, "RunAtLoad": True,
             # restart after a crash (non-zero exit) but not after a clean stop
@@ -180,7 +195,8 @@ class ServicePlan:
 
     @property
     def diff(self) -> str:
-        return _diff(self.artifact.path, self.artifact.before, self.artifact.after) if self.changed else ""
+        a = self.artifact
+        return _diff(a.path, hide_secrets(a.before), hide_secrets(a.after)) if self.changed else ""
 
     @property
     def diff_id(self) -> str:

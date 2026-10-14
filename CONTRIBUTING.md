@@ -138,7 +138,11 @@ writes a stand-in `claude` executable, so the bridge runs as a real child proces
 `tests/test_ai_routes.py` and `tests/test_sim_ai_browser.py` drive the whole path, including the page. The engine itself is
 tested with a scripted in-process agent in `tests/test_aisim.py`. A new agent adapter (anything with `id`, `name`,
 `detect()` and `complete()`) must be able to turn every tool off; if the agent can read or run things, it doesn't belong
-in `agentbridge`. The engine must keep importing nothing that starts a process (a test enforces it).
+in `agentbridge`. Two free passes: a model API called directly with a key from the server's environment has no tools
+at all (`tests/fake_api.py` stands in for the APIs over real HTTP, so those tests need no real key and run no bill),
+and an ACP-speaking CLI started with no client capabilities, no MCP servers, every permission denied and everything
+else refused (`tests/fake_acp.py` stands in over real stdio JSON-RPC, so those tests need no model either). The engine
+must keep importing nothing that starts a process (a test enforces it).
 
 If the view starts using another three.js class, or you want to bump three.js, rebuild the bundle (needs node, npm and
 network access) and commit the result:

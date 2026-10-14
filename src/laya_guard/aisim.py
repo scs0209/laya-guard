@@ -496,6 +496,55 @@ class Run:
             raise RunError("cost-limit", f"the agent reported spending more than ${self.max_cost:g}")
 
     # -- asking the agent -----------------------------------------------------------------------------------------------
+    def _relay_watcher(self, phase: str, step: int, attempt: int, stop: threading.Event) -> None:
+        """While a manual-relay decision is parked, tell the page what to answer: without this the dashboard has no way
+        to reply, so every manual run ends in a 120-second timeout. The board calls the hook synchronously when the
+        decision parks, so a fast answer can't slip past between polls."""
+        board = agentbridge.BOARD
+        if not hasattr(self, "_relay_announced"):
+            self._relay_announced: set[str] = set()
+        announced = self._relay_announced
+
+        def announce(entry) -> None:
+            if entry["id"] in announced:
+                return
+            announced.add(entry["id"])
+            try:
+                self.emit("relay.wait", phase=phase, step=step, attempt=attempt + 1, decision_id=entry["id"],
+                          deadline_s=self.agent_timeout, schema=entry.get("schema"))
+            except Exception:
+                pass
+
+        old = getattr(board, "on_park", None)
+        def hook(entry) -> None:
+            if old is not None:
+                try:
+                    old(entry)
+                except Exception:
+                    pass
+            announce(entry)
+        try:
+            board.on_park = hook
+        except Exception:
+            pass
+        try:
+            while not stop.is_set() and not self.stop_event.is_set():
+                try:
+                    with board.lock:
+                        fresh = [e for i, e in board.pending.items() if i not in announced]
+                except Exception:
+                    fresh = []
+                for e in fresh:
+                    announce(e)
+                if stop.wait(0.1):
+                    return
+        finally:
+            try:
+                if getattr(board, "on_park", None) is hook:
+                    board.on_park = old
+            except Exception:
+                pass
+
     def _ask(self, phase: str, prompt: str, schema: dict, validate, step: int = 0):
         """One decision from the agent: asked, parsed, validated; a rejected answer is retried with the reasons."""
         errors: list[str] = []
@@ -507,12 +556,19 @@ class Run:
             text = prompt if not errors else prompt + "\n\nYour previous reply was rejected: " + "; ".join(errors)[:500] + ". Reply again with one valid JSON object."
             self.emit("ai.thinking", phase=phase, step=step, attempt=attempt + 1)
             t0 = time.monotonic()
+            watcher_stop = threading.Event()
+            watcher = None
+            if getattr(self.agent, "id", "") == "manual-relay":
+                watcher = threading.Thread(target=self._relay_watcher, args=(phase, step, attempt, watcher_stop), daemon=True)
+                watcher.start()
             try:
                 done = self.agent.complete(SYSTEM_PROMPT, text, schema=schema, model=self.model, timeout=self.agent_timeout, cancel=self.stop_event)
             except agentbridge.AgentError as exc:
                 if exc.kind == "cancelled":
                     raise RunError("stopped", "stopped by the user")
                 raise RunError(exc.kind, exc.message)
+            finally:
+                watcher_stop.set()
             self.cost += done.cost_usd or 0.0
             self.emit("ai.reply", phase=phase, step=step, attempt=attempt + 1, ms=round((time.monotonic() - t0) * 1000), cost_usd=done.cost_usd,
                       total_cost_usd=round(self.cost, 5), model=done.model)

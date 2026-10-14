@@ -7,10 +7,32 @@ All notable changes to this project are documented here. Versions follow
 
 ### Added
 
+- **AI scenarios with a human in the agent's seat**: the manual relay (`manual-relay`, always listed last in
+  `/api/agents`) pauses the run at every decision until a person answers — `GET /api/sim/ai/relay/pending` lists
+  what the run is waiting for, `POST /api/sim/ai/relay/answer` takes the `decision_id` and the reply text. No model,
+  key or login needed; whoever answers sees the same prompt the agent would get. Unanswered decisions wait at most
+  120 s and then fail that step.
+- **AI scenarios with a self-running demo**: the `demo` agent (always listed last in `/api/agents`) plays a fixed
+  poisoned-`npm test` demonstration with no model, login, key, cost or answers — pick it and press Start and the run
+  always reaches the end. The plan is named after the prompt; the world and the steps are the demo's own.
+
 - **`POST /guard` accepts an optional `tool_name`** (`Bash`, `Edit`, an MCP tool, …). It is logged in clear as
   `"tool_name"` in `verdicts.jsonl` (non-printable characters dropped, cut to 64 characters, `null` when absent) and
   `laya-guard stats` shows the top five tools, so you can tell which tools the blocks come from. The adapters don't
   send it yet.
+- **AI scenarios drive ACP-speaking agents too**: Codex through the official `codex-acp` adapter and Gemini CLI
+  through `gemini --acp`, started with no client capabilities (no file system, no terminal, no elicitation) in an
+  empty temporary directory with no MCP servers. Every permission they ask for is denied and anything else refused
+  (Codex additionally starts read-only); one process and session per decision, reported cost honored. `CODEX_API_KEY`
+  joins the keys `laya-guard service install` copies (still shown as `[hidden]`).
+- **AI scenarios run without Claude Code too**: when `claude` isn't installed, a key for the Anthropic, OpenAI or
+  Gemini API (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` or `GOOGLE_API_KEY` in the server's environment)
+  drives the run instead — one plain HTTPS call per decision, no tools, so the model can only answer in text. The page
+  lists every ready agent, lets you pick when several are ready, and offers the provider's own chat models (cheapest
+  default first). The key is read from the environment only and never shown, logged or taken from the page;
+  `laya-guard service install` copies it into the login service with the rest of the server's environment (shown as
+  `[hidden]` in the diff). The $2 reported-cost limit doesn't apply to API runs — each call is capped at 8192 output
+  tokens instead.
 
 ## [0.4.1] - 2026-10-14
 

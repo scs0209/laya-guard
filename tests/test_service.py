@@ -93,6 +93,22 @@ def test_only_the_settings_the_server_reads_are_copied_and_path_only_with_an_ale
                plan_for("install", home, binary, environ=env).notes)                     # the note names them, never the values
 
 
+@pytest.mark.parametrize("platform", ["darwin", "linux"])
+def test_api_keys_are_copied_into_the_service_but_never_shown(home, binary, platform):
+    secret = 'sk-test-"$ecret%-123'
+    plan = plan_for("install", home, binary, platform=platform, environ={"OPENAI_API_KEY": secret, "GEMINI_API_KEY": "AIza-other"})
+    assert "OPENAI_API_KEY" in plan.artifact.after and "GEMINI_API_KEY" in plan.artifact.after
+    if platform == "darwin":
+        assert plistlib.loads(plan.artifact.after.encode())["EnvironmentVariables"]["OPENAI_API_KEY"] == secret
+    assert "sk-test" not in plan.diff and "AIza-other" not in plan.diff and plan.diff.count("[hidden]") == 2
+    assert not any("sk-test" in n or "AIza" in n for n in plan.notes)
+    # replacing the key: neither the old one nor the new one is shown
+    plan.artifact.path.parent.mkdir(parents=True, exist_ok=True)
+    plan.artifact.path.write_text(plan.artifact.after)
+    again = plan_for("install", home, binary, platform=platform, environ={"OPENAI_API_KEY": "sk-new-456"})
+    assert again.changed and "sk-test" not in again.diff and "sk-new" not in again.diff and "AIza" not in again.diff
+
+
 def test_the_systemd_unit_quotes_what_systemd_treats_specially(home, binary):
     env = {"LAYA_GUARD_ALERT_CMD": 'curl -d "100% $HOME" https://hooks.example/x', "PATH": "/usr/bin"}
     plan = plan_for("install", home, binary, platform="linux", environ=env)

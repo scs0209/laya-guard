@@ -163,10 +163,29 @@ evaluator**. The verdict goes back to the agent, which adapts (another route, a 
 <p align="center"><sub>One run: a poisoned <code>npm test</code> script is blocked, a download is held and denied. Recorded with a scripted stand-in for the agent (so it can be repeated) and the mock evaluator; the labels on screen say so. A real agent takes a few seconds per decision.</sub></p>
 
 - **Your own agent, nothing to configure**: it runs the Claude Code you already have (`claude` on your PATH and logged
-  in) headless, once per decision. No API key, no hosted service, no Ollama, nothing to copy or paste. Only Claude Code is
-  wired in, because it is the one agent CLI with a switch that turns every tool off (`--tools ""`, plus no settings, hooks,
-  MCP servers, skills or saved session, in an empty temporary directory), so it can only answer in text. Gemini CLI,
-  Cursor and OpenCode have no such switch; `laya_guard.agentbridge.register()` is where another adapter would go.
+  in) headless, once per decision. No hosted service, no Ollama, nothing to copy or paste. Claude Code is the only agent
+  CLI wired in, because it is the one with a switch that turns every tool off (`--tools ""`, plus no settings, hooks,
+  MCP servers, skills or saved session, in an empty temporary directory), so it can only answer in text. Agent CLIs
+  that speak the Agent Client Protocol are wired in through a small ACP client instead (Codex through the official
+  `codex-acp` adapter, Gemini CLI through `gemini --acp`): laya-guard starts them with no client capabilities at all
+  (no file system, no terminal, no elicitation) in an empty temporary directory with no MCP servers, denies every
+  permission they ask for, and refuses anything else they ask of it — Codex additionally starts in read-only mode.
+  One process and one session per decision; nothing stays running. Cursor and OpenCode speak neither, so they are not
+  wired in; `laya_guard.agentbridge.register()` is where another adapter would go.
+- **Or your own model key, no CLI needed**: without Claude Code, a key for the Anthropic, OpenAI or Gemini API works
+  instead (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` or `GOOGLE_API_KEY` in the server's environment).
+  A plain API call has no tools at all, so there is nothing to switch off. The key is read from the environment only:
+  never taken from the page, shown or logged. When several are ready (Claude Code and a key, or several keys), the page
+  lets you pick; the model list is the provider's own chat models, cheapest default first. `laya-guard service install`
+  copies the keys into the login service with the rest of the server's environment (the diff shows `[hidden]`, never
+  the values).
+- **Or you, answering through the API**: the manual relay (`manual-relay`, always listed last) pauses at every
+  decision and waits for you — `GET /api/sim/ai/relay/pending` shows what the run is asking, `POST
+  /api/sim/ai/relay/answer` with the `decision_id` and the reply text answers it. No model, key or login involved;
+  whoever answers sees the same prompt the agent would get.
+- **Or the demo script, nothing and nobody needed**: `demo` (always ready, listed last) plays a fixed poisoned-`npm test`
+  demonstration by itself — no model, login, key, cost or answers. Pick it and press Start: the run always reaches
+  the end. The plan names the run after what you typed; the world and the steps are the demo's own.
 - **The loop**: interpret the prompt into a plan and virtual files, then up to *N* steps of *observe, ask the agent, validate,
   apply*. The agent picks exactly one action per step from a fixed list (`read_file`, `write_file`, `list_dir`,
   `run_command`, `message`, `finish`); anything that doesn't fit the schema is rejected and asked again (twice at most),
@@ -186,10 +205,12 @@ evaluator**. The verdict goes back to the agent, which adapts (another route, a 
   lines are hypotheses, and nothing was run, so none of it happened.
 - **Limits and cost**: 8 steps by default (up to 20), 10 minutes of working time (time spent paused or waiting for you
   doesn't count, up to 30 minutes), $2 of reported cost, 120 s per decision, at most 14
-  files of 6000 characters, 2000 characters of prompt. Each decision is one Claude Code call under your own login and
-  plan: a typical 8-step run takes one to two minutes and cost about $0.05 to $0.15 with the cheap model in our checks.
-  Closing the tab doesn't stop a run: press **Stop**, or it ends at its limits or when the server exits (the agent process
-  goes with it).
+  files of 6000 characters, 2000 characters of prompt. Each decision is one agent call under your own login and
+  plan (a Claude Code call, or one ACP process and session): a typical 8-step run takes one to two minutes and
+  cost about $0.05 to $0.15 with the cheap model in our checks.
+  With a model API instead, laya-guard can't see what a call costs, so the $2 limit doesn't apply; each call is capped at
+  8192 output tokens. Closing the tab doesn't stop a run: press **Stop**, or it ends at its limits or when the server
+  exits (the agent process goes with it).
 - **Consent**: the page asks before the first use per server session. What goes to Claude Code is what you type, the
   virtual files and laya-guard's verdicts for the run; Claude Code adds its own context to every request (for example your
   account details and any organisation instructions), which laya-guard doesn't control. Your own `CLAUDE.md` and memory
