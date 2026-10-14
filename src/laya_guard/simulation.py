@@ -206,15 +206,49 @@ def config() -> dict:
 
 # --- running a scenario ---------------------------------------------------------------------------------------------
 
+MAX_PATH_CHARS = 160
+
+
+def safe_rel_path(path) -> str | None:
+    """A path inside a virtual repository, normalised ("./a//b.txt" -> "a/b.txt"), or None if it isn't a plain relative
+    path: no absolute paths, no `..`, no NUL or backslashes, no empty parts, nothing absurdly long."""
+    if not isinstance(path, str) or not path or len(path) > MAX_PATH_CHARS or "\0" in path or "\\" in path or path.startswith("/"):
+        return None
+    try:
+        path.encode("utf-8")                                      # a lone surrogate can't be written, sent or shown
+    except UnicodeEncodeError:
+        return None
+    parts = [p for p in path.split("/") if p not in ("", ".")]
+    if not parts or any(p in ("..", "__proto__") or len(p) > 80 or len(p.encode("utf-8")) > 200 or p.strip() != p for p in parts):
+        return None
+    return "/".join(parts)
+
+
 @contextmanager
-def _workspace(s: Scenario) -> Iterator[str | None]:
-    """The directory a scenario is judged in: a throwaway one holding its package.json, or none."""
-    if s.package_scripts is None:
+def _workspace_files(files: dict[str, str] | None) -> Iterator[str | None]:
+    """The directory a command is judged in: a throwaway one holding the virtual files (so the package.json scripts a
+    command would run can be read, which is all the evaluator does with them), or none. The files are written inside
+    it and nowhere else, never run, and removed afterwards."""
+    if not files:
         yield None
         return
     with tempfile.TemporaryDirectory(prefix="laya-guard-sim-") as d:
-        Path(d, "package.json").write_text(json.dumps({"name": "scenario", "scripts": s.package_scripts}), encoding="utf-8")
-        yield d
+        root = Path(d).resolve()
+        written: set[str] = set()
+        for rel, text in files.items():
+            safe = safe_rel_path(rel)
+            if safe is None or safe.lower() in written:
+                continue                                  # a file system that ignores case would let one overwrite the other
+            target = (root / safe).resolve()
+            if root not in target.parents:
+                continue                                  # defence in depth: never write outside the throwaway directory
+            try:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(str(text), encoding="utf-8")
+            except (OSError, ValueError):
+                continue                                  # a name or content this file system won't take: that file is left out
+            written.add(safe.lower())
+        yield str(root)
 
 
 # Which policy status stands for a whole chain: what decided something outranks a floor, a floor outranks "nothing
@@ -242,6 +276,8 @@ def steps_from_events(events: list[dict], verdict: guard.Verdict) -> tuple[list[
             result = e["result"]
             seg["policy"] = {"hit-block": "hit", "hit-review": "floor"}.get(result, result)
             seg["policy_id"] = e.get("policy_id")
+        elif stage == "package-script" and e.get("clean"):
+            seg["script"] = {"key": e.get("key"), "clean": True, "found": bool(e.get("found"))}       # read (if there was one), nothing matched: the status stays what it was
         elif stage == "package-script":
             seg["policy"] = "script"
             seg["script"] = {"key": e.get("key"), "policy_id": e.get("policy_id"), "unresolved": e.get("unresolved"),
@@ -272,6 +308,15 @@ def evaluate(s: Scenario, emit: Callable[[dict], None] | None = None) -> dict:
     """Judge a scenario with the real evaluator. Nothing is executed, logged or alerted on.
 
     `emit(event)` gets each stage event as it happens (the model's "running" arrives before the model finishes)."""
+    files = {"package.json": json.dumps({"name": "scenario", "scripts": s.package_scripts})} if s.package_scripts is not None else None
+    return judge_command(s.command, files=files, scenario_id=s.id, relevant=s.relevant, emit=emit)
+
+
+def judge_command(command: str, *, files: dict[str, str] | None = None, scenario_id: str = "", relevant: tuple[str, ...] = (),
+                  emit: Callable[[dict], None] | None = None) -> dict:
+    """Judge one command with the real evaluator, in a throwaway directory holding `files` (a virtual repository), as a
+    tool call. Nothing is executed, logged or alerted on: the evaluator only reads the command, and the package.json
+    scripts it would run, as text. `emit(event)` gets each stage event as it happens."""
     events: list[dict] = []
 
     def observe(event: dict) -> None:
@@ -280,8 +325,12 @@ def evaluate(s: Scenario, emit: Callable[[dict], None] | None = None) -> dict:
             emit({"type": "event", **event})
 
     t0 = time.perf_counter()
-    with _workspace(s) as cwd:
-        v = guard.judge_traced(s.command, source="tool", cwd=cwd, emit=observe)
+    with _workspace_files(files) as cwd:
+        if cwd is None:
+            v = guard.judge_traced(command, source="tool", cwd=None, emit=observe)
+        else:
+            with guard.confined(cwd):                 # only the virtual files can be read, wherever the command `cd`s to
+                v = guard.judge_traced(command, source="tool", cwd=cwd, emit=observe)
     latency = (time.perf_counter() - t0) * 1000.0
     steps, segments = steps_from_events(events, v)
     engine = next(st["status"] for st in steps if st["stage"] == "engine")
@@ -289,11 +338,10 @@ def evaluate(s: Scenario, emit: Callable[[dict], None] | None = None) -> dict:
             if e["stage"] == "policy" and e.get("policy_id")]
     # every policy whose pattern matches the command or a script it would run (judging stops at the first block, so
     # the events alone would say "didn't match" about policies that do), and which one decided
-    texts = [s.command, *[str(v) for v in (s.package_scripts or {}).values()]]
-    matching = [p.id for p in guard.policy_matches("\n".join(texts))]
+    matching = [p.id for p in guard.policy_matches("\n".join([command, *_script_bodies(files)]))]
     return {
         "type": "result",
-        "scenario": s.id,
+        "scenario": scenario_id,
         "mode": "mock" if v.mock else "fallback" if engine == "failed" else "real",
         "verdict": {"action": v.action, "risk": v.risk, "policy_id": v.policy_id, "reason": v.reason,
                     "mock": v.mock, "verdict_source": v.verdict_source},
@@ -302,12 +350,27 @@ def evaluate(s: Scenario, emit: Callable[[dict], None] | None = None) -> dict:
         "segments": segments,
         "policy_hits": hits,
         "matching_policies": matching,
-        "relevant": [{"policy_id": pid, "matched": pid in matching, "decided": pid == v.policy_id} for pid in s.relevant],
+        "relevant": [{"policy_id": pid, "matched": pid in matching, "decided": pid == v.policy_id} for pid in relevant],
         "source": "tool",
         "latency_ms": round(latency, 2),
         "logged": False,
         "executed": False,
     }
+
+
+def _script_bodies(files: dict[str, str] | None) -> list[str]:
+    """The `scripts` of every package.json in the virtual files, as text (for showing which policies match them)."""
+    bodies: list[str] = []
+    for rel, text in (files or {}).items():
+        if rel.rsplit("/", 1)[-1] != "package.json":
+            continue
+        try:
+            scripts = json.loads(text).get("scripts") or {}
+        except (ValueError, AttributeError):
+            continue
+        if isinstance(scripts, dict):
+            bodies += [v for v in scripts.values() if isinstance(v, str)]
+    return bodies
 
 
 def ndjson(s: Scenario) -> Iterator[str]:

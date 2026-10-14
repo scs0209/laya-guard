@@ -7,7 +7,7 @@ import { createCameraRig } from "./camera.js";
 import { createPackets } from "./packets.js";
 import { createLabels } from "./labels.js";
 
-var RING = { terminal: 2.3, queue: 4.2, policy: 5, engine: 3.6, decision: 3.6, execution: 3.8, review: 3.8, incident: 3.8 };
+var RING = { repo: 3.6, agent: 1.4, terminal: 2.3, queue: 4.2, policy: 5, engine: 3.6, decision: 3.6, execution: 3.8, review: 3.8, incident: 3.8 };
 
 export function createStage(canvas, labelsEl, config, hooks) {
   hooks = hooks || {};
@@ -79,7 +79,7 @@ export function createStage(canvas, labelsEl, config, hooks) {
     world: world, packets: packets, rig: rig,
     start: function () { if (running) return; running = true; last = performance.now(); raf = requestAnimationFrame(frame); },
     stop: function () { running = false; cancelAnimationFrame(raf); },
-    setReducedMotion: function (v) { reduced = !!v; rig.setReducedMotion(v); },
+    setReducedMotion: function (v) { reduced = !!v; world.reducedMotion = reduced; rig.setReducedMotion(v); },
     setPaused: function (v) { paused = !!v; },
     /** Glide to a station, ring it and highlight its label. `id` is a station id ("policy", "terminal:1", ...). */
     focusStation: function (id) {
@@ -89,6 +89,14 @@ export function createStage(canvas, labelsEl, config, hooks) {
       rig.glideTo(s.focus, s.zoom, 750);
       packets.select(s.focus.clone().setY(0), RING[stationOf(id)] || 3);
       labels.select(id);
+    },
+    /** Rebuild the station labels (after a station's label text or visibility changed). */
+    refreshLabels: function () { labels.set(world.labels()); },
+    focusPoint: function (pos, zoom, radius) {
+      rig.follow(null);
+      rig.glideTo(pos, zoom || 2.2, 700);
+      packets.select(pos.clone().setY(0), radius || 1);
+      labels.select(null);
     },
     focusPolicy: function (id) {
       var s = world.focusOf("policy");

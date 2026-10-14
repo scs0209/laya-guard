@@ -115,11 +115,13 @@ export function createPackets(scene) {
       packets.delete(run.id);
     },
     /** Remove every packet and token of recorded calls (the time window changed, so they are a different set). */
-    clearRecorded: function () {
-      Array.from(packets.keys()).forEach(function (id) { var p = packets.get(id); if (p.run.kind === "recorded") api.forget(p.run); });
+    clearRecorded: function () { api.clearWhere(function (r) { return r.kind === "recorded"; }); },
+    /** Remove every packet and token of the runs `pick(run)` says yes to. */
+    clearWhere: function (pick) {
+      Array.from(packets.keys()).forEach(function (id) { var p = packets.get(id); if (pick(p.run)) api.forget(p.run); });
       Array.from(tokens.keys()).forEach(function (id) {
         var m = tokens.get(id);
-        if (m.userData.run.kind !== "recorded") return;
+        if (!pick(m.userData.run)) return;
         layer.remove(m); m.geometry.dispose(); m.material.dispose(); tokens.delete(id);
         Object.keys(zones).forEach(function (z) { zones[z] = zones[z].filter(function (x) { return x !== id; }); });
       });

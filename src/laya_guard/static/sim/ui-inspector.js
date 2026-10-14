@@ -27,7 +27,7 @@ export function createInspector(root, actions) {
     update: function (app) {
       var t = app.stats && app.stats.totals;
       var s2 = [app.selection && app.selection.kind, app.selection && app.selection.id, app.focused && app.focused.id, app.focused && app.focused.source, app.inFlight,
-                t ? [t.total, t.allow, t.review, t.block].join(",") : "", app.evalMock].join("|");
+                t ? [t.total, t.allow, t.review, t.block].join(",") : "", app.evalMock, app.ai ? app.ai.lastSeq : 0].join("|");
       if (s2 === sig) return;
       sig = s2;
       clear(root);
@@ -41,7 +41,9 @@ export function createInspector(root, actions) {
       if (sel.kind === "run") {
         var run = app.byId[sel.id];
         root.appendChild(run ? runView(app, run, actions) : el("p", { text: "That call is no longer in the list." }));
-      } else if (sel.kind === "policy") root.appendChild(policyView(app, sel.id, actions));
+      } else if (sel.kind === "file") root.appendChild(fileView(app, sel.id));
+      else if (sel.kind === "agent") root.appendChild(agentView(app));
+      else if (sel.kind === "policy") root.appendChild(policyView(app, sel.id, actions));
       else root.appendChild(stationView(app, sel.id, actions));
     },
   };
@@ -124,6 +126,11 @@ function runView(app, run, actions) {
     el("div", { "class": "res-head" }, el("span", { "class": "src " + b.tone, text: b.label }), chip(ACTION_WORD[a] || a, run.source === "simulation" ? "sim" : tone(a))),
     el("p", { "class": "muted", text: b.detail }));
   if (run.kind === "scenario") root.appendChild(el("code", { "class": "scn-cmd", text: run.scenario.command }));
+  if (run.ai) {
+    root.appendChild(el("div", { "class": "res-head" }, el("span", { "class": "src ai", title: badge("ai").detail, text: badge("ai").label }),
+      el("span", { "class": "muted", text: "The command and the reason below were written by the AI agent. The verdict is laya-guard's." })));
+    if (run.scenario.why) root.appendChild(el("p", { "class": "ai-why", text: "The agent's reason (its own words): " + run.scenario.why }));
+  }
   root.appendChild(dl([
     ["Decided by", decidedBy(run)],
     ["Risk score", v.risk != null ? Number(v.risk).toFixed(2) : run.source === "simulation" ? "not measured (simulation data)" : "–"],
@@ -155,6 +162,35 @@ function runView(app, run, actions) {
   if (run.kind === "recorded") actionsRow.appendChild(el("button", { type: "button", "class": "sim-btn wide", onclick: function () { if (!actions.openInCalls(run)) root.appendChild(el("p", { "class": "muted", text: "That call isn't in the current time window of the Calls view. Widen the window and try again." })); } }, "Open in Calls"));
   else actionsRow.appendChild(el("span", { "class": "muted", text: "Scenario runs aren't logged, so there is nothing to open in Calls." }));
   root.appendChild(actionsRow);
+  return root;
+}
+
+function fileView(app, path) {
+  var f = app.ai.files[path], root = el("div", { "class": "insp" }, el("h3", { text: path }));
+  if (!f) { root.appendChild(el("p", { text: "That file isn't in the virtual repository." })); return root; }
+  root.appendChild(el("div", { "class": "res-head" }, el("span", { "class": "src plain", title: badge("simulated").detail, text: badge("simulated").label }),
+    el("span", { "class": "src ai", title: badge("ai").detail, text: badge("ai").label }),
+    el("span", { "class": "muted", text: "A file in the virtual repository: its text was written by the AI and lives only in memory." })));
+  var rows = [["Size", f.size + " characters"], ["Since the run started", f.created ? "created by the agent" : f.changed ? "changed by the agent (" + f.history.length + " write" + (f.history.length === 1 ? "" : "s") + ")" : "untouched"]];
+  if (f.flagged) rows.push(["laya-guard", "matched scripts." + f.flagged.key + " against " + f.flagged.policy + " when a command ran this file's script (a real finding)"]);
+  root.appendChild(dl(rows));
+  root.appendChild(block("Content", el("pre", { "class": "ai-file", text: f.content })));
+  if (f.history.length) {
+    var list = el("div", null);
+    f.history.forEach(function (h) { list.appendChild(el("details", { "class": "ai-diff" }, el("summary", { text: "Step " + h.step + ": " + (h.created ? "created" : "changed") }), el("pre", { text: h.diff || "(no textual diff)" }))); });
+    root.appendChild(block("What the agent changed", list));
+  }
+  return root;
+}
+
+function agentView(app) {
+  var st = app.ai, root = el("div", { "class": "insp" }, el("h3", { text: "The AI agent" }));
+  root.appendChild(el("div", { "class": "res-head" }, el("span", { "class": "src ai", title: badge("ai").detail, text: badge("ai").label })));
+  root.appendChild(el("p", { text: "A coding agent role-played by " + (st.agent ? st.agent.name : "the AI") + ". It reads your scenario, builds a virtual repository, and proposes one action at a time. It can't run anything: its commands are only judged by laya-guard." }));
+  root.appendChild(dl([
+    ["Scenario", st.plan ? st.plan.title : st.prompt || "none yet"], ["Goal", st.plan ? st.plan.goal : ""], ["Step", st.step ? st.step + " of " + st.maxSteps : ""],
+    ["Commands judged", st.commands.length ? st.commands.length + " (" + st.counts.allow + " allowed, " + st.counts.review + " held, " + st.counts.block + " blocked)" : ""],
+    ["Reported cost", st.cost ? "$" + st.cost.toFixed(3) : ""]]));
   return root;
 }
 

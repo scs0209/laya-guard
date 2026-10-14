@@ -296,6 +296,8 @@ export function createWorld(config) {
   var world = {
     scene: scene, pickables: pickables, stations: stations, animated: animated,
     stationIds: Object.keys(stations),
+    /** Things that add their own parts to the scene (the AI scenario's repository and agent) and move them each frame. */
+    extensions: [],
     /** Light a station up in a state's colour for a moment (the light decays on its own). */
     pulse: function (id, state, ms) { pulses[id] = { color: STATE_COLOR[state] || PALETTE.cyan, left: ms || 900, total: ms || 900 }; },
     lightPolicy: function (policyId, on) {
@@ -315,7 +317,7 @@ export function createWorld(config) {
     setEngineMode: function (mode) { world.engineMode = mode; },
     engineMode: "idle",
     focusOf: function (id) { return stations[id] || null; },
-    labels: function () { return Object.keys(stations).map(function (k) { return stations[k].label; }).filter(Boolean); },
+    labels: function () { return Object.keys(stations).map(function (k) { return stations[k].hidden ? null : stations[k].label; }).filter(Boolean); },
     update: function (dtMs, reduced) {
       var dt = dtMs / 1000;
       Object.keys(pulses).forEach(function (id) {
@@ -331,6 +333,7 @@ export function createWorld(config) {
           else setLamp(l, id === "engine" && world.engineMode === "offline" ? STATE_COLOR.fail : PALETTE.cyan, l.base);
         });
       });
+      world.extensions.forEach(function (x) { x.update(dtMs, reduced); });
       var active = world.engineMode === "active";
       if (animated.core) {
         animated.core.material.emissiveIntensity = active ? 1.4 : world.engineMode === "offline" ? 0.05 : 0.25;

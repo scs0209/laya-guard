@@ -232,3 +232,178 @@ test("simulation data is never drawn in the colours of a result, and a real run 
   assert.equal(vocab.toneFor(real, "policy", "hit"), "bad");
   assert.equal(vocab.toneFor(null, "decision", "allow"), "ok");
 });
+
+// ---- AI scenario runs: the event fold ---------------------------------------------------------------------------------
+
+test("a whole AI run folds into the state the panel shows, and each row says where it came from", async () => {
+  const ai = await import(SIM + "ai-reduce.js");
+  const events = JSON.parse(readFileSync(process.env.LAYA_SIM_AI_EVENTS, "utf8"));
+  const s = ai.reduceAll(events);
+  assert.equal(s.status, "finished");
+  assert.equal(s.plan.title, "Untrusted repo");
+  assert.deepEqual(s.counts, { allow: 0, review: 0, block: 1 });
+  assert.equal(s.lastSeq, events.at(-1).seq);
+  assert.equal(s.files["package.json"].changed, true, "the agent changed package.json");
+  assert.deepEqual(s.files["package.json"].flagged, { key: "test", policy: "pipe-to-shell" }, "laya-guard's script finding flags the file");
+  assert.equal(s.files["package.json"].history.length, 1);
+  assert.ok(s.files["package.json"].content.includes("curl"));
+  assert.equal(s.files["src/index.js"].changed, false);
+  const byKind = (k) => s.rows.filter((r) => r.kind === k);
+  assert.ok(byKind("ai").every((r) => r.badge.label === "AI-GENERATED"), "everything the agent wrote is labelled as AI");
+  assert.ok(byKind("world").every((r) => r.badge.label === "SIMULATED"));
+  assert.deepEqual(byKind("guard").map((r) => r.badge.label), ["MOCK EVALUATOR"], "a verdict carries the evaluator's own label, never the AI's");
+  assert.equal(byKind("guard")[0].verdict.action, "block");
+  const parts = ai.outcomeParts(s);
+  assert.equal(parts.caught, true);
+  assert.ok(parts.facts[0].startsWith("1 command judged by laya-guard: 0 allowed, 0 held for review, 1 blocked"));
+  assert.equal(parts.ai.headline, "laya-guard stopped the poisoned script.");
+  assert.ok(!parts.facts.join(" ").includes("poisoned"), "the AI's words are kept out of the facts");
+});
+
+test("statuses follow the events: thinking, pausing, a held command, the end", async () => {
+  const ai = await import(SIM + "ai-reduce.js");
+  const s = ai.initialAiState();
+  const ev = (type, extra = {}) => ({ seq: s.lastSeq + 1, t: "2026-10-14T00:00:00.000Z", type, ...extra });
+  ai.reduceAiEvent(s, ev("run.started", { run_id: "r1", prompt: "p", agent: { id: "claude-code", name: "Claude Code" }, model: null, max_steps: 6, mode: "step", review_policy: "ask" }));
+  assert.equal(s.status, "interpreting");
+  ai.reduceAiEvent(s, ev("ai.thinking", { phase: "interpret", step: 0, attempt: 1 }));
+  assert.equal(s.thinking.phase, "interpret");
+  ai.reduceAiEvent(s, ev("ai.reply", { phase: "interpret", step: 0, attempt: 1, total_cost_usd: 0.01 }));
+  assert.equal(s.thinking, null);
+  assert.equal(s.cost, 0.01);
+  ai.reduceAiEvent(s, ev("run.paused", { step: 1 }));
+  assert.equal(s.status, "paused");
+  assert.deepEqual(Object.entries(ai.controlsFor(s)).filter(([, v]) => v).map(([k]) => k).sort(), ["canResume", "canStep", "canStop"]);
+  ai.reduceAiEvent(s, ev("run.resumed", { step: 1 }));
+  assert.equal(s.status, "running");
+  ai.reduceAiEvent(s, ev("review.wait", { step: 1, command: "rm x", deadline_s: 120, auto: false }));
+  assert.equal(s.status, "waiting-review");
+  assert.equal(s.review.command, "rm x");
+  assert.equal(ai.controlsFor(s).canReview, true);
+  ai.reduceAiEvent(s, ev("review.decision", { step: 1, decision: "deny", by: "timeout" }));
+  assert.equal(s.review, null);
+  assert.equal(s.rows.at(-1).text, "no answer in time, so denied");
+  ai.reduceAiEvent(s, ev("ai.invalid", { phase: "act", step: 2, attempt: 1, errors: ["type must be one of ..."], will_retry: true }));
+  assert.ok(s.rows.at(-1).text.includes("it is asked again"));
+  ai.reduceAiEvent(s, ev("run.error", { kind: "timeout", message: "no answer in 120 s" }));
+  assert.equal(s.status, "error");
+  assert.deepEqual(s.error, { kind: "timeout", message: "no answer in 120 s" });
+  assert.deepEqual(ai.controlsFor(s), { canStart: true, canPause: false, canResume: false, canStep: false, canStop: false, canReview: false });
+  assert.equal(ai.isTerminal("run.stopped"), true);
+  assert.equal(ai.isTerminal("step.end"), false);
+});
+
+test("a run where the agent proposed no command says so as a fact, and does not claim laya-guard caught anything", async () => {
+  const ai = await import(SIM + "ai-reduce.js");
+  const s = ai.initialAiState();
+  ai.reduceAiEvent(s, { seq: 1, type: "summary", facts: { commands_judged: 0, verdicts: { allow: 0, review: 0, block: 0 }, files_written: [], ended_because: "agent-finished" }, ai: null });
+  const parts = ai.outcomeParts(s);
+  assert.equal(parts.caught, null);
+  assert.ok(parts.facts.includes("The agent proposed no command, so laya-guard had nothing to judge"));
+  assert.equal(parts.ai, null);
+});
+
+test("a path that is a name every object already has cannot reach the page's own objects", async () => {
+  const ai = await import(SIM + "ai-reduce.js");
+  const s = ai.initialAiState();
+  ai.reduceAiEvent(s, { seq: 1, type: "world.snapshot", files: { "a.txt": "x", constructor: "c" } });
+  for (const [i, path] of ["__proto__", "constructor", "toString", "hasOwnProperty"].entries()) {
+    ai.reduceAiEvent(s, { seq: 2 + i, type: "world.write", step: 1, path, created: true, content: "evil", before_chars: 0, after_chars: 4, diff: "" });
+  }
+  assert.equal(({}).content, undefined, "Object.prototype was not touched");
+  assert.equal(({}).size, undefined);
+  assert.equal(typeof Object.prototype.toString, "function");
+  assert.equal(typeof ({}).hasOwnProperty, "function");
+  assert.equal(s.files.constructor.content, "evil", "the AI's file called constructor is just a file");
+  assert.equal(Object.getPrototypeOf(s.files), null);
+  assert.deepEqual(Object.keys(s.files).sort(), ["__proto__", "a.txt", "constructor", "hasOwnProperty", "toString"]);
+});
+
+test("unknown events and an empty run are harmless, and no summary means no outcome", async () => {
+  const ai = await import(SIM + "ai-reduce.js");
+  const s = ai.initialAiState();
+  ai.reduceAiEvent(s, { seq: 1, type: "something.new", x: 1 });
+  ai.reduceAiEvent(s, { type: "ping" });
+  assert.equal(s.rows.length, 0);
+  assert.equal(ai.outcomeParts(s), null);
+  assert.equal(ai.describeAction({ type: "write_file", path: "a" }), "Writes a");
+  assert.equal(ai.describeAction({ type: "list_dir" }), "Lists .");
+});
+
+// ---- the sequencer ----------------------------------------------------------------------------------------------------
+
+const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
+
+test("events play strictly one after another, each waiting for the previous animation", async () => {
+  const { createSequencer } = await import(SIM + "ai-sequencer.js");
+  const log = [];
+  const seq = createSequencer(async (e) => { log.push("start " + e.n); await tick(15); log.push("end " + e.n); });
+  [1, 2, 3].forEach((n) => seq.push({ n }));
+  assert.equal(seq.length, 3);
+  await seq.idle();
+  assert.deepEqual(log, ["start 1", "end 1", "start 2", "end 2", "start 3", "end 3"]);
+  assert.equal(seq.length, 0);
+});
+
+test("a handler that returns nothing, throws or rejects doesn't stall the rest", async () => {
+  const { createSequencer } = await import(SIM + "ai-sequencer.js");
+  const seen = [];
+  const quiet = console.error; console.error = () => {};
+  const seq = createSequencer((e) => { seen.push(e.n); if (e.n === 2) throw new Error("boom"); if (e.n === 3) return Promise.reject(new Error("no")); });
+  [1, 2, 3, 4].forEach((n) => seq.push({ n }));
+  await seq.idle();
+  console.error = quiet;
+  assert.deepEqual(seen, [1, 2, 3, 4]);
+});
+
+test("pausing holds after the event being played; resuming carries on", async () => {
+  const { createSequencer } = await import(SIM + "ai-sequencer.js");
+  const seen = [];
+  const seq = createSequencer(async (e) => { seen.push(e.n); await tick(20); });
+  seq.push({ n: 1 }); seq.push({ n: 2 }); seq.push({ n: 3 });
+  seq.pause();
+  await seq.idle();
+  assert.deepEqual(seen, [1], "the event already playing finishes, then it holds");
+  assert.equal(seq.paused, true);
+  await tick(60);
+  assert.deepEqual(seen, [1]);
+  seq.push({ n: 4 });
+  assert.deepEqual(seen, [1], "new events wait too");
+  seq.resume();
+  await seq.idle();
+  assert.deepEqual(seen, [1, 2, 3, 4]);
+});
+
+test("stepping plays up to the end of the next step and holds again", async () => {
+  const { createSequencer } = await import(SIM + "ai-sequencer.js");
+  const seen = [];
+  const seq = createSequencer((e) => { seen.push(e.t); }, (e) => e.t === "step.end");
+  seq.pause();
+  ["step.begin", "action", "step.end", "step.begin", "action", "step.end"].forEach((t) => seq.push({ t }));
+  assert.deepEqual(seen, []);
+  seq.stepOnce();
+  await seq.idle();
+  assert.deepEqual(seen, ["step.begin", "action", "step.end"]);
+  assert.equal(seq.paused, true);
+  seq.stepOnce();
+  await seq.idle();
+  assert.equal(seen.length, 6);
+  seq.stepOnce(); seq.stepOnce();
+  seq.push({ t: "step.begin" }); seq.push({ t: "step.end" }); seq.push({ t: "step.begin" }); seq.push({ t: "step.end" });
+  await seq.idle();
+  assert.equal(seen.length, 10, "two steps asked for, two steps played");
+});
+
+test("clearing drops what hasn't played, and a disposed sequencer plays nothing more", async () => {
+  const { createSequencer } = await import(SIM + "ai-sequencer.js");
+  const seen = [];
+  const seq = createSequencer(async (e) => { seen.push(e.n); await tick(15); });
+  [1, 2, 3].forEach((n) => seq.push({ n }));
+  seq.clear();
+  await seq.idle();
+  assert.deepEqual(seen, [1]);
+  seq.dispose();
+  seq.push({ n: 9 });
+  await tick(30);
+  assert.deepEqual(seen, [1]);
+});

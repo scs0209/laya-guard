@@ -25,6 +25,10 @@ export var LAYOUT = {
   incident:  { center: [20.5, 8.5], in: [17.6, 8.5], out: [20.5, 8.5] },
 };
 
+// The virtual repository an AI scenario plays in, and where the agent stands: beside the scenario terminal.
+export var REPO = { center: [-13.5, 10.9], cols: 4, gap: 1.25 };
+export var AGENT_SPOTS = { terminal: [-16.2, 7.4], repo: [-12.1, 8.3] };
+
 export var GROUND = { x0: -24, x1: 26, z0: -15, z1: 15 };
 export var HOVER = 1.5;       // how high a packet floats above the ground
 
