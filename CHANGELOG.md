@@ -5,6 +5,12 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-14
+
+The dashboard gets a Simulation view: the pipeline as a small 3D diorama you can watch, an attack lab that judges eight
+scenarios with the real evaluator, and AI scenarios, where you describe any situation and the coding agent you already
+have plays it out in a virtual world while laya-guard judges every command it proposes. Nothing in it is ever run.
+
 ### Added
 
 - **Simulation view** in the dashboard (`/dashboard#/simulation`): the pipeline as an interactive isometric miniature
@@ -367,7 +373,8 @@ a verdict.
   Claude Code PreToolUse hook, local redacted telemetry, Korean 30-case eval,
   AgentDojo judge-level eval, E2E rollout harness.
 
-[Unreleased]: https://github.com/scs0209/laya-guard/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/scs0209/laya-guard/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/scs0209/laya-guard/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/scs0209/laya-guard/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/scs0209/laya-guard/compare/v0.2.6...v0.3.0
 [0.2.6]: https://github.com/scs0209/laya-guard/compare/v0.2.5...v0.2.6
