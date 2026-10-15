@@ -306,7 +306,8 @@ laya-guard status --check                  # where it's installed, is the server
 laya-guard uninstall claude-code           # removes only what `install` added
 ```
 
-`install` registers the hook for the `Bash` tool (`--matcher` to change that), writes absolute
+`install` registers the hook for the `Bash` tool (`--matcher` to change that, `--files` to add the file tools:
+[below](#protect-files-from-the-agents-file-tools-opt-in)), writes absolute
 paths (hooks often don't inherit your virtualenv's `PATH`), prints a diff, backs up the file
 and asks before writing (`--dry-run` to only look, `--yes` to skip the question). It merges into
 your existing hooks, never overwrites them, and leaves a hand-written `guard-hook.sh` entry alone
@@ -323,6 +324,42 @@ Non-interactive runs (`claude -p`) have nobody to answer, so an `ask` is denied 
 For the Bash tool only the command is judged, not the agent's description.
 If the server is unreachable or slower than 10s, it falls back to the offline
 check (see [Server down](#server-down)). Point it elsewhere with `LAYA_GUARD_URL`.
+
+#### Protect files from the agent's file tools (opt-in)
+
+The Claude Code hook guards `Bash` by default, so Claude Code's own `Read`, `Edit` and `Write` never reach it: nothing
+stops them from opening `~/.ssh/id_rsa`. `--files` adds them:
+
+```bash
+laya-guard install claude-code --files     # Bash + Read, Edit, MultiEdit, Write, NotebookEdit, Glob, Grep
+```
+
+A file tool call is then judged by the paths it names, against **protected paths**: no model runs, and the content
+being read or written is neither judged nor sent. Out of the box, credential stores (`~/.ssh`, `~/.aws`, `~/.gnupg`,
+`~/.kube`, …), `.env*` files and private keys are *reviewed* (Claude Code asks you) when read, credential stores are
+*blocked* when changed, and a write to the agent's own user-level settings and hooks is reviewed
+([`protect.yaml`](src/laya_guard/protect.yaml)). Add your own in `~/.config/laya-guard/protect.yaml`; edits apply to the
+next call:
+
+```yaml
+version: 1
+protect:
+  - path: "~/work/app/prisma/migrations/**"   # absolute: this project only
+    ops: [write]                               # read, write, or both (the default)
+    action: block                              # review (ask) or block
+    reason: schema history                     # shown with the verdict; keep file names out of it
+  - path: "**/secrets.yaml"                    # **/ matches at any depth
+    except: ["**/secrets.example.yaml"]
+```
+
+Relative globs follow the directory the agent runs in, so they apply in every project; write an absolute path to limit a
+rule to one. The path is checked as named and through symlinks and `..`, ignoring case. It is never written to the
+verdict log (the log keeps the tool name, a hash and a length). Try one without an agent:
+`laya-guard check --offline --tool-name Read --path ~/.ssh/id_rsa x`. With the server down, the offline check applies the
+same rules, and a file call that matches none is allowed instead of asked about.
+
+This sees the **path a tool call names, nothing more**: a file read inside a shell command, a script or a child process
+never reaches it. The shell is still judged as before, with its own sensitive-path checks.
 
 ### 1b. Guard Cursor (beforeShellExecution hook)
 
@@ -492,11 +529,14 @@ All patterns live in [policy.yaml](src/laya_guard/policy.yaml) — edit, add you
 ## API
 
 - `GET /health` → `{"ok": true, "mock": false}`
-- `POST /guard` `{tool_call, source?, cwd?, tool_name?}` → `{action, risk, policy_id, reason, mock, verdict_source}`
+- `POST /guard` `{tool_call, source?, cwd?, tool_name?, paths?}` → `{action, risk, policy_id, reason, mock, verdict_source}`
   (`source`: `user` | `tool` | `email` | `web`; non-user sources get stricter thresholds.
   `cwd`: absolute directory the command runs in; enables package.json script checks.
-  `tool_name`: the agent's name for the tool being called (`Bash`, `Edit`, an MCP tool, …); it doesn't change the
-  verdict, it is only logged (in clear, up to 64 characters; `null` when absent) and counted by `laya-guard stats`.
+  `tool_name`: the agent's name for the tool being called (`Bash`, `Edit`, an MCP tool, …); it is logged (in clear, up
+  to 64 characters; `null` when absent) and counted by `laya-guard stats`. With `paths` (the files the call names) it
+  also marks a file tool call (`Read`, `Edit`, `MultiEdit`, `Write`, `NotebookEdit`, `Glob`, `Grep`): that call is
+  judged by the paths alone, against the protected paths, and `tool_call` is ignored. For any other tool it doesn't
+  change the verdict.
   `reason` is Korean when the input contains Hangul, English otherwise.
   `verdict_source`: `regex` (prefilter block, model skipped) |
   `allowlist` (safe command, model skipped) | `model` |
@@ -610,11 +650,15 @@ the same as one model call, so a 6-window input takes a few seconds.
   (expanding them with `make -n` would run `$(shell …)`), and `.npmrc`
   `script-shell`. An edit to them is judged only when the agent writes it, and only
   by adapters that hook file edits. Trim `safe_commands` in `policy.yaml` if that
-  matters to you.
+  matters to you. (Claude Code's file tools, once guarded with `--files`, are judged by their paths alone, not by what
+  they write.)
 - Script checks trust the `cwd` the agent reports. If an agent's shell keeps a
   `cd` from an earlier call but reports the project root, the wrong package.json
   is read. Five adapters (Cline, Gemini, Qwen, Kilo, Amp) send the tool call as
   JSON, so it never qualifies as a safe command and goes to the model instead.
+- Protected paths see declared access only: the path a file tool call names. A file read by a shell command, a script
+  or a child process is invisible to them, and a rule can't tell an honest `Read` of `.env` from a harmful one: a
+  match is reviewed or blocked, not understood.
 - Chain commands are judged one by one, so the model doesn't see that `cd /etc`
   came before `cat shadow`. Sensitive-path checks and whole-string regexes cover
   the common cases, not all of them.

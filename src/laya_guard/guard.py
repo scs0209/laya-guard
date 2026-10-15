@@ -22,7 +22,7 @@ class Verdict:
     policy_id: str
     reason: str
     mock: bool = False
-    # where the verdict came from: regex = prefilter short-circuit (no model),
+    # where the verdict came from: regex = a rule short-circuit (a policy pattern or a protected path; no model),
     # allowlist = matched policy.yaml safe_commands (no model),
     # model = Laya ran (even if a regex floor later raised the action),
     # heuristic = mock mode, or the model raised and regex+heuristics stood in,

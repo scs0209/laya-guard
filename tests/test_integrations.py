@@ -85,11 +85,16 @@ def test_claude_hook_contract():
         p = _run_claude("REVIEWME x", url)
         assert p.returncode == 0 and "\"ask\"" in p.stdout        # review -> ask a human
         assert _run_claude("ls", url).returncode == 0  # description is not judged
-        # non-Bash tools: tool name + flattened input values are judged
+        # a file tool is judged by the paths it names (only those are sent); any other non-Bash tool by its
+        # name + flattened input values
         p = subprocess.run(["bash", str(CLAUDE)], capture_output=True, text=True, timeout=60,
                            env=dict(BASE_ENV, LAYA_GUARD_URL=url),
                            input=json.dumps({"tool_name": "Write",
-                                             "tool_input": {"file_path": "a", "content": "BLOCKME"}}))
+                                             "tool_input": {"file_path": "BLOCKME.txt", "content": "x"}}))
+        assert p.returncode == 2
+        p = subprocess.run(["bash", str(CLAUDE)], capture_output=True, text=True, timeout=60,
+                           env=dict(BASE_ENV, LAYA_GUARD_URL=url),
+                           input=json.dumps({"tool_name": "mcp__x__send", "tool_input": {"text": "BLOCKME"}}))
         assert p.returncode == 2
     finally:
         srv.shutdown()

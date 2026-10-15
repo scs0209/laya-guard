@@ -9,11 +9,24 @@ All notable changes to this project are documented here. Versions follow
 
 - **`POST /guard` accepts an optional `tool_name`** (`Bash`, `Edit`, an MCP tool, …). It is logged in clear as
   `"tool_name"` in `verdicts.jsonl` (non-printable characters dropped, cut to 64 characters, `null` when absent) and
-  `laya-guard stats` shows the top five tools, so you can tell which tools the blocks come from. The adapters don't
-  send it yet.
+  `laya-guard stats` shows the top five tools, so you can tell which tools the blocks come from. The Claude Code hook
+  sends it; the other adapters don't yet.
+- **Protected paths for Claude Code's file tools.** `laya-guard install claude-code --files` also guards `Read`, `Edit`,
+  `MultiEdit`, `Write`, `NotebookEdit`, `Glob` and `Grep`. A call is judged by the paths it names alone, against
+  `protect.yaml` rules: credential stores (`~/.ssh`, `~/.aws`, …), `.env*` files and private keys are reviewed when read,
+  credential stores are blocked when changed, and writes to the agent's own user-level settings and hooks are reviewed.
+  Add rules in `~/.config/laya-guard/protect.yaml` (globs, `read`/`write`, `review`/`block`, `except`; edits apply to the
+  next call). It is a rule lane: no model, and the path is never written to the verdict log. Paths are checked as named
+  and through symlinks and `..`, ignoring case. `POST /guard` takes `paths`, `laya-guard check` takes `--tool-name` and
+  `--path`, and the hook's offline fallback applies the same rules. It sees declared access only: a file read inside a
+  shell command, a script or a child process never reaches it.
 
 ### Changed
 
+- **A file tool call is judged by its paths alone.** When the Claude Code hook's matcher includes a file tool (`--files`,
+  or a hand-written `--matcher`), the call used to be judged as text with the file's content in it. Now only the tool name
+  and the paths are sent and judged, so a large or minified file can no longer be blocked as oversized, nothing a file
+  contains reaches the guard, and no model runs for these calls. The default matcher (`Bash`) is unchanged.
 - **The verdict log field `via` is now `verdict_source`**, the same name as in the API. Entries written before keep
   `via` and are still read by the dashboard and `laya-guard stats`.
 

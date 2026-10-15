@@ -1,0 +1,51 @@
+# laya-guard: protected paths
+# Rules for the files an agent touches with its own file tools (Claude Code's Read, Edit, Write, ...).
+# Your own rules in ~/.config/laya-guard/protect.yaml are added to these; the stricter answer wins.
+#
+#   path:    a glob. ~ is your home directory. A relative glob is relative to the directory the agent runs in, so it
+#            applies in every project; write an absolute path to limit a rule to one. A glob that starts with **/
+#            matches at any depth. `dir/**` matches dir itself and everything below it.
+#   ops:     read and/or write (default: both). read is Read, Glob, Grep; write is Edit, MultiEdit, Write, NotebookEdit.
+#   action:  review (a human is asked) or block (default: review).
+#   reason:  shown with the verdict; never put a file name in it, it is written to the verdict log.
+#   except:  globs that are not protected by this rule even though `path` matches.
+#
+# This sees the path a tool call names. A file read inside a shell command, a script or a child process never
+# reaches it.
+version: 1
+protect:
+  # Credential stores: ask before an agent reads one, refuse to let it change one.
+  - {path: "~/.ssh/**",              ops: [read],  action: review, reason: "SSH keys and config"}
+  - {path: "~/.ssh/**",              ops: [write], action: block,  reason: "SSH keys and config"}
+  - {path: "~/.aws/**",              ops: [read],  action: review, reason: "AWS credentials"}
+  - {path: "~/.aws/**",              ops: [write], action: block,  reason: "AWS credentials"}
+  - {path: "~/.gnupg/**",            ops: [read],  action: review, reason: "GPG keys"}
+  - {path: "~/.gnupg/**",            ops: [write], action: block,  reason: "GPG keys"}
+  - {path: "~/.kube/**",             ops: [read],  action: review, reason: "Kubernetes credentials"}
+  - {path: "~/.kube/**",             ops: [write], action: block,  reason: "Kubernetes credentials"}
+  - {path: "~/.docker/config.json",  ops: [read],  action: review, reason: "Docker registry credentials"}
+  - {path: "~/.docker/config.json",  ops: [write], action: block,  reason: "Docker registry credentials"}
+  - {path: "~/.netrc",               ops: [read],  action: review, reason: "stored logins"}
+  - {path: "~/.netrc",               ops: [write], action: block,  reason: "stored logins"}
+  - {path: "~/.npmrc",               ops: [read],  action: review, reason: "package registry tokens"}
+  - {path: "~/.npmrc",               ops: [write], action: block,  reason: "package registry tokens"}
+  - {path: "~/.pypirc",              ops: [read],  action: review, reason: "package registry tokens"}
+  - {path: "~/.pypirc",              ops: [write], action: block,  reason: "package registry tokens"}
+  - {path: "~/.git-credentials",     ops: [read],  action: review, reason: "stored git logins"}
+  - {path: "~/.git-credentials",     ops: [write], action: block,  reason: "stored git logins"}
+  # Environment files and private keys can sit in any project.
+  - path: "**/.env"
+    action: review
+    reason: "environment file"
+    except: ["**/.env.example", "**/.env.sample", "**/.env.template", "**/.env.dist"]
+  - path: "**/.env.*"
+    action: review
+    reason: "environment file"
+    except: ["**/.env.example", "**/.env.sample", "**/.env.template", "**/.env.dist"]
+  - {path: "**/id_rsa",     action: review, reason: "private key"}
+  - {path: "**/id_ed25519", action: review, reason: "private key"}
+  - {path: "**/id_ecdsa",   action: review, reason: "private key"}
+  # An agent that can rewrite its own hooks can switch the guard off.
+  - {path: "~/.claude/settings.json",       ops: [write], action: review, reason: "the agent's own user-level settings and hooks"}
+  - {path: "~/.claude/settings.local.json", ops: [write], action: review, reason: "the agent's own user-level settings and hooks"}
+  - {path: "~/.claude/hooks/**",            ops: [write], action: review, reason: "the agent's own user-level settings and hooks"}

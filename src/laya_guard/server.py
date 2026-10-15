@@ -12,7 +12,7 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
-from . import agentbridge, aisim, alerts, dashboard, install, service, simulation
+from . import agentbridge, aisim, alerts, dashboard, fileaccess, install, service, simulation
 from .guard import judge, is_mock
 from .log import load_entries, log_enabled, log_path, log_verdict
 
@@ -23,9 +23,12 @@ app = FastAPI(title="laya-guard")
 _WRITE_TOKEN = secrets.token_urlsafe(32)
 
 
-def _judge_and_log(text: str, source: str, cwd: str | None = None, tool_name: str | None = None):
+def _judge_and_log(text: str, source: str, cwd: str | None = None, tool_name: str | None = None,
+                   paths: list[str] | None = None):
     t0 = time.perf_counter()
-    v = judge(text, source=source, cwd=cwd)
+    # A file tool call is judged by the paths it names alone (the protected paths: no model, no content);
+    # everything else goes through the judge as before.
+    v = fileaccess.judge_file_call(tool_name, paths, cwd) or judge(text, source=source, cwd=cwd)
     log_verdict(
         action=v.action, risk=v.risk, policy_id=v.policy_id, reason=v.reason,
         mock=v.mock, source=source,
@@ -41,7 +44,8 @@ class GuardReq(BaseModel):
     state: str = ""
     source: str = "user"  # user | tool | email | web
     cwd: str | None = None  # absolute directory the command runs in (enables package script checks)
-    tool_name: str | None = None  # the agent's name for the tool (Bash, Edit, an MCP tool); logged, not judged
+    tool_name: str | None = None  # the agent's name for the tool (Bash, Edit, an MCP tool); logged, and tells a file tool from the rest
+    paths: list[str] | None = None  # the files a file tool call names (never their content); with a file tool, only these are judged
 
 class GuardRes(BaseModel):
     action: str
@@ -59,7 +63,7 @@ def health():
 def guard(req: GuardReq):
     text = req.tool_call or req.state
     cwd = req.cwd if req.cwd and os.path.isabs(req.cwd) else None
-    v = _judge_and_log(text, source=req.source, cwd=cwd, tool_name=req.tool_name)
+    v = _judge_and_log(text, source=req.source, cwd=cwd, tool_name=req.tool_name, paths=req.paths)
     return GuardRes(action=v.action, risk=v.risk, policy_id=v.policy_id, reason=v.reason,
                     mock=v.mock, verdict_source=v.verdict_source)
 

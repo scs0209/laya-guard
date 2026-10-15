@@ -1,0 +1,220 @@
+"""Protected paths: the rules an agent's file tool calls are judged against. No model, no network.
+
+Every test runs with HOME and the config directory in a temporary place, so neither the developer's own
+`~/.config/laya-guard/protect.yaml` nor their real `~/.ssh` can change a result.
+"""
+import logging
+import os
+import sys
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+from laya_guard import fileaccess  # noqa: E402
+from laya_guard.fileaccess import Rule, judge_file_call, judge_paths  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def mock_mode(monkeypatch):
+    monkeypatch.setenv("LAYA_GUARD_MOCK", "1")
+
+
+@pytest.fixture
+def home(tmp_path, monkeypatch):
+    h = tmp_path / "home"
+    h.mkdir()
+    monkeypatch.setenv("HOME", str(h))
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.delenv("LAYA_GUARD_PROTECT", raising=False)
+    return h
+
+
+@pytest.fixture
+def project(tmp_path):
+    p = tmp_path / "project"
+    p.mkdir()
+    return p
+
+
+def _user_rules(home, text):
+    path = home / ".config" / "laya-guard" / "protect.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+# --- the defaults ----------------------------------------------------------------------------------------------------
+
+def test_credential_stores_are_reviewed_to_read_and_blocked_to_change(home, project):
+    read = judge_paths("Read", ["~/.ssh/id_rsa"], str(project))
+    assert (read.action, read.policy_id, read.verdict_source) == ("review", "protected-path", "regex")
+    assert judge_paths("Write", ["~/.aws/credentials"], str(project)).action == "block"
+    assert judge_paths("Edit", [str(home / ".ssh" / "authorized_keys")], str(project)).action == "block"
+    assert judge_paths("Grep", ["~/.ssh"], str(project)).action == "review"       # the directory itself counts
+    assert judge_paths("Read", ["~/.sshx/notes"], str(project)) is None             # a different name
+
+
+def test_env_files_and_private_keys_are_protected_in_any_project(home, project):
+    assert judge_paths("Edit", [".env.production"], str(project)).action == "review"
+    assert judge_paths("Read", [str(project / "deep" / "er" / ".env")], str(project)).action == "review"
+    assert judge_paths("Read", ["keys/id_ed25519"], str(project)).action == "review"
+    for name in (".env.example", ".env.sample", ".env.template", ".env.dist"):
+        assert judge_paths("Read", [name], str(project)) is None, name
+
+
+def test_the_agents_own_hooks_are_reviewed_to_change_but_not_to_read(home, project):
+    assert judge_paths("Write", ["~/.claude/settings.json"], str(project)).action == "review"
+    assert judge_paths("Edit", ["~/.claude/hooks/guard.sh"], str(project)).action == "review"
+    assert judge_paths("Read", ["~/.claude/settings.json"], str(project)) is None
+    assert judge_paths("Write", [".claude/settings.json"], str(project)) is None     # a project's own file is fine
+
+
+def test_the_reason_never_names_the_file(home, project):
+    v = judge_paths("Read", ["~/.ssh/id_rsa"], str(project))
+    assert "id_rsa" not in v.reason and ".ssh" not in v.reason
+
+
+# --- what counts as a file tool call -----------------------------------------------------------------------------------
+
+def test_a_file_tool_call_is_judged_by_its_paths_alone(home, project):
+    v = judge_file_call("Write", ["src/app.py"], str(project))
+    assert (v.action, v.policy_id, v.verdict_source) == ("allow", "general", "allowlist")
+    assert judge_file_call("Read", ["~/.ssh/id_rsa"], str(project)).action == "review"
+
+
+def test_anything_else_is_left_to_the_judge(home, project):
+    cwd = str(project)
+    assert judge_file_call("Bash", ["~/.ssh/id_rsa"], cwd) is None                # not a file tool
+    assert judge_file_call("mcp__x__tool", ["~/.ssh/id_rsa"], cwd) is None
+    assert judge_file_call(None, ["~/.ssh/id_rsa"], cwd) is None
+    assert judge_file_call("Read", None, cwd) is None                              # no paths named
+    assert judge_file_call("Read", [], cwd) is None
+    assert judge_file_call("Read", ["", "  ", 5], cwd) is None                      # nothing usable
+    assert judge_paths("Bash", ["~/.ssh/id_rsa"], cwd) is None
+
+
+def test_every_tool_the_install_flag_guards_is_a_known_file_tool():
+    from laya_guard.install import FILES_MATCHER
+    guarded = set(FILES_MATCHER.split("|")) - {"Bash"}
+    assert guarded <= set(fileaccess.FILE_TOOLS)
+    assert fileaccess.FILE_TOOLS["Read"] == "read" and fileaccess.FILE_TOOLS["Write"] == "write"
+
+
+# --- your own rules ----------------------------------------------------------------------------------------------------
+
+def test_your_rules_add_to_the_defaults_and_relative_globs_follow_the_agents_directory(home, project, tmp_path):
+    _user_rules(home, f"""
+version: 1
+protect:
+  - {{path: "prisma/migrations/**", ops: [write], action: block, reason: "schema history"}}
+  - {{path: "**/secrets.yaml", action: review}}
+  - {{path: "{project}/legacy/**", action: block}}
+""")
+    cwd = str(project)
+    assert judge_paths("Write", ["prisma/migrations/001.sql"], cwd).action == "block"
+    assert judge_paths("Read", ["prisma/migrations/001.sql"], cwd) is None           # ops: write only
+    assert judge_paths("Edit", ["prisma/migrations"], cwd).action == "block"         # dir/** includes the directory
+    assert judge_paths("Write", ["prisma/migrations/001.sql"], str(tmp_path)).action == "block"   # relative: any project
+    assert judge_paths("Write", ["legacy/x.py"], cwd).action == "block"                           # absolute: this one only
+    assert judge_paths("Write", ["legacy/x.py"], str(tmp_path)) is None
+    assert judge_paths("Read", ["any/where/secrets.yaml"], cwd).action == "review"
+    assert judge_paths("Read", ["~/.ssh/id_rsa"], cwd).action == "review"             # the defaults still apply
+
+
+def test_the_strictest_matching_rule_wins(home, project):
+    _user_rules(home, 'version: 1\nprotect:\n  - {path: "~/.ssh/**", ops: [read], action: block, reason: "locked down"}\n')
+    v = judge_paths("Read", ["~/.ssh/id_rsa"], str(project))
+    assert (v.action, v.reason) == ("block", "locked down")
+
+
+def test_edits_to_your_rules_apply_to_the_next_call(home, project):
+    path = _user_rules(home, 'version: 1\nprotect:\n  - {path: "notes/**", action: review}\n')
+    assert judge_paths("Read", ["notes/a.md"], str(project)).action == "review"
+    path.write_text('version: 1\nprotect:\n  - {path: "notes/**", action: block}\n', encoding="utf-8")
+    stat = path.stat()
+    os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 10**9))                   # a coarse clock can repeat an mtime
+    assert judge_paths("Read", ["notes/a.md"], str(project)).action == "block"
+
+
+def test_a_broken_file_never_switches_the_defaults_off(home, project, caplog):
+    _user_rules(home, "protect: [this is: not, valid")
+    with caplog.at_level(logging.WARNING, logger="laya_guard"):
+        assert judge_paths("Read", ["~/.ssh/id_rsa"], str(project)).action == "review"
+    assert any("ignored" in r.message for r in caplog.records)
+
+
+def test_a_bad_entry_is_skipped_and_the_good_ones_kept(home, project, caplog):
+    _user_rules(home, """
+version: 1
+protect:
+  - {path: "a/**", action: nuke}
+  - {path: "", action: review}
+  - {action: review}
+  - {path: "b/**", ops: [delete], action: review}
+  - {path: "c/**", action: block}
+""")
+    with caplog.at_level(logging.WARNING, logger="laya_guard"):
+        assert judge_paths("Write", ["c/x"], str(project)).action == "block"
+        assert judge_paths("Write", ["a/x"], str(project)) is None
+        assert judge_paths("Write", ["b/x"], str(project)) is None
+    assert sum("skipped" in r.message for r in caplog.records) >= 4
+
+
+def test_an_env_override_points_at_another_file(home, project, tmp_path, monkeypatch):
+    other = tmp_path / "elsewhere.yaml"
+    other.write_text('version: 1\nprotect:\n  - {path: "x/**", action: block}\n', encoding="utf-8")
+    monkeypatch.setenv("LAYA_GUARD_PROTECT", str(other))
+    assert judge_paths("Write", ["x/a"], str(project)).action == "block"
+
+
+# --- a path can't be dressed up ----------------------------------------------------------------------------------------
+
+def test_dotdot_and_case_do_not_dodge_a_rule(home, project):
+    cwd = str(project)
+    assert judge_paths("Read", ["../home/.ssh/id_rsa"], str(home / "elsewhere")).action == "review"
+    assert judge_paths("Read", [f"{home}/project/../.ssh/id_rsa"], cwd).action == "review"
+    assert judge_paths("Read", ["~/.SSH/ID_RSA"], cwd).action == "review"          # the usual file systems ignore case
+
+
+def test_a_symlink_into_a_protected_place_is_caught_through_its_real_path(home, project):
+    (home / ".ssh").mkdir()
+    (home / ".ssh" / "id_rsa").write_text("key")
+    (project / "innocent.txt").symlink_to(home / ".ssh" / "id_rsa")
+    assert judge_paths("Read", ["innocent.txt"], str(project)).action == "review"
+    assert judge_paths("Write", ["innocent.txt"], str(project)).action == "block"
+
+
+def test_a_link_named_like_an_exception_does_not_become_one(home, project):
+    (project / ".env").write_text("TOKEN=1")
+    (project / ".env.example").symlink_to(project / ".env")
+    assert judge_paths("Read", [".env.example"], str(project)).action == "review"  # its target isn't an example
+
+
+def test_many_or_huge_paths_are_bounded(home, project):
+    many = ["a"] * 500 + ["~/.ssh/id_rsa"]                                            # the protected one is past the cap
+    assert judge_paths("Read", many, str(project)) is None
+    assert judge_paths("Read", ["x" * (fileaccess.MAX_PATH_LEN + 1)], str(project)) is None
+
+
+# --- globs --------------------------------------------------------------------------------------------------------------
+
+@pytest.mark.parametrize("glob, path, hit", [
+    ("a/*.txt", "a/x.txt", True),
+    ("a/*.txt", "a/b/x.txt", False),                  # * stays inside one directory
+    ("a/**/x.txt", "a/x.txt", True),
+    ("a/**/x.txt", "a/b/c/x.txt", True),
+    ("**/x.txt", "x.txt", True),
+    ("a/?.txt", "a/b.txt", True),
+    ("a/?.txt", "a/bc.txt", False),
+    ("a/[1].txt", "a/[1].txt", True),                 # no character classes: brackets are literal
+    ("a/[1].txt", "a/1.txt", False),
+    ("a/(x)+.txt", "a/(x)+.txt", True),               # regex characters are literal too
+    ("a/dir/**", "a/dir", True),
+    ("a/dir/**", "a/dir/x/y", True),
+    ("a/dir/**", "a/dirx/y", False),
+])
+def test_glob_semantics(home, project, glob, path, hit):
+    rule = Rule(glob=glob, ops=frozenset({"read"}), action="review", reason="t")
+    got = judge_paths("Read", [path], str(project), rules=[rule])
+    assert (got is not None) is hit

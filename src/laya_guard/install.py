@@ -35,6 +35,7 @@ SCRIPT_NAME = "guard-hook.sh"          # Claude Code's; kept for callers that do
 MARKER = "LAYA_GUARD_MANAGED=1"       # in the command or the file header: written by `laya-guard install`
 SCOPES = ("user", "project", "local")
 DEFAULT_MATCHER = "Bash"
+FILES_MATCHER = "Bash|Read|Edit|MultiEdit|Write|NotebookEdit|Glob|Grep"   # `install --files`: the file tools too
 HOOK_TIMEOUT = 30                      # seconds; the hook itself gives up on the server after 10
 DEAD_URL = "http://127.0.0.1:1/none"   # for probes: force the offline path, don't touch the real server
 
