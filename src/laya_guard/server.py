@@ -12,7 +12,7 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
-from . import agentbridge, aisim, alerts, dashboard, fileaccess, install, service, simulation
+from . import activity, agentbridge, aisim, alerts, dashboard, fileaccess, install, service, simulation
 from .guard import judge, is_mock
 from .log import load_entries, log_enabled, log_path, log_verdict
 
@@ -24,7 +24,7 @@ _WRITE_TOKEN = secrets.token_urlsafe(32)
 
 
 def _judge_and_log(text: str, source: str, cwd: str | None = None, tool_name: str | None = None,
-                   paths: list[str] | None = None):
+                   paths: list[str] | None = None, agent: str | None = None):
     t0 = time.perf_counter()
     # A file tool call is judged by the paths it names alone (the protected paths: no model, no content);
     # everything else goes through the judge as before.
@@ -35,6 +35,7 @@ def _judge_and_log(text: str, source: str, cwd: str | None = None, tool_name: st
         latency_ms=(time.perf_counter() - t0) * 1000.0, tool_call=text, via=v.verdict_source,
         tool_name=tool_name,
     )
+    activity.record_call(agent=agent, tool_name=tool_name, text=text, paths=paths, cwd=cwd, verdict=v)   # opt-in; never raises
     if v.verdict_source == "heuristic" and not v.mock:
         alerts.maybe_alert("model-error")  # the model failed and heuristics stood in; mock mode is a choice
     return v
@@ -46,6 +47,7 @@ class GuardReq(BaseModel):
     cwd: str | None = None  # absolute directory the command runs in (enables package script checks)
     tool_name: str | None = None  # the agent's name for the tool (Bash, Edit, an MCP tool); logged, and tells a file tool from the rest
     paths: list[str] | None = None  # the files a file tool call names (never their content); with a file tool, only these are judged
+    agent: str | None = None  # which agent is calling (claude-code, ...); only used to label the opt-in file activity log
 
 class GuardRes(BaseModel):
     action: str
@@ -63,7 +65,7 @@ def health():
 def guard(req: GuardReq):
     text = req.tool_call or req.state
     cwd = req.cwd if req.cwd and os.path.isabs(req.cwd) else None
-    v = _judge_and_log(text, source=req.source, cwd=cwd, tool_name=req.tool_name, paths=req.paths)
+    v = _judge_and_log(text, source=req.source, cwd=cwd, tool_name=req.tool_name, paths=req.paths, agent=req.agent)
     return GuardRes(action=v.action, risk=v.risk, policy_id=v.policy_id, reason=v.reason,
                     mock=v.mock, verdict_source=v.verdict_source)
 

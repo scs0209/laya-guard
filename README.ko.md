@@ -322,6 +322,25 @@ laya-guard install claude-code --files     # Bash + Read, Edit, MultiEdit, Write
 이 기능이 보는 것은 **도구 호출이 지목한 경로뿐**입니다. 셸 명령, 스크립트, 자식 프로세스 안에서 읽는 파일은 닿지
 않습니다. 셸은 예전처럼 민감 경로 검사를 포함해 그대로 심판합니다.
 
+#### 에이전트가 건드린 파일 보기 (선택)
+
+에이전트의 도구 호출이 지목한 파일을 기록해 두면 에이전트가 실제로 무엇에 손을 댔는지 볼 수 있습니다. 디스크에
+**파일 경로**(내용은 절대 아님)를 쓰기 때문에 기본은 꺼져 있습니다:
+
+```bash
+laya-guard activity on        # 기록 시작
+laya-guard activity           # 상태와 최근 이벤트
+laya-guard activity off       # 중지 (기록은 남음)
+```
+
+`~/.local/share/laya-guard/file-activity.jsonl`(본인만 읽을 수 있음, `LAYA_GUARD_FILE_ACTIVITY_PATH`로 위치 변경)의
+한 줄이 호출이 지목한 파일 하나입니다: `{ts, agent, tool_name, op, path, abs, source, action, policy_id}`.
+`op`는 `read`·`write`·`delete`, `source`는 경로를 어디서 알았는지(`hook`: 파일 도구가 지목, `shell`: Bash 명령에서
+단순한 형태만 추정, 셸이 풀어야 하는 `$VAR`·글롭·`$(…)`은 건너뛰므로 놓치는 것이 있음), `action`은 가드의 답이라
+막힌 시도를 접근으로 오해하지 않습니다. `verdicts.jsonl`에는 여전히 경로가 들어가지 않고, 환경변수
+`LAYA_GUARD_FILE_ACTIVITY=1|0`이 있으면 그것이 우선합니다. 50 MB에서 기록을 멈춥니다. Bash 호출은 켜는 즉시,
+파일 도구 호출은 `install --files`가 필요하며, 지금은 Claude Code 훅을 거친 선언된 접근만 기록합니다.
+
 ### 1b. Cursor 가드 (beforeShellExecution 훅)
 
 ```bash
@@ -487,13 +506,14 @@ laya-guard dashboard   # 같은 내용을 로컬 웹 페이지로 (대시보드 
 ## API
 
 - `GET /health` → `{"ok": true, "mock": false}`
-- `POST /guard` `{tool_call, source?, cwd?, tool_name?, paths?}` → `{action, risk, policy_id, reason, mock, verdict_source}`
+- `POST /guard` `{tool_call, source?, cwd?, tool_name?, paths?, agent?}` → `{action, risk, policy_id, reason, mock, verdict_source}`
   (`source`: `user` | `tool` | `email` | `web`. 비사용자 출처는 임계값 강화.
   `cwd`: 명령이 실행될 절대 경로. 주면 package.json 스크립트 검사가 켜짐.
   `tool_name`: 에이전트가 호출한 도구 이름(`Bash`, `Edit`, MCP 도구 등). 로그에 남음(평문, 최대 64자, 없으면
   `null`)과 `laya-guard stats`의 도구별 집계에 쓰임. `paths`(호출이 지목한 파일)와 함께 오면 파일 도구 호출
   (`Read`, `Edit`, `MultiEdit`, `Write`, `NotebookEdit`, `Glob`, `Grep`)로 보고 경로만으로 보호 경로와 대조해
-  판정하며 `tool_call`은 무시합니다. 다른 도구에서는 판정에 영향이 없습니다.
+  판정하며 `tool_call`은 무시합니다. 다른 도구에서는 판정에 영향이 없습니다. `agent`: 호출하는 에이전트
+  (`claude-code`), 선택 기능인 파일 활동 기록의 라벨로만 쓰입니다.
   `reason`은 입력에 한글이 있으면 한국어, 아니면 영어로 반환.
   `verdict_source`: `regex`(정규식 선차단, 모델 미호출) |
   `allowlist`(안전 명령, 모델 미호출) | `model` |

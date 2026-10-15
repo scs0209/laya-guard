@@ -21,6 +21,14 @@ All notable changes to this project are documented here. Versions follow
   `--path`, and the hook's offline fallback applies the same rules. It sees declared access only: a file read inside a
   shell command, a script or a child process never reaches it.
 
+- **An opt-in log of which files an agent's tool calls named.** `laya-guard activity on` starts it; `laya-guard activity`
+  shows the state and the latest events, `activity off` stops it. One line per file in
+  `~/.local/share/laya-guard/file-activity.jsonl` (owner-only; `LAYA_GUARD_FILE_ACTIVITY_PATH` moves it):
+  `ts`, `agent`, `tool_name`, `op` (`read` / `write` / `delete`), `path`, `abs`, `source` (`hook`: a file tool named it;
+  `shell`: read off a Bash command, simple forms only) and `action` / `policy_id` (what the guard answered). It is off by
+  default, apart from `verdicts.jsonl`, never holds file contents, and stops at 50 MB. `LAYA_GUARD_FILE_ACTIVITY=1|0`
+  overrides the switch. `POST /guard` and `laya-guard check` take `agent`, which the Claude Code hook sends.
+
 ### Changed
 
 - **A file tool call is judged by its paths alone.** When the Claude Code hook's matcher includes a file tool (`--files`,

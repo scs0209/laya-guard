@@ -46,13 +46,16 @@ class Rule:
 
 # --- loading -------------------------------------------------------------------------------------------------------
 
-def user_rules_path() -> Path:
-    override = os.environ.get("LAYA_GUARD_PROTECT", "")
-    if override:
-        return Path(override).expanduser()
+def config_dir() -> Path:
+    """Where laya-guard keeps what the user sets: ~/.config/laya-guard (or under XDG_CONFIG_HOME)."""
     xdg = os.environ.get("XDG_CONFIG_HOME", "")
     base = Path(xdg).expanduser() if xdg else Path.home() / ".config"
-    return base / "laya-guard" / "protect.yaml"
+    return base / "laya-guard"
+
+
+def user_rules_path() -> Path:
+    override = os.environ.get("LAYA_GUARD_PROTECT", "")
+    return Path(override).expanduser() if override else config_dir() / "protect.yaml"
 
 
 def _parse(text: str, where: str) -> list[Rule]:
