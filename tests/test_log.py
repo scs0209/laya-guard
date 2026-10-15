@@ -64,7 +64,10 @@ def test_the_log_records_how_a_verdict_was_made_and_stats_count_the_outages(tmp_
     _isolate(tmp_path, monkeypatch)
     p = log_verdict(action="allow", risk=0.5, policy_id="offline", reason="r", mock=False, source="tool",
                     latency_ms=1.0, tool_call="kubectl delete namespace prod", via="offline")
-    assert json.loads(p.read_text())["via"] == "offline" and "kubectl" not in p.read_text()
+    entry = json.loads(p.read_text())
+    assert entry["verdict_source"] == "offline"
+    assert "via" not in entry
+    assert "kubectl" not in p.read_text()
     log_verdict(action="allow", risk=0.1, policy_id="general", reason="r", mock=False, source="user",
                 latency_ms=1.0, tool_call="ls")
     assert "via" not in load_entries(p)[1]                         # old callers and old logs stay valid
@@ -83,8 +86,12 @@ def test_offline_checks_are_logged_without_the_text_and_obey_the_fail_mode(tmp_p
         assert cli.main(["check", "--offline", "--json", secret_call]) == code
         assert json.loads(capsys.readouterr().out)["action"] == action, mode
     entries = load_entries(tmp_path / "v.jsonl")
-    assert [(e["via"], e["action"], e["policy_id"]) for e in entries] == [
-        ("offline", "review", "offline"), ("offline", "allow", "offline"), ("offline", "block", "offline")]
+    assert all(e["source"] == "tool" for e in entries)
+    assert [(e["verdict_source"], e["action"], e["policy_id"]) for e in entries] == [
+        ("offline", "review", "offline"),
+        ("offline", "allow", "offline"),
+        ("offline", "block", "offline"),
+    ]
     assert "SECRET" not in (tmp_path / "v.jsonl").read_text()
     assert summarize(entries)["degraded"]["offline"] == 3
     monkeypatch.setenv("LAYA_GUARD_LOG", "0")                      # logging off still judges
@@ -166,3 +173,11 @@ def test_post_guard_logs_the_optional_tool_name(tmp_path, monkeypatch):
     entries = load_entries(tmp_path / "v.jsonl")
     assert [e["tool_name"] for e in entries] == ["Bash", None]
     assert all("tool_call" not in e for e in entries)                  # the text itself is still never stored
+
+
+def test_degraded_kind_supports_legacy_via():
+    from laya_guard.log import degraded_kind
+
+    assert degraded_kind({"via": "offline"}) == "offline"
+    assert degraded_kind({"via": "heuristic", "mock": False}) == "model_error"
+    assert degraded_kind({"via": "heuristic", "mock": True}) is None

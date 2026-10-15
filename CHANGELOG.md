@@ -12,6 +12,11 @@ All notable changes to this project are documented here. Versions follow
   `laya-guard stats` shows the top five tools, so you can tell which tools the blocks come from. The adapters don't
   send it yet.
 
+### Changed
+
+- **The verdict log field `via` is now `verdict_source`**, the same name as in the API. Entries written before keep
+  `via` and are still read by the dashboard and `laya-guard stats`.
+
 ## [0.4.1] - 2026-10-14
 
 The dashboard gets a Simulation view: the pipeline as a small 3D diorama you can watch, an attack lab that judges eight

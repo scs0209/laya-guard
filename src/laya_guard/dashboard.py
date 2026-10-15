@@ -164,7 +164,8 @@ def build_stats(entries: list[dict], now: datetime, window: str = "24h") -> dict
         "ts": _iso(ts), "action": e.get("action"), "risk": e.get("risk"),
         "policy_id": e.get("policy_id"), "reason": e.get("reason"), "source": e.get("source"),
         "latency_ms": e.get("latency_ms"), "tool_len": e.get("tool_len"),
-        "tool_sha": str(e.get("tool_sha", ""))[:8], "via": e.get("via") or None, "degraded": degraded_kind(e),
+        "tool_sha": str(e.get("tool_sha", ""))[:8], "via": e.get("verdict_source") or e.get("via") or None,
+        "degraded": degraded_kind(e),
     } for ts, e in recent_rows]
 
     # the verdict tape: the latest calls in order, oldest first, as [letter, time]
