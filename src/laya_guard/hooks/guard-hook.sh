@@ -53,6 +53,8 @@ if m.get("tool_name"):
     p["tool_name"] = m["tool_name"]
 if m.get("paths"):
     p["paths"] = m["paths"]
+if m.get("tool_name") == "Bash":
+    p["command"] = p["tool_call"]
 print(json.dumps(p))' <<< "$tool")
   if ! res=$(printf '%s' "$payload" | curl -sf -m 10 -X POST "$url" -H 'Content-Type: application/json' --data-binary @-); then
     offline=1
@@ -61,6 +63,7 @@ print(json.dumps(p))' <<< "$tool")
     path_args=()
     name=$(META="$meta" python3 -c 'import json,os; print(json.loads(os.environ.get("META") or "{}").get("tool_name") or "")' 2>/dev/null)
     [ -n "$name" ] && name_args=(--tool-name "$name")
+    [ "$name" = Bash ] && name_args+=(--shell)
     while IFS= read -r -d '' p; do path_args+=(--path "$p"); done < <(META="$meta" python3 -c 'import json,os,sys
 for x in json.loads(os.environ.get("META") or "{}").get("paths", []):
     sys.stdout.write(x + "\0")' 2>/dev/null)

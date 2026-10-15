@@ -101,6 +101,33 @@ def test_every_tool_the_install_flag_guards_is_a_known_file_tool():
     assert fileaccess.FILE_TOOLS["Read"] == "read" and fileaccess.FILE_TOOLS["Write"] == "write"
 
 
+# --- any agent's adapter can say what a call touches -------------------------------------------------------------------
+
+def test_an_adapters_own_accesses_are_judged_like_a_claude_code_file_tool(home, project):
+    cwd = str(project)
+    read = judge_file_call("read_file", None, cwd, accesses=[{"op": "read", "path": "~/.ssh/id_rsa"}])
+    assert (read.action, read.policy_id) == ("review", "protected-path")           # not a Claude Code tool name, still judged
+    assert judge_file_call("write_file", None, cwd, accesses=[{"op": "write", "path": "~/.aws/credentials"}]).action == "block"
+    assert judge_file_call("anything", None, cwd, accesses=[("write", "src/app.py")]).action == "allow"   # pairs work too
+
+
+def test_deleting_is_judged_by_the_write_rules(home, project):
+    cwd = str(project)
+    assert judge_file_call("rm", None, cwd, accesses=[{"op": "delete", "path": "~/.ssh/id_rsa"}]).action == "block"
+    assert judge_file_call("rm", None, cwd, accesses=[{"op": "delete", "path": "~/.claude/settings.json"}]).action == "review"
+    assert judge_file_call("read_file", None, cwd, accesses=[{"op": "read", "path": "~/.claude/settings.json"}]).action == "allow"
+
+
+def test_accesses_that_make_no_sense_are_dropped_and_override_paths():
+    good = fileaccess.accesses_for("Read", ["a.txt"], [{"op": "write", "path": "b.txt"}])
+    assert good == [("write", "b.txt")]                                             # the adapter's reading wins
+    assert fileaccess.accesses_for("Read", ["a.txt"], []) == []                      # an adapter that says "nothing" means nothing
+    junk = [{"op": "launch", "path": "x"}, {"op": "read"}, {"op": "read", "path": " "}, "x", None, 5, ["read"], ("read", 3)]
+    assert fileaccess.accesses_for("Read", None, junk) == []
+    assert fileaccess.accesses_for("Bash", ["a.txt"], None) == []                    # paths only count for a known file tool
+    assert fileaccess.accesses_for("Read", ["a.txt"]) == [("read", "a.txt")]
+
+
 # --- your own rules ----------------------------------------------------------------------------------------------------
 
 def test_your_rules_add_to_the_defaults_and_relative_globs_follow_the_agents_directory(home, project, tmp_path):

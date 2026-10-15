@@ -9,7 +9,7 @@ from .install import InstallError
 def cmd_check(args):
     text = " ".join(args.text) if args.text else sys.stdin.read()
     cwd = os.path.abspath(args.cwd)
-    v = judge_file_call(args.tool_name, args.path, cwd)       # a file tool call is judged by its paths alone
+    v = judge_file_call(args.tool_name, args.path, cwd, args.access or None)   # a file call is judged by its paths alone
     if args.offline:
         # LAYA_GUARD_FAIL: ask (default) sends what it can't judge to a human, closed blocks it, open passes it
         unknown = {"open": "allow", "closed": "block"}.get(os.environ.get("LAYA_GUARD_FAIL", ""), "review")
@@ -19,8 +19,9 @@ def cmd_check(args):
         _log_offline(v, text, (time.perf_counter() - t0) * 1000.0, args.tool_name)
     elif v is None:
         v = judge(text, cwd=cwd)
-    if args.tool_name:                       # a tool call from an agent's hook, not someone typing a command
-        activity.record_call(agent=args.agent, tool_name=args.tool_name, text=text, paths=args.path, cwd=cwd, verdict=v)
+    if args.tool_name or args.shell or args.access:     # a tool call from an agent's hook, not someone typing a command
+        activity.record_call(agent=args.agent, tool_name=args.tool_name, text=text, paths=args.path,
+                             accesses=args.access or None, command=text if args.shell else None, cwd=cwd, verdict=v)
     if args.json:
         print(json.dumps(dataclasses.asdict(v), ensure_ascii=False))
         return 0 if v.action != "block" else 2
@@ -395,6 +396,10 @@ def main(argv=None):
     c.add_argument("--tool-name", default=None,
                    help="the agent's name for the tool (Read, Edit, Write, ...): with --path, the call is judged by the paths alone")
     c.add_argument("--agent", default=None, help="which agent is calling (claude-code, ...): labels the file activity log")
+    c.add_argument("--shell", action="store_true",
+                   help="the text is a shell command an agent is about to run (labels the file activity log)")
+    c.add_argument("--access", nargs=2, action="append", default=[], metavar=("OP", "PATH"),
+                   help="what the call touches: read, write or delete, then a path (repeat for more); judged like --path")
     c.add_argument("--path", action="append", default=[],
                    help="a file the tool call names (repeat for more); judged against the protected paths, not by its content")
     c.add_argument("--cwd", default=".",

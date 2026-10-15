@@ -292,6 +292,10 @@ the manual steps per agent are in [integrations/](integrations/). Claude Code, C
 `review` to a human (and deny it when nobody can answer); elsewhere `review` warns and passes, so use native
 `permission`/`allowlist` rules alongside if you want hard asks.
 
+Which agents the [file activity log](#see-which-files-your-agents-touched-opt-in) records: shell commands from all of the
+above, and Claude Code's file tools. The others' file tools reach it agent by agent, as their hooks are extended past
+shell commands.
+
 ## Use cases
 
 Ready-made adapters for 11 agents live in [integrations/](integrations/) —
@@ -383,8 +387,11 @@ moves it) is one file one call named: `{ts, agent, tool_name, op, path, abs, sou
 
 It lives next to `verdicts.jsonl`, not in it: that file still never holds a path. Set `LAYA_GUARD_FILE_ACTIVITY=1` or
 `0` to decide from the environment instead (it wins over `activity on|off`). Recording stops at 50 MB. Bash calls are
-recorded as soon as it is on; file tool calls need `install --files`. It records declared access only, and only
-through the Claude Code hook for now.
+recorded as soon as it is on, for **every supported agent** (each adapter sends its agent's name and the bare command);
+file tool calls need `install --files` and are Claude Code only so far, because the other agents' hooks are registered
+for shell commands only. It records declared access only. An adapter that knows what a non-shell tool touches can
+report it as `accesses` (`POST /guard`, or `laya-guard check --access read PATH`), which is judged against the protected
+paths and recorded like a file tool.
 
 ### 1b. Guard Cursor (beforeShellExecution hook)
 

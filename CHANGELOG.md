@@ -29,8 +29,19 @@ All notable changes to this project are documented here. Versions follow
   default, apart from `verdicts.jsonl`, never holds file contents, and stops at 50 MB. `LAYA_GUARD_FILE_ACTIVITY=1|0`
   overrides the switch. `POST /guard` and `laya-guard check` take `agent`, which the Claude Code hook sends.
 
+- **The file activity log works for every supported agent's shell commands.** Every adapter (Codex, Cursor, Gemini CLI,
+  Qwen Code, Windsurf, Copilot CLI, Cline, OpenCode, Kilo, Amp and the Amp helper) now sends `agent`, the tool's name and
+  the bare shell command, and its offline fallback passes them to `laya-guard check`, so paths are recorded wherever the
+  hook runs. Agents whose hooks are registered for shell commands only still record shell paths only; file tools for
+  them come agent by agent. `POST /guard` takes `command` (the bare command, for adapters whose `tool_call` is a
+  wrapper) and `accesses` (`[{"op": "read|write|delete", "path": …}]`, what a non-shell tool touches), and
+  `laya-guard check` takes `--shell` and `--access OP PATH`. `accesses` are judged against the protected paths like a
+  Claude Code file tool's `paths` (a delete counts as a write), so any adapter can use them.
+
 ### Changed
 
+- **The Amp helper hands the offline check the bare command** instead of the JSON it receives, like the other adapters,
+  so a safe command passes when the server is down.
 - **A file tool call is judged by its paths alone.** When the Claude Code hook's matcher includes a file tool (`--files`,
   or a hand-written `--matcher`), the call used to be judged as text with the file's content in it. Now only the tool name
   and the paths are sent and judged, so a large or minified file can no longer be blocked as oversized, nothing a file

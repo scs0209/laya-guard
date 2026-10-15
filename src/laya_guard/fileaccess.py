@@ -163,21 +163,41 @@ def _protects(rule: Rule, candidates: list[str], cwd: str, home: str) -> bool:
     return any(rx.match(c) and not any(s.match(c) for s in skips) for c in candidates)
 
 
-def judge_paths(tool_name: str | None, paths, cwd: str | None = None, rules: list[Rule] | None = None) -> Verdict | None:
-    """The verdict for a file tool call, or None when no rule applies (not a file tool, no paths, no matching rule)."""
-    op = FILE_TOOLS.get(tool_name or "")
-    if op is None or not isinstance(paths, (list, tuple)) or not paths:
+# An access is (op, path). Deleting a file is changing it, so a delete is judged by the `write` rules.
+RULE_OP = {"read": "read", "write": "write", "delete": "write"}
+
+
+def accesses_for(tool_name: str | None, paths, accesses=None) -> list[tuple[str, str]]:
+    """The (op, path) pairs a call names, ready to judge. `accesses` is an adapter's own reading of what the call
+    touches (op is read, write or delete), so it works for any agent. Without it, `paths` of a Claude Code file tool
+    (FILE_TOOLS) mean the op that tool performs. Entries that make no sense are dropped, never guessed at."""
+    if isinstance(accesses, (list, tuple)):
+        raw = []
+        for a in accesses:
+            if isinstance(a, dict):
+                raw.append((a.get("op"), a.get("path")))
+            elif isinstance(a, (list, tuple)) and len(a) == 2:
+                raw.append((a[0], a[1]))
+    elif tool_name in FILE_TOOLS and isinstance(paths, (list, tuple)):
+        raw = [(FILE_TOOLS[tool_name], p) for p in paths]
+    else:
+        return []
+    ok = [(op, p) for op, p in raw if op in RULE_OP and isinstance(p, str) and p.strip() and len(p) <= MAX_PATH_LEN]
+    return ok[:MAX_PATHS]
+
+
+def judge_accesses(accesses: list[tuple[str, str]], cwd: str | None = None, rules: list[Rule] | None = None) -> Verdict | None:
+    """The verdict for a set of accesses, or None when no rule applies to any of them."""
+    if not accesses:
         return None
     rules = load_rules() if rules is None else rules
     cwd = cwd if cwd and os.path.isabs(cwd) else os.getcwd()
     home = os.path.expanduser("~")
     worst: Rule | None = None
-    for raw in list(paths)[:MAX_PATHS]:
-        if not isinstance(raw, str) or not raw.strip() or len(raw) > MAX_PATH_LEN:
-            continue
+    for op, raw in accesses:
         candidates = _candidates(raw, cwd)
         for rule in rules:
-            if op in rule.ops and _protects(rule, candidates, cwd, home):
+            if RULE_OP[op] in rule.ops and _protects(rule, candidates, cwd, home):
                 if worst is None or _RANK[rule.action] > _RANK[worst.action]:
                     worst = rule
     if worst is None:
@@ -186,14 +206,20 @@ def judge_paths(tool_name: str | None, paths, cwd: str | None = None, rules: lis
                    mock=is_mock(), verdict_source="regex")
 
 
-def judge_file_call(tool_name: str | None, paths, cwd: str | None = None) -> Verdict | None:
-    """The verdict for a file tool call, decided by the paths it names alone, or None when this isn't one (another tool,
-    or no usable path), so the caller judges the call as usual. A protected path is reviewed or blocked and anything
-    else is allowed. The content being read or written is not judged, and no model runs."""
-    if tool_name not in FILE_TOOLS or not isinstance(paths, (list, tuple)):
+def judge_paths(tool_name: str | None, paths, cwd: str | None = None, rules: list[Rule] | None = None) -> Verdict | None:
+    """The verdict for a Claude Code file tool call, or None when no rule applies (not a file tool, no paths, no
+    matching rule)."""
+    return judge_accesses(accesses_for(tool_name, paths), cwd, rules)
+
+
+def judge_file_call(tool_name: str | None, paths, cwd: str | None = None, accesses=None) -> Verdict | None:
+    """The verdict for a file call, decided by the paths it names alone, or None when this isn't one (another tool, or no
+    usable path), so the caller judges the call as usual. A protected path is reviewed or blocked and anything else is
+    allowed. The content being read or written is not judged, and no model runs. `accesses` lets any agent's adapter
+    say what a call touches; without it only Claude Code's file tools (`paths`) count."""
+    pairs = accesses_for(tool_name, paths, accesses)
+    if not pairs:
         return None
-    if not any(isinstance(p, str) and p.strip() and len(p) <= MAX_PATH_LEN for p in paths):
-        return None
-    return judge_paths(tool_name, paths, cwd) or Verdict(
+    return judge_accesses(pairs, cwd) or Verdict(
         action="allow", risk=0.0, policy_id="general", reason="File tool call: no protected path matched",
         mock=is_mock(), verdict_source="allowlist")

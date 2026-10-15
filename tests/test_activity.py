@@ -188,6 +188,55 @@ def test_one_call_never_records_more_than_the_cap(env):
     assert len(events(log)) == activity.MAX_PER_CALL
 
 
+# --- any agent: accesses and an explicit command ------------------------------------------------------------------------
+
+def test_an_adapters_accesses_are_recorded_and_judged_for_any_agent(env):
+    home, log = env
+    activity.turn_on()
+    v = _guard(tool_call="read_file({...})", tool_name="read_file", agent="gemini-cli", cwd="/work",
+               accesses=[{"op": "read", "path": "~/.ssh/id_rsa"}])
+    assert (v.action, v.policy_id) == ("review", "protected-path")
+    _guard(tool_call="write_file({...})", tool_name="write_file", agent="gemini-cli", cwd="/work",
+           accesses=[{"op": "write", "path": "src/a.py"}, {"op": "delete", "path": "old.py"}])
+    got = [(e["agent"], e["tool_name"], e["op"], e["abs"], e["source"], e["action"]) for e in events(log)]
+    assert got == [
+        ("gemini-cli", "read_file", "read", str(home / ".ssh" / "id_rsa"), "hook", "review"),
+        ("gemini-cli", "write_file", "write", "/work/src/a.py", "hook", "allow"),
+        ("gemini-cli", "write_file", "delete", "/work/old.py", "hook", "allow")]
+
+
+def test_the_shell_command_is_read_from_command_not_from_a_wrapper(env):
+    _, log = env
+    activity.turn_on()
+    # the tool_call is the wrapper some agents send; parsing it would invent paths
+    _guard(tool_call='run_shell_command({"command": "rm old.log"})', tool_name="run_shell_command", agent="gemini-cli",
+           command="rm old.log", cwd="/work")
+    _guard(tool_call="bash", tool_name="bash", agent="opencode", command="cat a.txt > b.txt", cwd="/work")
+    got = [(e["agent"], e["op"], e["path"], e["source"]) for e in events(log)]
+    assert got == [("gemini-cli", "delete", "old.log", "shell"), ("opencode", "read", "a.txt", "shell"),
+                   ("opencode", "write", "b.txt", "shell")]
+
+
+def test_a_wrapper_without_a_command_records_nothing(env):
+    _, log = env
+    activity.turn_on()
+    _guard(tool_call='run_shell_command({"command": "rm old.log"})', tool_name="run_shell_command", agent="gemini-cli")
+    assert not log.exists()
+
+
+def test_check_takes_a_shell_flag_and_accesses_for_any_agent(env, capsys):
+    _, log = env
+    activity.turn_on()
+    cli.main(["check", "--offline", "--json", "--agent", "opencode", "--tool-name", "bash", "--shell", "cat notes.txt"])
+    cli.main(["check", "--offline", "--json", "--agent", "gemini-cli", "--tool-name", "read_file",
+              "--access", "read", "~/.ssh/id_rsa", "ignored"])
+    capsys.readouterr()
+    got = [(e["agent"], e["tool_name"], e["op"], e["path"], e["source"]) for e in events(log)]
+    assert got == [("opencode", "bash", "read", "notes.txt", "shell"),
+                   ("gemini-cli", "read_file", "read", "~/.ssh/id_rsa", "hook")]
+    assert events(log)[1]["action"] == "review"
+
+
 # --- laya-guard check and the hook ------------------------------------------------------------------------------------
 
 def test_the_offline_check_records_a_hook_call_but_not_a_command_someone_typed(env, capsys):

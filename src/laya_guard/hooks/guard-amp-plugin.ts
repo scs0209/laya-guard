@@ -25,14 +25,24 @@ const GUARD_BIN = process.env.LAYA_GUARD_BIN ?? 'laya-guard'
 const FAIL_MODE = process.env.LAYA_GUARD_FAIL ?? 'ask'
 const NO_PROMPT = 'this agent has no approval prompt, so it is blocked (LAYA_GUARD_FAIL=open lets it through)'
 
-async function judge(text: string, cwd: string): Promise<Verdict | null> {
+const AGENT = 'amp'
+
+type Call = { tool_name?: string; command?: string }
+
+// What the guard's file activity log needs to know about a call, as `laya-guard check` flags.
+const callFlags = (call?: Call): string[] => [
+  ...(call?.tool_name ? ['--tool-name', call.tool_name] : []),
+  ...(call?.command ? ['--shell'] : []),
+]
+
+async function judge(text: string, cwd: string, call?: Call): Promise<Verdict | null> {
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 10000)
   try {
     const res = await fetch(GUARD_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tool_call: text, source: 'tool', cwd }),
+      body: JSON.stringify({ tool_call: text, source: 'tool', cwd, agent: AGENT, ...call }),
       signal: ctrl.signal,
     })
     if (!res.ok) return null
@@ -45,10 +55,10 @@ async function judge(text: string, cwd: string): Promise<Verdict | null> {
 }
 
 // Server down or too slow: regex + safe-command check without the model.
-function judgeOffline(text: string, cwd: string): Verdict {
+function judgeOffline(text: string, cwd: string, call?: Call): Verdict {
   let v: Verdict | null = null
   try {
-    const r = spawnSync(GUARD_BIN, ['check', '--offline', '--json', '--cwd', cwd], {
+    const r = spawnSync(GUARD_BIN, ['check', '--offline', '--json', '--cwd', cwd, '--agent', AGENT, ...callFlags(call)], {
       input: text, encoding: 'utf8', timeout: 10000, env: { ...process.env, LAYA_GUARD_FAIL: FAIL_MODE },
     })
     if (r.stdout) v = JSON.parse(r.stdout) as Verdict
@@ -86,7 +96,8 @@ export default function (amp: PluginAPI) {
     const command = shellCommand(amp, event)
     if (!command) return { action: 'allow' }
     const cwd = process.cwd()
-    const v = (await judge(command, cwd)) ?? judgeOffline(command, cwd)
+    const call: Call = { tool_name: String(event?.tool ?? 'shell'), command }
+    const v = (await judge(command, cwd, call)) ?? judgeOffline(command, cwd, call)
     if (v.action === 'block') {
       return { action: 'reject-and-continue', message: `laya-guard blocked this command [${v.policy_id} risk=${v.risk}]: ${v.reason}` }
     }

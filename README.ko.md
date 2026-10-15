@@ -339,7 +339,10 @@ laya-guard activity off       # 중지 (기록은 남음)
 단순한 형태만 추정, 셸이 풀어야 하는 `$VAR`·글롭·`$(…)`은 건너뛰므로 놓치는 것이 있음), `action`은 가드의 답이라
 막힌 시도를 접근으로 오해하지 않습니다. `verdicts.jsonl`에는 여전히 경로가 들어가지 않고, 환경변수
 `LAYA_GUARD_FILE_ACTIVITY=1|0`이 있으면 그것이 우선합니다. 50 MB에서 기록을 멈춥니다. Bash 호출은 켜는 즉시,
-파일 도구 호출은 `install --files`가 필요하며, 지금은 Claude Code 훅을 거친 선언된 접근만 기록합니다.
+파일 도구 호출은 `install --files`가 필요하고 지금은 Claude Code만 지원합니다. 다른 에이전트의 훅은 셸 명령에만
+등록돼 있기 때문입니다. 셸 명령은 지원하는 **모든 에이전트**에서 기록합니다(각 어댑터가 에이전트 이름과 맨 명령어를
+보냄). 선언된 접근만 기록하며, 셸이 아닌 도구가 무엇을 건드리는지 아는 어댑터는 `accesses`로 보고할 수 있습니다
+(`POST /guard` 또는 `laya-guard check --access read PATH`).
 
 ### 1b. Cursor 가드 (beforeShellExecution 훅)
 
