@@ -49,3 +49,14 @@ protect:
   - {path: "~/.claude/settings.json",       ops: [write], action: review, reason: "the agent's own user-level settings and hooks"}
   - {path: "~/.claude/settings.local.json", ops: [write], action: review, reason: "the agent's own user-level settings and hooks"}
   - {path: "~/.claude/hooks/**",            ops: [write], action: review, reason: "the agent's own user-level settings and hooks"}
+  # Files that run by themselves: a payload written here runs the next time a shell starts or a commit is made.
+  - {path: "~/.bashrc",                ops: [write], action: review, reason: "shell startup file: runs whenever a shell starts"}
+  - {path: "~/.bash_profile",          ops: [write], action: review, reason: "shell startup file: runs whenever a shell starts"}
+  - {path: "~/.bash_login",            ops: [write], action: review, reason: "shell startup file: runs whenever a shell starts"}
+  - {path: "~/.profile",               ops: [write], action: review, reason: "shell startup file: runs whenever a shell starts"}
+  - {path: "~/.zshrc",                 ops: [write], action: review, reason: "shell startup file: runs whenever a shell starts"}
+  - {path: "~/.zshenv",                ops: [write], action: review, reason: "shell startup file: runs whenever a shell starts"}
+  - {path: "~/.zprofile",              ops: [write], action: review, reason: "shell startup file: runs whenever a shell starts"}
+  - {path: "~/.zlogin",                ops: [write], action: review, reason: "shell startup file: runs whenever a shell starts"}
+  - {path: "~/.config/fish/config.fish", ops: [write], action: review, reason: "shell startup file: runs whenever a shell starts"}
+  - {path: "**/.git/hooks/**",         ops: [write], action: review, reason: "git hook: runs on commit, push and checkout"}
