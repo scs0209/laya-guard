@@ -202,6 +202,29 @@ def test_a_symlink_into_a_protected_place_is_caught_through_its_real_path(home, 
     assert judge_paths("Write", ["innocent.txt"], str(project)).action == "block"
 
 
+def test_dotdot_after_a_symlink_is_resolved_the_way_the_os_does(home, project):
+    (home / ".ssh").mkdir()
+    (home / ".aws").mkdir()
+    (home / "work" / "sub").mkdir(parents=True)
+    (project / "link").symlink_to(home / "work" / "sub")
+    # `link/../..` is two levels above the link's target (home), not above the project, which text-only `..` would give
+    assert judge_paths("Write", ["link/../../.ssh/authorized_keys"], str(project)).action == "block"
+    assert judge_paths("Read", ["link/../../.aws/credentials"], str(project)).action == "review"
+    assert judge_file_call("Write", ["link/../../.ssh/authorized_keys"], str(project)).action == "block"
+
+
+def test_a_home_reached_through_a_link_is_still_home(tmp_path, monkeypatch, project):
+    real_home = tmp_path / "real-home"
+    (real_home / ".aws").mkdir(parents=True)
+    linked = tmp_path / "home-link"
+    linked.symlink_to(real_home)
+    monkeypatch.setenv("HOME", str(linked))
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.delenv("LAYA_GUARD_PROTECT", raising=False)
+    assert judge_paths("Read", [str(real_home / ".aws" / "credentials")], str(project)).action == "review"
+    assert judge_paths("Read", ["~/.aws/credentials"], str(project)).action == "review"
+
+
 def test_a_link_named_like_an_exception_does_not_become_one(home, project):
     (project / ".env").write_text("TOKEN=1")
     (project / ".env.example").symlink_to(project / ".env")

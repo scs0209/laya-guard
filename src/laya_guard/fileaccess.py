@@ -140,24 +140,46 @@ def _regex(glob: str, cwd: str, home: str) -> re.Pattern:
 
 
 def _candidates(path: str, cwd: str) -> list[str]:
-    """The path as named and, when it differs, where it really points (a link can lead into a protected place)."""
+    """The path as named and, when it differs, where it really points (a link can lead into a protected place).
+
+    The operating system follows a link before it applies a `..` after it (`link/../x` is the parent of the link's
+    target, not the directory holding the link), so the path is resolved as written too, not only after `..` has been
+    collapsed as text."""
     p = os.path.expanduser(path)
     if not os.path.isabs(p):
         p = os.path.join(cwd, p)
-    p = os.path.normpath(p)
+    named = os.path.normpath(p)
+    out = [named]
+    for q in (p, named):
+        try:
+            real = os.path.realpath(q)
+        except (OSError, ValueError):
+            continue
+        if real not in out:
+            out.append(real)
+    return out
+
+
+def _roots(cwd: str, home: str) -> list[tuple[str, str]]:
+    """The directories `~/` and a relative glob stand for: as given and, when they differ, where they really are (a
+    resolved candidate starts with the real home, which may itself be a link)."""
+    roots = [(cwd, home)]
     try:
-        real = os.path.realpath(p)
-    except OSError:
-        real = p
-    return [p] if real == p else [p, real]
+        real = (os.path.realpath(cwd), os.path.realpath(home))
+    except (OSError, ValueError):
+        return roots
+    return roots if real == roots[0] else roots + [real]
 
 
-def _protects(rule: Rule, candidates: list[str], cwd: str, home: str) -> bool:
+def _protects(rule: Rule, candidates: list[str], roots: list[tuple[str, str]]) -> bool:
     """A candidate is protected when the rule's glob matches it and no `except` does. Each candidate stands alone, so
     a link called .env.example that points at .env is still caught through its real path."""
-    rx = _regex(rule.glob, cwd, home)
-    skips = [_regex(x, cwd, home) for x in rule.excepts]
-    return any(rx.match(c) and not any(s.match(c) for s in skips) for c in candidates)
+    for cwd, home in roots:
+        rx = _regex(rule.glob, cwd, home)
+        skips = [_regex(x, cwd, home) for x in rule.excepts]
+        if any(rx.match(c) and not any(s.match(c) for s in skips) for c in candidates):
+            return True
+    return False
 
 
 def _over_limit(paths) -> bool:
@@ -181,14 +203,14 @@ def judge_paths(tool_name: str | None, paths, cwd: str | None = None, rules: lis
         return _limit_verdict()
     rules = load_rules() if rules is None else rules
     cwd = cwd if cwd and os.path.isabs(cwd) else os.getcwd()
-    home = os.path.expanduser("~")
+    roots = _roots(cwd, os.path.expanduser("~"))
     worst: Rule | None = None
     for raw in paths:
         if not isinstance(raw, str) or not raw.strip():
             continue
         candidates = _candidates(raw, cwd)
         for rule in rules:
-            if op in rule.ops and _protects(rule, candidates, cwd, home):
+            if op in rule.ops and _protects(rule, candidates, roots):
                 if worst is None or _RANK[rule.action] > _RANK[worst.action]:
                     worst = rule
     if worst is None:
