@@ -142,6 +142,12 @@ def _regex(glob: str, cwd: str, home: str) -> re.Pattern:
     return re.compile("^" + re.escape(prefix) + _translate(rest) + "$", re.IGNORECASE)
 
 
+def matches_glob(glob: str, path: str, cwd: str | None = None) -> bool:
+    """Whether an absolute path matches a glob written the way protect.yaml writes them (~, **/, dir/**, relative to cwd)."""
+    cwd = cwd if cwd and os.path.isabs(cwd) else os.getcwd()
+    return bool(_regex(glob, cwd, os.path.expanduser("~")).match(path))
+
+
 def _candidates(path: str, cwd: str) -> list[str]:
     """The path as named and, when it differs, where it really points (a link can lead into a protected place).
 
