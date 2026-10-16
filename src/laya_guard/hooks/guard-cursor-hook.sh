@@ -47,10 +47,13 @@ if [ -z "$cmd" ]; then          # not a command we can read: the fail mode decid
   action=$unjudged
   res="the hook input had no command; not judged"
 else
-  payload=$(CWD="$cwd" python3 -c 'import json,os,sys; print(json.dumps({"tool_call": sys.stdin.read().strip(), "cwd": os.environ["CWD"]}))' <<< "$cmd")
+  # Every call this hook sees is a shell command: say so (and which agent), so the opt-in file activity log can read paths off it.
+  payload=$(CWD="$cwd" python3 -c 'import json,os,sys
+c = sys.stdin.read().strip()
+print(json.dumps({"tool_call": c, "cwd": os.environ["CWD"], "agent": "cursor", "tool_name": "beforeShellExecution", "command": c}))' <<< "$cmd")
   if ! res=$(printf '%s' "$payload" | curl -sf -m 10 -X POST "$url" -H 'Content-Type: application/json' --data-binary @-); then
     offline=1
-    res=$(printf '%s' "$cmd" | LAYA_GUARD_FAIL="$fail" "${LAYA_GUARD_BIN:-laya-guard}" check --offline --json --cwd "$cwd" 2>/dev/null)
+    res=$(printf '%s' "$cmd" | LAYA_GUARD_FAIL="$fail" "${LAYA_GUARD_BIN:-laya-guard}" check --offline --json --cwd "$cwd" --agent cursor --tool-name beforeShellExecution --shell 2>/dev/null)
   fi
   action=$(printf '%s' "$res" | python3 -c "import json,sys; print(json.load(sys.stdin).get('action','allow'))" 2>/dev/null)
   if [ -z "$action" ]; then

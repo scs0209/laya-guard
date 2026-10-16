@@ -23,6 +23,42 @@ GUARD_URL = os.environ.get("LAYA_GUARD_URL", "http://localhost:8787/guard")
 GUARD_BIN = os.environ.get("LAYA_GUARD_BIN", "laya-guard")
 FAIL_MODE = os.environ.get("LAYA_GUARD_FAIL", "ask")
 
+AGENT = "amp"
+
+
+def call_flags(call: dict | None) -> list[str]:
+    """What the guard's file activity log needs to know about this call, as `laya-guard check` flags."""
+    call = call or {}
+    return (["--tool-name", call["tool_name"]] if call.get("tool_name") else []) + (["--shell"] if call.get("command") else [])
+
+
+def make_call(event: object) -> dict:
+    """The call as the activity log wants it: which tool, and the bare shell command when it is one."""
+    if not isinstance(event, dict):
+        return {}
+    command = event.get("cmd") or event.get("command")
+    call = {"tool_name": "Bash" if command else None, "command": command}   # the delegate is not told the tool's name
+    return {k: v for k, v in call.items() if isinstance(v, str) and v}
+
+
+def bare_command(event: object, call: dict) -> str | None:
+    """The command alone, when the parameters are nothing but that command and where it runs. The delegate is asked
+    about every tool, so another parameter (a script, an env value, a second command) can carry what runs: such a
+    call is judged whole, never by its command field alone."""
+    command = call.get("command")
+    if not command or not isinstance(event, dict):
+        return None
+    for key, value in event.items():
+        if key in ("cmd", "command"):
+            if value != command:
+                return None
+        elif key in ("cwd", "workdir", "directory"):
+            if not isinstance(value, str):
+                return None
+        elif isinstance(value, (str, list, dict)):
+            return None
+    return command
+
 
 def not_judged(why: str) -> dict:
     return {"action": {"open": "allow", "closed": "block"}.get(FAIL_MODE, "review"), "risk": 0.5,
@@ -48,11 +84,11 @@ def extract_cwd(event: object) -> str:
     return base
 
 
-def judge(text: str, cwd: str) -> dict | None:
+def judge(text: str, cwd: str, call: dict | None = None) -> dict | None:
     try:
         req = urllib.request.Request(
             GUARD_URL,
-            data=json.dumps({"tool_call": text, "source": "tool", "cwd": cwd}).encode(),
+            data=json.dumps({"tool_call": text, "source": "tool", "cwd": cwd, "agent": AGENT, **(call or {})}).encode(),
             headers={"Content-Type": "application/json"},
         )
         with urllib.request.urlopen(req, timeout=10) as r:
@@ -61,10 +97,10 @@ def judge(text: str, cwd: str) -> dict | None:
         return None
 
 
-def judge_offline(text: str, cwd: str) -> dict:
+def judge_offline(text: str, cwd: str, call: dict | None = None) -> dict:
     # Server down or too slow: regex + safe-command check without the model.
     try:
-        r = subprocess.run([GUARD_BIN, "check", "--offline", "--json", "--cwd", cwd], input=text,
+        r = subprocess.run([GUARD_BIN, "check", "--offline", "--json", "--cwd", cwd, "--agent", AGENT, *call_flags(call)], input=text,
                            capture_output=True, text=True, timeout=10,
                            env=dict(os.environ, LAYA_GUARD_FAIL=FAIL_MODE))
         verdict = json.loads(r.stdout)
@@ -89,9 +125,11 @@ def main() -> int:
         except ValueError:
             event = {}
         cwd = extract_cwd(event)
-        verdict = judge(text, cwd)
+        call = make_call(event)
+        verdict = judge(text, cwd, call)
         if verdict is None:
-            verdict = judge_offline(text, cwd)
+            # the offline safe-command list matches a bare command, not the JSON the delegate gets
+            verdict = judge_offline(bare_command(event, call) or text, cwd, call)
     action = verdict.get("action")
     if action == "block":
         print(f"laya-guard blocked [{verdict.get('policy_id')} risk={verdict.get('risk')}]: "

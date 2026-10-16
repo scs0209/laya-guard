@@ -185,10 +185,39 @@ def _protects(rule: Rule, candidates: list[str], roots: list[tuple[str, str]]) -
     return False
 
 
-def _over_limit(paths) -> bool:
+# An access is (op, path). Deleting a file is changing it, so a delete is judged by the `write` rules.
+RULE_OP = {"read": "read", "write": "write", "delete": "write"}
+
+
+def _raw_accesses(tool_name: str | None, paths, accesses=None) -> list[tuple]:
+    """Every (op, path) a call names, as given: nothing dropped, nothing checked."""
+    if isinstance(accesses, (list, tuple)):
+        raw = []
+        for a in accesses:
+            if isinstance(a, dict):
+                raw.append((a.get("op"), a.get("path")))
+            elif isinstance(a, (list, tuple)) and len(a) == 2:
+                raw.append((a[0], a[1]))
+        return raw
+    if tool_name in FILE_TOOLS and isinstance(paths, (list, tuple)):
+        return [(FILE_TOOLS[tool_name], p) for p in paths]
+    return []
+
+
+def accesses_for(tool_name: str | None, paths, accesses=None) -> list[tuple[str, str]]:
+    """The (op, path) pairs a call names, ready to judge or to record. `accesses` is an adapter's own reading of what
+    the call touches (op is read, write or delete), so it works for any agent. Without it, `paths` of a Claude Code file
+    tool (FILE_TOOLS) mean the op that tool performs. Entries that make no sense are dropped, never guessed at, and at
+    most MAX_PATHS come back: a caller that judges must check `_over_limit` first, or what is past the cap goes unchecked."""
+    ok = [(op, p) for op, p in _raw_accesses(tool_name, paths, accesses)
+          if op in RULE_OP and isinstance(p, str) and p.strip() and len(p) <= MAX_PATH_LEN]
+    return ok[:MAX_PATHS]
+
+
+def _over_limit(raw: list[tuple]) -> bool:
     """A call that names more paths than we look at, or a path too long to look at. Skipping what is past a limit would
     let an unchecked path through (the 51st could be ~/.ssh/id_rsa), so such a call is reviewed instead."""
-    return len(paths) > MAX_PATHS or any(isinstance(p, str) and len(p) > MAX_PATH_LEN for p in paths)
+    return len(raw) > MAX_PATHS or any(isinstance(p, str) and len(p) > MAX_PATH_LEN for _, p in raw)
 
 
 def _limit_verdict() -> Verdict:
@@ -196,24 +225,18 @@ def _limit_verdict() -> Verdict:
                    reason="too many or too long paths to check", mock=is_mock(), verdict_source="limit")
 
 
-def judge_paths(tool_name: str | None, paths, cwd: str | None = None, rules: list[Rule] | None = None) -> Verdict | None:
-    """The verdict for a file tool call, or None when no rule applies (not a file tool, no paths, no matching rule). A call
-    past a limit (MAX_PATHS paths, MAX_PATH_LEN characters each) is reviewed: nothing is skipped."""
-    op = FILE_TOOLS.get(tool_name or "")
-    if op is None or not isinstance(paths, (list, tuple)) or not paths:
+def judge_accesses(accesses: list[tuple[str, str]], cwd: str | None = None, rules: list[Rule] | None = None) -> Verdict | None:
+    """The verdict for a set of accesses, or None when no rule applies to any of them."""
+    if not accesses:
         return None
-    if _over_limit(paths):
-        return _limit_verdict()
     rules = load_rules() if rules is None else rules
     cwd = cwd if cwd and os.path.isabs(cwd) else os.getcwd()
     roots = _roots(cwd, os.path.expanduser("~"))
     worst: Rule | None = None
-    for raw in paths:
-        if not isinstance(raw, str) or not raw.strip():
-            continue
+    for op, raw in accesses:
         candidates = _candidates(raw, cwd)
         for rule in rules:
-            if op in rule.ops and _protects(rule, candidates, roots):
+            if RULE_OP[op] in rule.ops and _protects(rule, candidates, roots):
                 if worst is None or _RANK[rule.action] > _RANK[worst.action]:
                     worst = rule
     if worst is None:
@@ -222,14 +245,25 @@ def judge_paths(tool_name: str | None, paths, cwd: str | None = None, rules: lis
                    mock=is_mock(), verdict_source="regex")
 
 
-def judge_file_call(tool_name: str | None, paths, cwd: str | None = None) -> Verdict | None:
-    """The verdict for a file tool call, decided by the paths it names alone, or None when this isn't one (another tool,
-    or no usable path), so the caller judges the call as usual. A protected path is reviewed or blocked and anything
-    else is allowed. The content being read or written is not judged, and no model runs."""
-    if tool_name not in FILE_TOOLS or not isinstance(paths, (list, tuple)):
+def judge_paths(tool_name: str | None, paths, cwd: str | None = None, rules: list[Rule] | None = None) -> Verdict | None:
+    """The verdict for a Claude Code file tool call, or None when no rule applies (not a file tool, no paths, no
+    matching rule). A call past a limit (MAX_PATHS paths, MAX_PATH_LEN characters each) is reviewed: nothing is skipped."""
+    if _over_limit(_raw_accesses(tool_name, paths)):
+        return _limit_verdict()
+    return judge_accesses(accesses_for(tool_name, paths), cwd, rules)
+
+
+def judge_file_call(tool_name: str | None, paths, cwd: str | None = None, accesses=None) -> Verdict | None:
+    """The verdict for a file call, decided by the paths it names alone, or None when this isn't one (another tool, or no
+    usable path), so the caller judges the call as usual. A protected path is reviewed or blocked and anything else is
+    allowed. The content being read or written is not judged, and no model runs. `accesses` lets any agent's adapter
+    say what a call touches; without it only Claude Code's file tools (`paths`) count. A call past a limit is reviewed,
+    never judged on the part that fits: the part that doesn't could be the protected one."""
+    if _over_limit(_raw_accesses(tool_name, paths, accesses)):
+        return _limit_verdict()
+    pairs = accesses_for(tool_name, paths, accesses)
+    if not pairs:
         return None
-    if not any(isinstance(p, str) and p.strip() for p in paths):
-        return None                                      # (a call past a limit has paths: judge_paths reviews it)
-    return judge_paths(tool_name, paths, cwd) or Verdict(
+    return judge_accesses(pairs, cwd) or Verdict(
         action="allow", risk=0.0, policy_id="general", reason="File tool call: no protected path matched",
         mock=is_mock(), verdict_source="allowlist")

@@ -26,7 +26,7 @@ import shlex
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .fileaccess import FILE_TOOLS, config_dir
+from .fileaccess import accesses_for, config_dir
 
 log = logging.getLogger("laya_guard")
 
@@ -327,22 +327,23 @@ def _append(events: list[dict]) -> None:
         f.write(data)
 
 
-def record_call(*, agent: str | None, tool_name: str | None, text: str, paths, cwd: str | None, verdict) -> None:
+def record_call(*, agent: str | None, tool_name: str | None, cwd: str | None, verdict, text: str = "", paths=None,
+                accesses=None, command: str | None = None) -> None:
     """Remember the files one tool call named, if recording is on. Never raises: a log that can't be written (or a
-    config directory that can't even be looked at) must never stop a hook or change its verdict."""
+    config directory that can't even be looked at) must never stop a hook or change its verdict.
+
+    Where the paths come from, in this order: `accesses` (an adapter says what the call touches, any agent) or the
+    `paths` of a Claude Code file tool, which are source "hook"; else the shell `command` the adapter sent (or, for
+    Claude Code's Bash tool, the call text), which is parsed and is source "shell"."""
     try:
-        if not tool_name or not enabled():
+        if not (tool_name or command or accesses) or not enabled():
             return
-        if tool_name in FILE_TOOLS:
-            op = FILE_TOOLS[tool_name]
-            accesses = [(op, p) for p in (paths or []) if isinstance(p, str) and p.strip()]
-            source = "hook"
-        elif tool_name == "Bash":
-            accesses, source = shell_accesses_moved(text), "shell"
-        else:
-            return
-        if accesses:
-            _append(build_events(agent=agent, tool_name=tool_name, accesses=accesses, source=source, cwd=cwd,
+        found = accesses_for(tool_name, paths, accesses)
+        source = "hook"
+        if not found and (command or tool_name == "Bash"):
+            found, source = shell_accesses_moved(command or text), "shell"
+        if found:
+            _append(build_events(agent=agent, tool_name=tool_name, accesses=found, source=source, cwd=cwd,
                                  action=verdict.action, policy_id=verdict.policy_id))
     except Exception as exc:                                         # noqa: BLE001
         log.warning("file activity: not recorded: %s", exc)
