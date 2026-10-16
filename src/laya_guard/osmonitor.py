@@ -39,7 +39,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from . import activity
-from .fileaccess import judge_accesses, load_rules, matches_glob
+from .fileaccess import judge_accesses, load_rules, matches_glob, outside_project
 
 EVENTS = ("exec", "fork", "exit", "open", "unlink", "rename", "create")     # not close/write: they are 3/4 of the volume
 ESLOGGER = "/usr/bin/eslogger"
@@ -335,21 +335,6 @@ class Tracker:
 
 # --- what to keep ------------------------------------------------------------------------------------------------------
 
-def outside_project(path: str, project: str | None, home: str) -> bool:
-    """A file in one of your own folders (Documents, other projects, ...) that is not where the agent was started.
-    System directories, hidden directories (~/.nvm, ~/.zshrc, ...) and ~/Library are the machine's own business: a
-    shell reads dozens of them every time it starts, so they only count when a protected-path rule names them."""
-    if project is None:
-        return False
-    root = project.rstrip("/")
-    if path == root or path.startswith(root + "/"):
-        return False
-    if not path.startswith(home + "/"):
-        return False
-    first = path[len(home) + 1:].split("/", 1)[0]
-    return not first.startswith(".") and first != "Library"
-
-
 class Monitor:
     """Turns an agent's file accesses into activity events: judges each against the protected paths, keeps what is worth
     keeping, merges repeats, and hands batches to `sink` (the activity log, or stdout)."""
@@ -416,7 +401,7 @@ class Monitor:
             self._recent = {k: t for k, t in self._recent.items() if now - t < COALESCE_SECONDS}
         self._recent[key] = now
         event = activity.build_events(agent=proc.agent, tool_name=proc.exe, accesses=[(op, path)], source="os-monitor",
-                                      cwd=None, action="observed", policy_id=verdict.policy_id if verdict else None)[0]
+                                      cwd=proc.project or proc.cwd, action="observed", policy_id=verdict.policy_id if verdict else None)[0]
         event["would"] = verdict.action if verdict else None
         self.buffer.append(event)
         self.stats["recorded"] += 1

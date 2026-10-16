@@ -148,6 +148,21 @@ def matches_glob(glob: str, path: str, cwd: str | None = None) -> bool:
     return bool(_regex(glob, cwd, os.path.expanduser("~")).match(path))
 
 
+def outside_project(path: str, project: str | None, home: str) -> bool:
+    """A file in one of your own folders (Documents, other projects, ...) that is not where the agent was started.
+    System directories, hidden directories (~/.nvm, ~/.zshrc, ...) and ~/Library are the machine's own business: a
+    shell reads dozens of them every time it starts, so they only count when a protected-path rule names them."""
+    if project is None:
+        return False
+    root = project.rstrip("/")
+    if path == root or path.startswith(root + "/"):
+        return False
+    if not path.startswith(home + "/"):
+        return False
+    first = path[len(home) + 1:].split("/", 1)[0]
+    return not first.startswith(".") and first != "Library"
+
+
 def _candidates(path: str, cwd: str) -> list[str]:
     """The path as named and, when it differs, where it really points (a link can lead into a protected place)."""
     p = os.path.expanduser(path)

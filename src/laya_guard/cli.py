@@ -1,7 +1,7 @@
 """CLI: laya-guard check / serve / eval."""
 from __future__ import annotations
 import argparse, dataclasses, json, os, sys, time
-from . import activity, osmonitor
+from . import activity, footprint, osmonitor
 from .fileaccess import judge_file_call
 from .guard import judge, judge_offline, is_mock, warmup
 from .install import InstallError
@@ -75,6 +75,38 @@ def cmd_activity(args):
         action = str(e.get("action", "")) + (f"!{e['would']}" if e.get("would") else "")    # observed!review: it happened
         print(f"  {str(e.get('ts', ''))[:19]}  {str(e.get('agent') or '-'):12} {str(e.get('tool_name') or '-'):10} "
               f"{str(e.get('op', '')):7} {action:14} {str(e.get('source', '')):10} {e.get('path', '')}")
+    return 0
+
+def cmd_footprint(args):
+    """laya-guard footprint: what each project and session touched, and what is worth protecting, from the activity log."""
+    path = activity.activity_path()
+    events = activity.load_events()
+    if not events:
+        print(f"No file activity recorded yet ({_short(path)}).\n"
+              + ("Recording is on: it fills in as your agents run." if activity.enabled()
+                 else "Turn it on first: laya-guard activity on"))
+        return 0
+    try:
+        if args.suggest:
+            by_project, _ = footprint.select(events, window=args.since, project=args.project, agent=args.agent)
+            found = footprint.suggest([e for rows in by_project.values() for _, e in rows])
+            if args.json:
+                print(json.dumps({"suggestions": found}, ensure_ascii=False, indent=1))
+            elif found:
+                print(footprint.render_rules_yaml(found), end="")
+                print("\n# Paste what you want into ~/.config/laya-guard/protect.yaml (edits apply to the next call).", file=sys.stderr)
+            else:
+                print("Nothing to suggest: no touched path matches a well-known secret location or sits rarely outside "
+                      "its project, beyond what protect.yaml already covers.")
+            return 0
+        report = footprint.build_report(events, window=args.since, project=args.project, agent=args.agent, top=args.top)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps({"log": str(path), "log_events": len(events), **report}, ensure_ascii=False, indent=1))
+    else:
+        print(footprint.render_text(report, log_label=f"log: {_short(path)}", total_in_log=len(events)))
     return 0
 
 def cmd_watch(args):
@@ -419,6 +451,21 @@ def main(argv=None):
     ac.add_argument("--last", type=int, default=20, help="how many of the latest events to show (default 20)")
     ac.add_argument("--json", action="store_true", help="print the state and events as JSON")
     ac.set_defaults(fn=cmd_activity)
+    fp = sub.add_parser("footprint", help="what each project and session touched, and paths worth protecting, from the activity log",
+                        description="Reads the file activity log (laya-guard activity on) and shows, per project and session, "
+                                    "what your agents read, wrote and deleted, what hit a protected path and what was outside "
+                                    "the project. --suggest prints protect.yaml entries for paths you may want to protect; "
+                                    "it never applies anything, and an access alone is not evidence of bad intent.")
+    fp.add_argument("--since", choices=footprint.WINDOW_CHOICES, default=footprint.DEFAULT_WINDOW,
+                    help=f"how far back to look (default {footprint.DEFAULT_WINDOW})")
+    fp.add_argument("--project", default=None, help="only this directory (and anything below it)")
+    fp.add_argument("--agent", default=None, help="only this agent (claude-code, codex, ...)")
+    fp.add_argument("--top", type=int, default=5, help="how many paths to list per project (default 5)")
+    fp.add_argument("--suggest", action="store_true",
+                    help="print protect.yaml entries for paths worth protecting: known secret locations an agent touched, and "
+                         "folders outside the project it touched only rarely. Nothing is applied")
+    fp.add_argument("--json", action="store_true", help="print JSON")
+    fp.set_defaults(fn=cmd_footprint)
     w = sub.add_parser("watch", help="(macOS, optional) record the files an agent's processes really open, as the OS sees them",
                        description="Reads Apple's eslogger output and adds the files an agent's own processes open, create, "
                                    "delete or rename to the file activity log (source os-monitor). It sees what scripts and "

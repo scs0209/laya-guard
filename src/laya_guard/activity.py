@@ -2,7 +2,9 @@
 
 Off by default. `laya-guard activity on` starts it. One JSON line per file an agent touched:
 
-    {"ts", "agent", "tool_name", "op", "path", "abs", "source", "action", "policy_id"}   (+ "would" when source is os-monitor)
+    {"ts", "agent", "tool_name", "op", "path", "abs", "cwd", "source", "action", "policy_id"}   (+ "would" for os-monitor)
+
+cwd     the directory the call ran in (absolute), or null when the adapter sent none: what `laya-guard footprint` groups by.
 
 op      read | write | delete
 source  how the path was learned, which is how far to trust it:
@@ -240,8 +242,9 @@ def _absolute(path: str, cwd: str | None) -> str | None:
 
 def build_events(*, agent, tool_name, accesses, source, cwd, action, policy_id) -> list[dict]:
     ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    where = cwd if isinstance(cwd, str) and os.path.isabs(cwd) else None
     return [{"ts": ts, "agent": agent, "tool_name": tool_name, "op": op, "path": path[:4096],
-             "abs": _absolute(path, cwd), "source": source, "action": action, "policy_id": policy_id}
+             "abs": _absolute(path, cwd), "cwd": where, "source": source, "action": action, "policy_id": policy_id}
             for op, path in accesses[:MAX_PER_CALL]]
 
 

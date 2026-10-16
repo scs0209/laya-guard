@@ -55,6 +55,20 @@ All notable changes to this project are documented here. Versions follow
   matches the expected shape is reported. Not yet run for long sessions with real agents.
 - `laya-guard activity` lists `os-monitor` events with `observed!review` / `observed!block` in the action column.
 
+- **`laya-guard footprint`: what each project and session touched, and what to protect.** From the file activity log:
+  per project the reads, writes and deletes, the agents, the sessions (one agent's activity in one project with no gap over
+  30 minutes: a guess from the timestamps, the hooks send no session id), what hit a protected path, what was outside the
+  project and the most touched files. `--since 24h|7d|30d|all`, `--project DIR`, `--agent NAME`, `--top N`, `--json`. A call
+  the guard blocked is a stopped attempt, not something touched. Events now carry `cwd` (the directory the call ran in;
+  older events and adapters that send none are grouped under `(unknown)`); a project is the git repository it is in.
+  `footprint --suggest` prints `protect.yaml` entries (action `review`) for two kinds of path, and applies nothing: known
+  secret locations an agent touched that the default rules don't cover (cloud CLI credentials, browser profiles, shell
+  history, `*.pem`, `*.tfstate`, ...), and folders in your own home, outside the project, that agents touched only a few
+  times. An access alone is not evidence of bad intent.
+- **A File footprint card on the dashboard's Overview**, from `GET /api/footprint?window=` (loopback only, paths shortened
+  with `~`, re-read only when the log changed and at most every 30 seconds). It shows nothing but a hint while the activity
+  log is off and empty.
+
 ### Changed
 
 - **The Amp helper hands the offline check the bare command** instead of the JSON it receives, like the other adapters,

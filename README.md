@@ -377,7 +377,8 @@ laya-guard activity off       # stop; what was recorded stays
 ```
 
 Each line of `~/.local/share/laya-guard/file-activity.jsonl` (readable by you only; `LAYA_GUARD_FILE_ACTIVITY_PATH`
-moves it) is one file one call named: `{ts, agent, tool_name, op, path, abs, source, action, policy_id}`.
+moves it) is one file one call named: `{ts, agent, tool_name, op, path, abs, cwd, source, action, policy_id}` (`cwd`: the directory
+the call ran in; OS-monitor lines add `would`).
 
 - `op` is `read`, `write` or `delete`.
 - `source` says how far to trust a path. `hook`: a file tool (`Read`, `Edit`, `Write`, …) named it. `shell`: guessed
@@ -432,6 +433,36 @@ was opened, which may not be the name the agent used to reach it (a symlink), so
 one Mac (macOS 26) saw every read, write, delete and rename a stand-in agent made, including reads inside Python and Node
 child processes, at about 700 messages a second and 8 % of one core for `eslogger`. It has not been run for long sessions
 with real agents yet.
+
+#### See where your agents reached, and what to protect (footprint)
+
+With the file activity log on, `laya-guard footprint` answers "what did my agents touch?" per project and session, and
+"what should I protect that I'm not protecting yet?":
+
+```bash
+laya-guard footprint                     # the last 7 days, per project and session
+laya-guard footprint --since 30d --project ~/work/app --agent claude-code
+laya-guard footprint --suggest           # protect.yaml entries worth a look; nothing is applied
+laya-guard footprint --json              # the same, for scripts
+```
+
+For each project: how many reads, writes and deletes, which agents, sessions, the accesses that hit a protected path, the
+files outside the project and the most touched ones. The dashboard's Overview has the same as a File footprint card
+(only when the log has something; click a project for the detail).
+
+- **A project** is the git repository the call's directory is in (the directory itself when there is none); events from
+  before the log kept `cwd`, and calls whose adapter sent no directory, are under `(unknown)`.
+- **A session** is one agent's run of activity in one project with no gap over 30 minutes. The hooks don't send a session
+  id, so this is a guess from the timestamps.
+- **Stopped is not touched.** A call the guard blocked didn't happen, so it is counted as a stopped attempt. A call sent to
+  review is counted as touched: the log can't tell whether you approved it.
+- **Suggestions** are of two kinds, and never applied. *Sensitive*: an agent touched a well-known place for secrets that the
+  default rules don't cover (cloud CLI credentials, browser profiles, shell history, `*.pem`, `*.tfstate`, ...). *Rare*:
+  a folder in your own home, outside the project, that agents touched only a few times (in a few sessions): cheap to
+  protect, and somewhere you may not expect an agent to be. Something an agent uses all the time is not suggested, since
+  protecting it means constant review prompts. Each comes as a `protect.yaml` entry with `review` as its action; paste
+  what you want into `~/.config/laya-guard/protect.yaml`. **An access alone is not evidence of bad intent**: an agent that
+  read `~/Documents/taxes/2025.pdf` once may have been asked to.
 
 ### 1b. Guard Cursor (beforeShellExecution hook)
 

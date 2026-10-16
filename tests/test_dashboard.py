@@ -229,6 +229,71 @@ def test_api_stats_reports_when_logging_is_off(client, monkeypatch):
     assert client.get("/api/stats").json()["health"]["logging"] is False
 
 
+def _activity_event(minutes_ago, path, cwd="/work/a", **kw):
+    ts = datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)
+    return {"ts": ts.isoformat(timespec="seconds"), "agent": "claude-code", "tool_name": "Read", "op": "read", "path": path,
+            "abs": path, "cwd": cwd, "source": "hook", "action": "allow", "policy_id": "general", **kw}
+
+
+class _Req:
+    """The part of a request the loopback check reads. These tests call the route functions directly, so they run
+    without httpx (the TestClient tests above skip when it isn't installed)."""
+
+    def __init__(self, host="127.0.0.1:8787"):
+        self.headers = {"host": host}
+
+
+def _footprint(window="7d", host="127.0.0.1:8787"):
+    from laya_guard import server
+    r = server.api_footprint(_Req(host), window=window)
+    return r, json.loads(r.body)
+
+
+def test_api_footprint_is_off_without_a_log_and_only_for_this_machine(monkeypatch, tmp_path):
+    from fastapi import HTTPException
+    from laya_guard import server
+    monkeypatch.setenv("LAYA_GUARD_FILE_ACTIVITY_PATH", str(tmp_path / "none" / "activity.jsonl"))
+    monkeypatch.delenv("LAYA_GUARD_FILE_ACTIVITY", raising=False)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    server._footprint_cache.clear()
+    r, body = _footprint()
+    assert r.headers["cache-control"] == "no-store"
+    assert (body["enabled"], body["log_events"], body["projects"]) == (False, 0, [])
+    with pytest.raises(HTTPException) as rebinding:                                              # DNS rebinding
+        _footprint(host="evil.example:8787")
+    assert rebinding.value.status_code == 403
+    with pytest.raises(HTTPException) as odd:
+        _footprint(window="1y")
+    assert odd.value.status_code == 400
+
+
+def test_api_footprint_reports_the_log_with_short_paths_and_notices_new_events(monkeypatch, tmp_path):
+    from laya_guard import server
+    log = tmp_path / "activity.jsonl"
+    home = os.path.expanduser("~")
+    log.write_text(json.dumps(_activity_event(5, home + "/.config/gcloud/c.db")) + "\n"
+                   + json.dumps(_activity_event(4, "/work/a/x.py")) + "\n", encoding="utf-8")
+    monkeypatch.setenv("LAYA_GUARD_FILE_ACTIVITY_PATH", str(log))
+    monkeypatch.setenv("LAYA_GUARD_FILE_ACTIVITY", "1")
+    server._footprint_cache.clear()
+    _, body = _footprint("24h")
+    assert body["enabled"] is True and body["log_events"] == 2 and body["totals"]["events"] == 2
+    assert body["projects"][0]["project"] == "/work/a" and body["suggestions"] == 1
+    assert home + "/" not in json.dumps(body)                                                    # ~ stands for the home directory
+    with log.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(_activity_event(1, "/work/a/y.py")) + "\n")
+    assert _footprint("24h")[1]["totals"]["events"] == 3                                          # the file changed: re-read
+    assert _footprint("all")[1]["window"] == "all"
+
+
+def test_page_has_the_footprint_card_after_the_setup_cards_and_only_sets_text():
+    html = dashboard.render_page("N0NC3", "T0K3N")
+    assert html.index('id="cards-protection"') < html.index('id="footprint-label"') < html.index('id="cards-footprint"') < html.index('id="footer"')
+    for needle in ("/api/footprint", "File activity", "Worth protecting", "laya-guard footprint --suggest", "laya-guard activity on"):
+        assert needle in html, needle
+    assert "innerHTML" not in html and "style=" not in html
+
+
 # --- installing the hook from the dashboard -----------------------------------------------------
 
 def test_origin_and_token_checks():

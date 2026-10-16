@@ -116,6 +116,11 @@ h2 { margin: 0; font-size: 30px; line-height: 1.15; font-weight: 650; letter-spa
 .axis { display: flex; justify-content: space-between; color: var(--faint); font-size: 12px; }
 .label { margin: 40px 0 12px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
 .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 18px 14px; padding-top: 8px; }
+.fp { margin-top: 18px; background: var(--card); border-radius: 14px; padding: 14px 18px; font-size: 13px; line-height: 1.6; color: var(--muted); overflow-wrap: anywhere; }
+.fp h3 { margin: 0 0 4px; font-size: 14px; color: var(--text); }
+.fp ul { margin: 2px 0 12px; padding-left: 18px; }
+.fp li { margin: 2px 0; }
+.fp code { font-family: var(--mono); font-size: 12px; color: var(--text); }
 .foot-note { margin: 56px 0 0; color: var(--faint); font-size: 12px; line-height: 1.7; max-width: 46em; }
 .foot-note kbd, .help kbd { font: inherit; color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 0 6px; }
 
@@ -338,6 +343,9 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
           <div class="cards" id="cards-verdicts"></div>
           <div class="label" id="protection-label">Protection</div>
           <div class="cards" id="cards-protection"></div>
+          <div class="label" id="footprint-label" hidden>File footprint</div>
+          <div class="cards" id="cards-footprint"></div>
+          <div class="fp" id="fp-detail" hidden></div>
           <p class="foot-note" id="footer"></p>
         </div>
       </section>
@@ -615,6 +623,77 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
     }).catch(function () {});
   }
 
+  // --- file footprint: from the opt-in file activity log; paths arrive shortened with ~ and are only ever set as text ---
+  var footprintInfo = null, footprintSig = "", footprintAt = 0, fpSel = null;
+  function loadFootprint(force) {
+    var now = Date.now();
+    if (!force && now - footprintAt < 30000) return Promise.resolve();
+    footprintAt = now;
+    var win = state.window;
+    return fetch("/api/footprint?window=" + encodeURIComponent(win), { cache: "no-store" })
+      .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(function (j) {
+        if (win !== state.window) return;
+        var sig = JSON.stringify(j);
+        if (sig === footprintSig) return;
+        footprintSig = sig; footprintInfo = j;
+        if (state.view === "overview") renderFootprint();
+      }).catch(function () {});
+  }
+  function fpList(title, rows, text) {
+    if (!rows || !rows.length) return null;
+    var ul = el("ul");
+    rows.forEach(function (r) { ul.appendChild(el("li", { text: text(r) })); });
+    return el("div", null, el("h3", { text: title }), ul);
+  }
+  function fpDetail(j) {
+    var box = $("fp-detail");
+    clear(box);
+    if (fpSel == null || !j) { box.hidden = true; return; }
+    box.hidden = false;
+    if (fpSel === "help") {
+      box.appendChild(el("h3", { text: "File activity" }));
+      box.appendChild(el("p", { text: "laya-guard can record which files your agents touch (paths only, never contents) and show them here. Turn it on with `laya-guard activity on`; on macOS `laya-guard watch` adds what scripts and child processes open." }));
+      return;
+    }
+    if (fpSel === "suggest") {
+      box.appendChild(el("h3", { text: "Worth protecting" }));
+      box.appendChild(el("p", { text: "Known secret locations an agent touched, and folders outside the project it touched only rarely. Run `laya-guard footprint --suggest` for protect.yaml entries to paste. They are suggestions: nothing is applied, and an access alone is not evidence of bad intent." }));
+      return;
+    }
+    var p = (j.projects || []).filter(function (x) { return x.project === fpSel; })[0];
+    if (!p) { fpSel = null; box.hidden = true; return; }
+    box.appendChild(el("h3", { text: p.project }));
+    box.appendChild(el("p", { text: "read " + fmtInt(p.read) + ", write " + fmtInt(p.write) + ", delete " + fmtInt(p.delete) + (p.stopped ? "; " + plural(p.stopped, "attempt", "attempts") + " stopped by the guard" : "") }));
+    [fpList("Recent sessions", p.sessions.slice(-3).reverse(), function (s) { return fmtStamp(s.start) + " to " + fmtTime(s.end) + ", " + s.agent + ": " + plural(s.events, "event", "events") + (s.flagged ? ", " + s.flagged + " on protected paths" : ""); }),
+     fpList("On protected paths", p.protected_hits, function (h) { return h.agent + " " + h.op + " " + h.path + " (" + h.answer + (h.stopped ? ", stopped" : "") + ")"; }),
+     fpList("Outside the project", p.outside_paths, function (o) { return o.path + " x" + o.count; }),
+     fpList("Most touched", p.top_paths, function (o) { return o.path + " x" + o.count; })
+    ].forEach(function (n) { if (n) box.appendChild(n); });
+  }
+  function renderFootprint() {
+    var j = footprintInfo, box = $("cards-footprint");
+    clear(box);
+    $("footprint-label").hidden = !j;
+    if (!j) { fpDetail(null); return; }
+    function toggle(id) { return function () { fpSel = fpSel === id ? null : id; renderFootprint(); }; }
+    if (!j.log_events) {
+      box.appendChild(attentionCard({ title: "File activity", sub: j.enabled ? "On: nothing recorded yet" : "Off: turn on with laya-guard activity on", cls: "", go: toggle("help") }));
+      fpDetail(j);
+      return;
+    }
+    var t = j.totals || {};
+    box.appendChild(attentionCard({ title: "File activity", sub: plural(t.events || 0, "event", "events") + " in " + plural(j.projects.length, "project", "projects") + " " + (WINDOW_TEXT[j.window] || "") + (j.enabled ? "" : ", recording is off"),
+      cls: t.flagged ? "warn" : "", badge: t.flagged, go: toggle("help") }));
+    j.projects.slice(0, 5).forEach(function (p) {
+      var card = attentionCard({ title: p.project, sub: p.agents.join(", ") + ": " + plural(p.sessions.length, "session", "sessions") + ", " + plural(p.events, "event", "events"), cls: p.flagged ? "warn" : "", badge: p.flagged, go: toggle(p.project) });
+      if (fpSel === p.project) card.classList.add("sel");
+      box.appendChild(card);
+    });
+    if (j.suggestions) box.appendChild(attentionCard({ title: "Worth protecting", sub: plural(j.suggestions, "path", "paths") + " to look at", cls: "", go: toggle("suggest") }));
+    fpDetail(j);
+  }
+
   // --- overview ---
   function renderHero(d, ok) {
     var lede = $("lede"), split = $("split"), note = $("note"), t = d && d.totals, h = (d && d.health) || {};
@@ -820,7 +899,7 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
     if (d) renderState(d, true);
     if (state.view === "agents") { renderAgentsView(); return; }
     if (!d) return;
-    if (state.view === "overview") { renderHero(d, true); renderTape(d); renderCards(d); renderFooter(d, true); }
+    if (state.view === "overview") { renderHero(d, true); renderTape(d); renderCards(d); renderFootprint(); renderFooter(d, true); }
     else if (state.view === "calls") renderCalls(fresh);
     else if (state.view === "policies") renderPolicies(d);
   }
@@ -864,6 +943,7 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
 
   function setWindow(w) {
     state.window = w; state.seen = null; state.sel = null; state.drawn = false;
+    footprintInfo = null; footprintSig = ""; fpSel = null; loadFootprint(true);
     Array.prototype.forEach.call($("windows").querySelectorAll("button"), function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-window") === w)); });
     load(false);
   }
@@ -1059,12 +1139,13 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
     resizeTimer = setTimeout(function () { if (state.data && state.view === "overview") { state.drawn = true; renderTape(state.data); } }, 150);
   });
   window.addEventListener("hashchange", function () { setView(hashView(), true); });
-  setInterval(function () { if (!state.paused && !document.hidden) { load(true); loadAgents(); if (state.view === "overview") loadService(); } }, 5000);
-  document.addEventListener("visibilitychange", function () { if (!document.hidden && !state.paused) { load(true); loadAgents(); loadService(); } });
+  setInterval(function () { if (!state.paused && !document.hidden) { load(true); loadAgents(); if (state.view === "overview") { loadService(); loadFootprint(false); } } }, 5000);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden && !state.paused) { load(true); loadAgents(); loadService(); loadFootprint(false); } });
   setView(hashView(), true);
   load(false);
   loadAgents();
   loadService();
+  loadFootprint(true);
 })();
 </script>
 </body>

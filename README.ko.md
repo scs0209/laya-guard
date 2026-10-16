@@ -334,7 +334,8 @@ laya-guard activity off       # 중지 (기록은 남음)
 ```
 
 `~/.local/share/laya-guard/file-activity.jsonl`(본인만 읽을 수 있음, `LAYA_GUARD_FILE_ACTIVITY_PATH`로 위치 변경)의
-한 줄이 호출이 지목한 파일 하나입니다: `{ts, agent, tool_name, op, path, abs, source, action, policy_id}`.
+한 줄이 호출이 지목한 파일 하나입니다: `{ts, agent, tool_name, op, path, abs, cwd, source, action, policy_id}`(`cwd`: 호출이
+실행된 디렉터리, OS 모니터 줄에는 `would`가 더해짐).
 `op`는 `read`·`write`·`delete`, `source`는 경로를 어디서 알았는지(`hook`: 파일 도구가 지목, `shell`: Bash 명령에서
 단순한 형태만 추정, 셸이 풀어야 하는 `$VAR`·글롭·`$(…)`은 건너뛰므로 놓치는 것이 있음), `action`은 가드의 답이라
 막힌 시도를 접근으로 오해하지 않습니다. `verdicts.jsonl`에는 여전히 경로가 들어가지 않고, 환경변수
@@ -381,6 +382,34 @@ sudo eslogger exec fork exit open unlink rename create | laya-guard watch
 도달한 이름(심볼릭 링크)과 다를 수 있어 규칙은 실제 경로로 쓰는 것이 안전합니다. Mac 한 대(macOS 26)에서 시험했을 때
 대역 에이전트의 읽기·쓰기·삭제·이름 변경을 모두 잡았고 Python·Node 자식 프로세스 안의 읽기도 포함됩니다. 초당 약 700건,
 `eslogger`가 코어 하나의 8% 수준이었습니다. 실제 에이전트의 긴 세션으로는 아직 돌려보지 않았습니다.
+
+#### 에이전트가 어디까지 닿았는지, 무엇을 보호할지 보기 (footprint)
+
+파일 활동 기록을 켜 두면 `laya-guard footprint`가 "에이전트가 무엇을 건드렸나"를 프로젝트·세션별로, "아직 보호하지 않는데
+보호할 만한 것은 무엇인가"를 알려줍니다:
+
+```bash
+laya-guard footprint                     # 최근 7일, 프로젝트·세션별
+laya-guard footprint --since 30d --project ~/work/app --agent claude-code
+laya-guard footprint --suggest           # 살펴볼 만한 protect.yaml 항목. 아무것도 적용하지 않음
+laya-guard footprint --json              # 스크립트용
+```
+
+프로젝트마다 읽기·쓰기·삭제 수, 에이전트, 세션, 보호 경로에 닿은 접근, 프로젝트 밖 파일, 가장 많이 건드린 파일을 보여줍니다.
+대시보드 개요에도 같은 내용이 파일 발자국 카드로 있습니다(기록에 내용이 있을 때만, 프로젝트를 누르면 자세히).
+
+- **프로젝트**는 호출 디렉터리가 속한 git 저장소입니다(없으면 그 디렉터리). 기록이 `cwd`를 남기기 전의 이벤트와 어댑터가
+  디렉터리를 보내지 않은 호출은 `(unknown)`에 들어갑니다.
+- **세션**은 한 에이전트가 한 프로젝트에서 30분 넘는 공백 없이 이어간 활동입니다. 훅은 세션 id를 보내지 않으므로
+  타임스탬프로 추정한 값입니다.
+- **막힌 것은 건드린 것이 아닙니다.** 가드가 차단한 호출은 일어나지 않았으므로 막힌 시도로 셉니다. 검토로 보낸 호출은
+  건드린 것으로 셉니다. 기록만으로는 승인했는지 알 수 없기 때문입니다.
+- **추천**은 두 종류이며 절대 적용되지 않습니다. *민감*: 기본 규칙이 다루지 않는 널리 알려진 비밀 위치(클라우드 CLI 자격증명,
+  브라우저 프로필, 셸 기록, `*.pem`, `*.tfstate` …)를 에이전트가 건드렸을 때. *드묾*: 홈의 본인 폴더이면서 프로젝트 밖이고
+  에이전트가 몇 번(몇 세션)만 건드린 폴더. 보호 비용이 낮고 에이전트가 있으리라 기대하지 않던 곳일 수 있습니다. 에이전트가
+  늘 쓰는 곳은 보호하면 검토 요청이 계속 뜨므로 추천하지 않습니다. 각 항목은 action `review`의 `protect.yaml` 항목으로
+  나오며, 원하는 것만 `~/.config/laya-guard/protect.yaml`에 붙여 넣으세요. **접근 하나만으로는 나쁜 의도의 증거가 아닙니다.**
+  `~/Documents/taxes/2025.pdf`를 한 번 읽은 에이전트는 그렇게 요청받았을 수도 있습니다.
 
 ### 1b. Cursor 가드 (beforeShellExecution 훅)
 
