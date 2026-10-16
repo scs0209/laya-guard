@@ -48,7 +48,7 @@ if m.get("paths"):
   [ -n "$only" ] && tool="$only"
   payload=$(CWD="$cwd" META="$meta" python3 -c 'import json,os,sys
 m = json.loads(os.environ.get("META") or "{}")
-p = {"tool_call": sys.stdin.read().strip(), "cwd": os.environ["CWD"]}
+p = {"tool_call": sys.stdin.read().strip(), "cwd": os.environ["CWD"], "agent": "claude-code"}
 if m.get("tool_name"):
     p["tool_name"] = m["tool_name"]
 if m.get("paths"):
@@ -64,7 +64,7 @@ print(json.dumps(p))' <<< "$tool")
     while IFS= read -r -d '' p; do path_args+=(--path "$p"); done < <(META="$meta" python3 -c 'import json,os,sys
 for x in json.loads(os.environ.get("META") or "{}").get("paths", []):
     sys.stdout.write(x + "\0")' 2>/dev/null)
-    res=$(printf '%s' "$tool" | LAYA_GUARD_FAIL="$fail" "${LAYA_GUARD_BIN:-laya-guard}" check --offline --json --cwd "$cwd" "${name_args[@]}" "${path_args[@]}" 2>/dev/null)
+    res=$(printf '%s' "$tool" | LAYA_GUARD_FAIL="$fail" "${LAYA_GUARD_BIN:-laya-guard}" check --offline --json --cwd "$cwd" --agent claude-code "${name_args[@]}" "${path_args[@]}" 2>/dev/null)
   fi
   action=$(printf '%s' "$res" | python3 -c "import json,sys; print(json.load(sys.stdin).get('action','allow'))" 2>/dev/null)
   if [ -z "$action" ]; then

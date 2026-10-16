@@ -383,6 +383,31 @@ same rules, and a file call that matches none is allowed instead of asked about.
 This sees the **path a tool call names, nothing more**: a file read inside a shell command, a script or a child process
 never reaches it. The shell is still judged as before, with its own sensitive-path checks.
 
+#### See which files your agents touched (opt-in)
+
+laya-guard can keep a record of the files an agent's tool calls name, so you can see what your agents actually reached
+for. It is off by default, because it writes **file paths** (never contents) to disk:
+
+```bash
+laya-guard activity on        # start recording
+laya-guard activity           # the state and the latest events
+laya-guard activity off       # stop; what was recorded stays
+```
+
+Each line of `~/.local/share/laya-guard/file-activity.jsonl` (readable by you only; `LAYA_GUARD_FILE_ACTIVITY_PATH`
+moves it) is one file one call named: `{ts, agent, tool_name, op, path, abs, source, action, policy_id}`.
+
+- `op` is `read`, `write` or `delete`.
+- `source` says how far to trust a path. `hook`: a file tool (`Read`, `Edit`, `Write`, …) named it. `shell`: guessed
+  from a Bash command, simple forms only (`cat`, `rm`, `cp`, `mv`, `tee`, redirects, …). Anything the shell would still
+  have to expand (`$VAR`, globs, `$(…)`) is skipped, so this misses things.
+- `action` is what the guard answered, so a blocked attempt isn't mistaken for an access.
+
+It lives next to `verdicts.jsonl`, not in it: that file still never holds a path. Set `LAYA_GUARD_FILE_ACTIVITY=1` or
+`0` to decide from the environment instead (it wins over `activity on|off`). Recording stops at 50 MB. Bash calls are
+recorded as soon as it is on; file tool calls need `install --files`. It records declared access only, and only
+through the Claude Code hook for now.
+
 ### 1b. Guard Cursor (beforeShellExecution hook)
 
 ```bash
@@ -551,14 +576,14 @@ All patterns live in [policy.yaml](src/laya_guard/policy.yaml) — edit, add you
 ## API
 
 - `GET /health` → `{"ok": true, "mock": false}`
-- `POST /guard` `{tool_call, source?, cwd?, tool_name?, paths?}` → `{action, risk, policy_id, reason, mock, verdict_source}`
+- `POST /guard` `{tool_call, source?, cwd?, tool_name?, paths?, agent?}` → `{action, risk, policy_id, reason, mock, verdict_source}`
   (`source`: `user` | `tool` | `email` | `web`; non-user sources get stricter thresholds.
   `cwd`: absolute directory the command runs in; enables package.json script checks.
   `tool_name`: the agent's name for the tool being called (`Bash`, `Edit`, an MCP tool, …); it is logged (in clear, up
   to 64 characters; `null` when absent) and counted by `laya-guard stats`. With `paths` (the files the call names) it
   also marks a file tool call (`Read`, `Edit`, `MultiEdit`, `Write`, `NotebookEdit`, `Glob`, `Grep`): that call is
   judged by the paths alone, against the protected paths, and `tool_call` is ignored. For any other tool it doesn't
-  change the verdict.
+  change the verdict. `agent`: which agent is calling (`claude-code`); it only labels the opt-in file activity log.
   `reason` is Korean when the input contains Hangul, English otherwise.
   `verdict_source`: `regex` (prefilter block, model skipped) |
   `allowlist` (safe command, model skipped) | `model` |

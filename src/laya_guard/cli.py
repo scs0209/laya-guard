@@ -1,6 +1,7 @@
 """CLI: laya-guard check / serve / eval."""
 from __future__ import annotations
 import argparse, dataclasses, json, os, sys, time
+from . import activity
 from .fileaccess import judge_file_call
 from .guard import judge, judge_offline, is_mock, warmup
 from .install import InstallError
@@ -18,6 +19,8 @@ def cmd_check(args):
         _log_offline(v, text, (time.perf_counter() - t0) * 1000.0, args.tool_name)
     elif v is None:
         v = judge(text, cwd=cwd)
+    if args.tool_name:                       # a tool call from an agent's hook, not someone typing a command
+        activity.record_call(agent=args.agent, tool_name=args.tool_name, text=text, paths=args.path, cwd=cwd, verdict=v)
     if args.json:
         print(json.dumps(dataclasses.asdict(v), ensure_ascii=False))
         return 0 if v.action != "block" else 2
@@ -37,6 +40,46 @@ def _log_offline(v, text: str, latency_ms: float, tool_name: str | None = None) 
     except OSError:
         pass
     maybe_alert("server-down")             # LAYA_GUARD_ALERT_CMD, once per outage; never raises, never waits
+
+def cmd_activity(args):
+    """laya-guard activity [on|off]: the opt-in log of which files an agent's tool calls named."""
+    path = activity.activity_path()
+    if args.action == "on":
+        activity.turn_on()
+        print("File activity recording is on.\n"
+              "  What: each file an agent's tool call names: its path, read / write / delete, and what the guard answered.\n"
+              "        Never the contents of a file.\n"
+              f"  Where: {_short(path)} (only you can read it)\n"
+              "  Turn it off: laya-guard activity off")
+        if activity.forced() is False:
+            print("\nNote: LAYA_GUARD_FILE_ACTIVITY is set to off in this environment, so it stays off here.")
+        return 0
+    if args.action == "off":
+        activity.turn_off()
+        print(f"File activity recording is off. What was recorded is kept in {_short(path)}; delete it if you don't want it.")
+        return 0
+    events = activity.load_events()
+    shown = events[-args.last:] if args.last > 0 else []
+    if args.json:
+        print(json.dumps({"enabled": activity.enabled(), "path": str(path), "total": len(events), "events": shown},
+                         ensure_ascii=False))
+        return 0
+    state = "on" if activity.enabled() else "off"
+    forced = activity.forced()
+    print(f"File activity recording: {state}" + (" (set by LAYA_GUARD_FILE_ACTIVITY)" if forced is not None else ""))
+    print(f"Log: {_short(path)} ({len(events)} event{'s' if len(events) != 1 else ''})")
+    if not events and not activity.enabled():
+        print("Turn it on with: laya-guard activity on")
+    for e in shown:
+        f = {k: _shown(e.get(k)) for k in ("ts", "agent", "tool_name", "op", "action", "source", "path")}
+        print(f"  {f['ts'][:19]}  {f['agent'] or '-':12} {f['tool_name'] or '-':10} "
+              f"{f['op']:7} {f['action']:7} {f['source']:5} {f['path']}")
+    return 0
+
+def _shown(value) -> str:
+    """A logged value made safe for a terminal: what an agent named can hold escape sequences that would rewrite the
+    screen, so anything unprintable is shown as an escape instead."""
+    return "".join(c if c.isprintable() else f"\\u{ord(c):04x}" for c in str(value if value is not None else ""))
 
 def cmd_serve(args):
     from .server import run
@@ -357,12 +400,19 @@ def main(argv=None):
     c.add_argument("--json", action="store_true", help="print the verdict as JSON")
     c.add_argument("--tool-name", default=None,
                    help="the agent's name for the tool (Read, Edit, Write, ...): with --path, the call is judged by the paths alone")
+    c.add_argument("--agent", default=None, help="which agent is calling (claude-code, ...): labels the file activity log")
     c.add_argument("--path", action="append", default=[],
                    help="a file the tool call names (repeat for more); judged against the protected paths, not by its content")
     c.add_argument("--cwd", default=".",
                    help="directory the command runs in; package.json scripts that `npm test` "
                         "and the like run are checked from here (default: current directory)")
     c.set_defaults(fn=cmd_check)
+    ac = sub.add_parser("activity", help="the opt-in log of which files an agent's tool calls named")
+    ac.add_argument("action", nargs="?", choices=("on", "off"), default=None,
+                    help="on: start recording, off: stop (default: show the state and the latest events)")
+    ac.add_argument("--last", type=int, default=20, help="how many of the latest events to show (default 20)")
+    ac.add_argument("--json", action="store_true", help="print the state and events as JSON")
+    ac.set_defaults(fn=cmd_activity)
     s = sub.add_parser("serve"); s.add_argument("--host", default="127.0.0.1"); s.add_argument("--port", type=int, default=8787)
     s.add_argument("--no-warmup", action="store_true", help="skip loading the model before listening"); s.set_defaults(fn=cmd_serve)
     t = sub.add_parser("stats"); t.add_argument("--path", default=None); t.add_argument("--json", action="store_true"); t.set_defaults(fn=cmd_stats)

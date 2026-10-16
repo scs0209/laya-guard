@@ -178,6 +178,7 @@ def test_the_hook_sends_only_the_tool_name_and_paths_of_a_file_call(env):
         srv.shutdown()
     write, bash = seen
     assert (write["tool_name"], write["paths"], write["tool_call"]) == ("Write", ["/tmp/x.py"], "Write: /tmp/x.py")
+    assert write["agent"] == "claude-code" and bash["agent"] == "claude-code"
     assert "SECRET-CONTENT" not in json.dumps(write)
     assert bash["tool_name"] == "Bash" and "paths" not in bash and bash["tool_call"] == "ls"
 
