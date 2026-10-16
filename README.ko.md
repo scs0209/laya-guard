@@ -10,18 +10,39 @@
   <a href="README.md">English</a> · <strong>한국어</strong>
 </p>
 
-> **매 `tool_call`을 노트북에서 ~0.1초에 심판. 건당 과금 없음.**
+> **코딩 에이전트는 당신의 컴퓨터에서 `cat ~/.ssh/id_rsa`, `curl … | sh`, `rm -rf ~`를 실행할 수 있습니다. laya-guard는
+> 명령이 실행되기 *전에* 막거나, 당신에게 묻거나, 통과시킵니다. 무료이고, 노트북에서, ~0.1초에.**
 
-**Demo KO:**
-<img src="demo/demo.gif" width="750" alt="한국어 데모">
+<p align="center"><img src="demo/hero_en.gif" width="750" alt="laya-guard가 cat ~/.ssh/id_rsa, curl | sh, rm -rf ~를 막고 pytest는 통과시키는 모습"></p>
 
-**Demo EN:**
-<img src="demo/demo_en.gif" width="750" alt="English demo">
+**10초 만에 써 보기** (모델·서버·훅 없이. 위 데모가 실행하는 바로 그것입니다):
+
+```bash
+pip install --no-deps laya-guardrail pyyaml
+laya-guard check --offline "cat ~/.ssh/id_rsa"     # [BLOCK] ... policy=credential-read
+```
+
+**내 에이전트에 붙이기** (Claude Code, Codex CLI, Cursor, Gemini CLI 외 7개):
+
+```bash
+pip install laya-guardrail          # PyPI 이름이며, 설치되는 명령은 `laya-guard`입니다
+laya-guard install claude-code      # 먼저 diff를 보여주고, 설정을 백업한 뒤, 훅을 점검합니다
+```
+
+(`pip install laya-guard`는 관계없는 다른 프로젝트입니다. 패키지 이름은 **`laya-guardrail`**입니다.)
 
 AI 코딩 에이전트는 셸을 실행하고, 돈을 움직이고, 데이터를 외부로 보냅니다. 매 스텝마다
-검사해야 하지만 건당 과금 API로는 매 호출 검사가 비현실적입니다. laya-guard는 소형
-다국어 모델(Laya, ~322M, Apache-2.0)로 **로컬에서** 매 호출을 심판합니다. 알려진 위험
-패턴은 정규식으로 선차단하고, 나머지는 모델이 심판 → `allow` / `review` / `block`.
+검사해야 하지만 건당 과금 API로는 매 호출 검사가 비현실적이므로, laya-guard는 건당 과금 없이
+**로컬에서** 매 호출을 심판합니다. 알려진 위험 패턴은 정규식으로 선차단하고, 나머지는 소형
+다국어 모델(Laya, ~322M, Apache-2.0)이 심판 → `allow` / `review` / `block`.
+
+<details>
+<summary>더 많은 데모 (모의 모드, 모델 다운로드 없음: 영어와 한국어 사례)</summary>
+
+<img src="demo/demo.gif" width="750" alt="한국어 데모">
+<img src="demo/demo_en.gif" width="750" alt="English demo">
+
+</details>
 
 English: [README.md](README.md)
 
