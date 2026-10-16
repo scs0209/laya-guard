@@ -28,7 +28,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import shutil
 import signal
 import subprocess
 import sys
@@ -43,7 +42,8 @@ from .fileaccess import judge_accesses, load_rules, matches_glob
 
 EVENTS = ("exec", "fork", "exit", "open", "unlink", "rename", "create")     # not close/write: they are 3/4 of the volume
 ESLOGGER = "/usr/bin/eslogger"
-PIPE_COMMAND = f"sudo eslogger {' '.join(EVENTS)} | laya-guard watch"
+SUDO = "/usr/bin/sudo"
+PIPE_COMMAND = f"sudo {ESLOGGER} {' '.join(EVENTS)} | laya-guard watch"
 FWRITE = 0x2                                                                # open flags: FREAD=1, FWRITE=2
 
 # the program name that starts an agent's tree -> the agent's id (the same ids `laya-guard install` uses)
@@ -504,9 +504,25 @@ def _say(text: str) -> None:
 
 
 def _spawn_eslogger() -> subprocess.Popen:
-    exe = shutil.which("eslogger") or ESLOGGER
-    return subprocess.Popen(["sudo", exe, *EVENTS], stdout=subprocess.PIPE, text=True, encoding="utf-8",
+    # Both by absolute path: a folder on PATH that the user (or the agent being watched) can write to, like Homebrew's,
+    # could otherwise hold a fake `sudo` or `eslogger`, and the user's password would run it as root.
+    return subprocess.Popen([SUDO, ESLOGGER, *EVENTS], stdout=subprocess.PIPE, text=True, encoding="utf-8",
                             errors="replace", bufsize=1)
+
+
+class RecordingOff(Exception):
+    """File activity recording was turned off while watching."""
+
+
+def _record(events: list[dict]) -> bool:
+    """The sink of a watch that records: `laya-guard activity off` stops it at the next flush, and nothing more is added."""
+    try:
+        on = activity.enabled()
+    except OSError:
+        on = False
+    if not on:
+        raise RecordingOff
+    return activity.append_events(events)
 
 
 def watch(*, matches=None, reads: str = "outside", ignore=(), to_stdout: bool = False, seed: bool = True,
@@ -536,7 +552,7 @@ def watch(*, matches=None, reads: str = "outside", ignore=(), to_stdout: bool = 
                   "       (or add --stdout to print the events instead of recording them)", file=sys.stderr)
             return 1
     tracker = Tracker(programs, ignore_pids={os.getpid()})
-    monitor = Monitor(tracker, _print_sink if to_stdout else activity.append_events, reads=reads, ignore=ignore,
+    monitor = Monitor(tracker, _print_sink if to_stdout else _record, reads=reads, ignore=ignore,
                       announce=_say)
     if seed:
         tracker.seed(ps_rows())
@@ -561,6 +577,9 @@ def watch(*, matches=None, reads: str = "outside", ignore=(), to_stdout: bool = 
         monitor.run(lines)
     except KeyboardInterrupt:
         pass
+    except RecordingOff:
+        monitor.buffer = []
+        _say("file activity recording was turned off, so the watch stops; what it saw since the last save is not kept")
     except BrokenPipeError:                                     # `laya-guard watch --stdout | head`: the reader went away
         try:
             os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())     # so the exit flush has nothing to fail on
