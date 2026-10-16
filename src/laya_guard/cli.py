@@ -72,9 +72,15 @@ def cmd_activity(args):
     if not events and not activity.enabled():
         print("Turn it on with: laya-guard activity on")
     for e in shown:
-        print(f"  {str(e.get('ts', ''))[:19]}  {str(e.get('agent') or '-'):12} {str(e.get('tool_name') or '-'):10} "
-              f"{str(e.get('op', '')):7} {str(e.get('action', '')):7} {str(e.get('source', '')):5} {e.get('path', '')}")
+        f = {k: _shown(e.get(k)) for k in ("ts", "agent", "tool_name", "op", "action", "source", "path")}
+        print(f"  {f['ts'][:19]}  {f['agent'] or '-':12} {f['tool_name'] or '-':10} "
+              f"{f['op']:7} {f['action']:7} {f['source']:5} {f['path']}")
     return 0
+
+def _shown(value) -> str:
+    """A logged value made safe for a terminal: what an agent named can hold escape sequences that would rewrite the
+    screen, so anything unprintable is shown as an escape instead."""
+    return "".join(c if c.isprintable() else f"\\u{ord(c):04x}" for c in str(value if value is not None else ""))
 
 def cmd_serve(args):
     from .server import run
