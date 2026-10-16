@@ -1,19 +1,22 @@
 """CLI: laya-guard check / serve / eval."""
 from __future__ import annotations
 import argparse, dataclasses, json, os, sys, time
+from .fileaccess import judge_file_call
 from .guard import judge, judge_offline, is_mock, warmup
 from .install import InstallError
 
 def cmd_check(args):
     text = " ".join(args.text) if args.text else sys.stdin.read()
     cwd = os.path.abspath(args.cwd)
+    v = judge_file_call(args.tool_name, args.path, cwd)       # a file tool call is judged by its paths alone
     if args.offline:
         # LAYA_GUARD_FAIL: ask (default) sends what it can't judge to a human, closed blocks it, open passes it
         unknown = {"open": "allow", "closed": "block"}.get(os.environ.get("LAYA_GUARD_FAIL", ""), "review")
         t0 = time.perf_counter()
-        v = judge_offline(text, unknown=unknown, cwd=cwd)
-        _log_offline(v, text, (time.perf_counter() - t0) * 1000.0)
-    else:
+        if v is None:
+            v = judge_offline(text, unknown=unknown, cwd=cwd)
+        _log_offline(v, text, (time.perf_counter() - t0) * 1000.0, args.tool_name)
+    elif v is None:
         v = judge(text, cwd=cwd)
     if args.json:
         print(json.dumps(dataclasses.asdict(v), ensure_ascii=False))
@@ -23,14 +26,14 @@ def cmd_check(args):
     print(f"reason: {v.reason}")
     return 0 if v.action != "block" else 2
 
-def _log_offline(v, text: str, latency_ms: float) -> None:
+def _log_offline(v, text: str, latency_ms: float, tool_name: str | None = None) -> None:
     """An offline verdict is an outage, not a real judgment: record it (hash and length only, like every
     entry) so it can be counted. A log that can't be written must never stop a hook."""
     from .alerts import maybe_alert
     from .log import log_verdict
     try:
         log_verdict(action=v.action, risk=v.risk, policy_id=v.policy_id, reason=v.reason, mock=False,
-                    source="tool", latency_ms=latency_ms, tool_call=text, via="offline")
+                    source="tool", latency_ms=latency_ms, tool_call=text, via="offline", tool_name=tool_name)
     except OSError:
         pass
     maybe_alert("server-down")             # LAYA_GUARD_ALERT_CMD, once per outage; never raises, never waits
@@ -160,6 +163,20 @@ def _probe_line(agent, label, expected, got) -> str:
     return f"  {ok} {label} (answered {_ANSWERS.get(got, f'exit {got}')}, expected {_ANSWERS.get(expected, expected)})"
 
 def cmd_install(args):
+    if args.files:
+        from . import install as ins_mod
+        try:
+            agent_id = ins_mod.spec_for(args.agent).id
+        except InstallError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        if agent_id != "claude-code":
+            print("error: --files only applies to claude-code", file=sys.stderr)
+            return 1
+        if args.matcher:
+            print("error: --files and --matcher both choose the tools the hook guards; use one", file=sys.stderr)
+            return 1
+        args.matcher = ins_mod.FILES_MATCHER
     try:
         ins, plan = _plan(args, "install")
     except InstallError as exc:
@@ -338,6 +355,10 @@ def main(argv=None):
                         "server is down; unjudged calls are sent to a human by default, "
                         "LAYA_GUARD_FAIL=closed blocks them, =open passes them)")
     c.add_argument("--json", action="store_true", help="print the verdict as JSON")
+    c.add_argument("--tool-name", default=None,
+                   help="the agent's name for the tool (Read, Edit, Write, ...): with --path, the call is judged by the paths alone")
+    c.add_argument("--path", action="append", default=[],
+                   help="a file the tool call names (repeat for more); judged against the protected paths, not by its content")
     c.add_argument("--cwd", default=".",
                    help="directory the command runs in; package.json scripts that `npm test` "
                         "and the like run are checked from here (default: current directory)")
@@ -361,6 +382,9 @@ def main(argv=None):
     _scope_args(i, "user")
     i.add_argument("--matcher", default=None, help="Claude Code only: the tools the hook guards (default: Bash). "
                                                    "The other agents' hooks always guard shell commands")
+    i.add_argument("--files", action="store_true",
+                   help="Claude Code only: also guard the file tools (Read, Edit, MultiEdit, Write, NotebookEdit, Glob, Grep), "
+                        "so the protected paths apply to them")
     i.add_argument("--bin", default=None, help="absolute path of the laya-guard executable (default: found automatically)")
     i.add_argument("--dry-run", action="store_true", help="print the diff, write nothing")
     i.add_argument("-y", "--yes", action="store_true", help="apply without asking")

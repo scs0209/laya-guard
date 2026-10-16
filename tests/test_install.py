@@ -244,6 +244,25 @@ def test_install_status_and_uninstall_end_to_end(home, capsys):
     assert "No hook written by" in capsys.readouterr().out
 
 
+def test_files_flag_guards_the_file_tools_too(home, capsys):
+    path = home / ".claude" / "settings.json"
+    assert _cli("install", "claude-code", "--files", "--bin", str(GUARD_BIN), "--yes") == 0
+    assert "matcher 'Bash|Read" in capsys.readouterr().out
+    assert json.loads(path.read_text())["hooks"]["PreToolUse"][0]["matcher"] == install.FILES_MATCHER
+    assert _cli("install", "claude-code", "--files", "--bin", str(GUARD_BIN), "--yes") == 0
+    assert "Already installed" in capsys.readouterr().out
+    assert _cli("install", "claude-code", "--bin", str(GUARD_BIN), "--yes") == 0         # the default narrows it again
+    assert json.loads(path.read_text())["hooks"]["PreToolUse"][0]["matcher"] == "Bash"
+
+
+def test_files_flag_is_for_claude_code_and_not_with_matcher(home, capsys):
+    assert _cli("install", "cursor", "--files", "--bin", str(GUARD_BIN), "--yes") == 1
+    assert "--files only applies to claude-code" in capsys.readouterr().err
+    assert _cli("install", "claude-code", "--files", "--matcher", "Bash", "--bin", str(GUARD_BIN), "--yes") == 1
+    assert "use one" in capsys.readouterr().err
+    assert not (home / ".claude" / "settings.json").exists()
+
+
 def test_dry_run_and_unconfirmed_changes_write_nothing(home, capsys):
     path = home / ".claude" / "settings.json"
     assert _cli("install", "claude-code", "--bin", str(GUARD_BIN), "--dry-run") == 0

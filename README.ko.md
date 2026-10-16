@@ -307,7 +307,7 @@ laya-guard status --check                  # 어디에 설치됐는지, 서버�
 laya-guard uninstall claude-code           # `install`이 추가한 것만 제거
 ```
 
-`install`은 `Bash` 도구용으로 훅을 등록하고(`--matcher`로 변경), 절대 경로를 씁니다(훅은 가상환경의
+`install`은 `Bash` 도구용으로 훅을 등록하고(`--matcher`로 변경, `--files`로 파일 도구 추가: [아래](#에이전트의-파일-도구로부터-파일-보호하기-선택)), 절대 경로를 씁니다(훅은 가상환경의
 `PATH`를 물려받지 못하는 경우가 많습니다). 변경을 diff로 보여주고, 파일을 백업하고, 쓰기 전에
 확인합니다(`--dry-run`은 보기만, `--yes`는 확인 생략). 기존 훅에 병합하고 덮어쓰지 않으며, 손으로
 쓴 `guard-hook.sh` 항목은 `--force` 없이는 건드리지 않습니다. 끝나면 훅에 시험 호출 두 개(무해한 것
@@ -318,6 +318,31 @@ laya-guard uninstall claude-code           # `install`이 추가한 것만 제�
 stdin으로 읽어 로컬 서버에 POST하고, `block`이면 exit 2로 해당 실행을 취소합니다.
 `review`면 `permissionDecision: "ask"` JSON을 출력해 Claude Code가 정책과 사유가 담긴 권한 프롬프트로 사람에게 묻습니다(`LAYA_GUARD_REVIEW=pass`면 예전처럼 통과). `allow`는 조용히 통과합니다. 응답할 사람이 없는 비대화형(`claude -p`)에서는 ask가 거부됩니다. Bash 도구는 에이전트가 쓴 설명이 아니라 명령만 심판합니다. 서버에 닿지 않거나 10초 안에 답이 없으면 오프라인 검사로 대체합니다([서버 장애](#서버-장애) 참조).
 [한계](#한계)를 먼저 읽어주세요. 서버 주소는 `LAYA_GUARD_URL`로 바꿀 수 있습니다.
+
+#### 에이전트의 파일 도구로부터 파일 보호하기 (선택)
+
+Claude Code 훅은 기본적으로 `Bash`만 지키므로 Claude Code 자체의 `Read`, `Edit`, `Write`는 가드에 닿지 않습니다.
+`~/.ssh/id_rsa`를 여는 것을 막을 방법이 없다는 뜻입니다. `--files`로 이 도구들을 추가합니다:
+
+```bash
+laya-guard install claude-code --files     # Bash + Read, Edit, MultiEdit, Write, NotebookEdit, Glob, Grep
+```
+
+그러면 파일 도구 호출은 그 호출이 지목한 경로를 **보호 경로**와 대조해 판정합니다. 모델은 돌지 않고, 읽거나 쓰는
+내용은 판정하지도 전송하지도 않습니다. 기본값은 자격 증명 저장소(`~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.kube` 등), `.env*`
+파일, 개인 키를 읽을 때 *검토*(Claude Code가 묻습니다), 자격 증명 저장소를 바꿀 때 *차단*, 에이전트 자신의 사용자
+수준 설정과 훅, 셸 시작 파일(`~/.bashrc`, `~/.zshrc` 등), `.git/hooks/**`에 쓸 때 *검토*입니다([`protect.yaml`](src/laya_guard/protect.yaml)).
+경로가 50개를 넘거나 한 경로가 4096자를 넘는 호출도 건너뛰지 않고 *검토*합니다. 내 규칙은
+`~/.config/laya-guard/protect.yaml`에 추가하면 다음 호출부터 적용됩니다. 형식은 영문 README의 예시를 참고하세요.
+
+상대 경로 글롭은 에이전트가 실행 중인 디렉터리 기준이라 모든 프로젝트에 적용됩니다. 한 프로젝트에만 적용하려면
+절대 경로를 쓰세요. 경로는 지목된 그대로, 그리고 심볼릭 링크와 `..`을 풀어서, 대소문자를 무시하고 검사합니다.
+경로는 판정 로그에 쓰지 않습니다(로그에는 도구 이름, 해시, 길이만 남음). 에이전트 없이 시험하려면
+`laya-guard check --offline --tool-name Read --path ~/.ssh/id_rsa x`. 서버가 꺼져 있어도 오프라인 검사가 같은 규칙을
+적용하고, 어느 규칙에도 해당하지 않는 파일 호출은 묻지 않고 허용합니다.
+
+이 기능이 보는 것은 **도구 호출이 지목한 경로뿐**입니다. 셸 명령, 스크립트, 자식 프로세스 안에서 읽는 파일은 닿지
+않습니다. 셸은 예전처럼 민감 경로 검사를 포함해 그대로 심판합니다.
 
 ### 1b. Cursor 가드 (beforeShellExecution 훅)
 
@@ -484,11 +509,13 @@ laya-guard dashboard   # 같은 내용을 로컬 웹 페이지로 (대시보드 
 ## API
 
 - `GET /health` → `{"ok": true, "mock": false}`
-- `POST /guard` `{tool_call, source?, cwd?, tool_name?}` → `{action, risk, policy_id, reason, mock, verdict_source}`
+- `POST /guard` `{tool_call, source?, cwd?, tool_name?, paths?}` → `{action, risk, policy_id, reason, mock, verdict_source}`
   (`source`: `user` | `tool` | `email` | `web`. 비사용자 출처는 임계값 강화.
   `cwd`: 명령이 실행될 절대 경로. 주면 package.json 스크립트 검사가 켜짐.
-  `tool_name`: 에이전트가 호출한 도구 이름(`Bash`, `Edit`, MCP 도구 등). 판정에는 영향 없고 로그에만 남음
-  (평문, 최대 64자, 없으면 `null`). `laya-guard stats`가 도구별로 집계.
+  `tool_name`: 에이전트가 호출한 도구 이름(`Bash`, `Edit`, MCP 도구 등). 로그에 남음(평문, 최대 64자, 없으면
+  `null`)과 `laya-guard stats`의 도구별 집계에 쓰임. `paths`(호출이 지목한 파일)와 함께 오면 파일 도구 호출
+  (`Read`, `Edit`, `MultiEdit`, `Write`, `NotebookEdit`, `Glob`, `Grep`)로 보고 경로만으로 보호 경로와 대조해
+  판정하며 `tool_call`은 무시합니다. 다른 도구에서는 판정에 영향이 없습니다.
   `reason`은 입력에 한글이 있으면 한국어, 아니면 영어로 반환.
   `verdict_source`: `regex`(정규식 선차단, 모델 미호출) |
   `allowlist`(안전 명령, 모델 미호출) | `model` |
@@ -585,11 +612,15 @@ export LAYA_GUARD_ALERT_CMD='osascript -e "display notification \"$LAYA_GUARD_AL
   `conftest.py`, `build.rs`, `node_modules/.bin`, Makefile 레시피(`make -n`으로 펼치면
   `$(shell …)`이 실행됨), `.npmrc`의 `script-shell`. 이 파일들의 수정은 에이전트가 쓰는
   시점에만, 파일 수정을 훅으로 받는 어댑터에서만 심판됩니다. 신경 쓰인다면
-  `policy.yaml`의 `safe_commands`를 줄이세요.
+  `policy.yaml`의 `safe_commands`를 줄이세요. (`--files`로 지키는 Claude Code의 파일 도구는 쓰는 내용이 아니라
+  경로만으로 판정합니다.)
 - 스크립트 검사는 에이전트가 알려주는 `cwd`를 믿습니다. 에이전트의 셸이 이전 호출의
   `cd`를 유지하면서 프로젝트 루트를 보고하면 엉뚱한 package.json을 읽습니다. 어댑터
   5개(Cline, Gemini, Qwen, Kilo, Amp)는 도구 호출을 JSON으로 보내므로 안전 명령에
   해당하지 않고, 대신 모델이 심판합니다.
+- 보호 경로는 선언된 접근, 즉 파일 도구 호출이 지목한 경로만 봅니다. 셸 명령, 스크립트, 자식 프로세스가 읽는 파일은
+  보이지 않고, 규칙은 `.env`를 정당하게 읽는 것과 해로운 것을 구별하지 못합니다. 해당하면 검토하거나 차단할 뿐
+  이해하지는 못합니다.
 - 체인은 명령별로 심판하므로, 모델은 `cat shadow` 앞에 `cd /etc`가 있었다는 걸 모릅니다.
   민감 경로 검사와 전체 문자열 정규식이 흔한 경우를 막지만 전부는 아닙니다.
 - 정규식 `block` 적중은 `risk: 0.92` 하드코딩을 반환합니다. 모델을 건너뛰므로 이 점수는
