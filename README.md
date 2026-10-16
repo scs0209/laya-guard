@@ -341,8 +341,9 @@ laya-guard install claude-code --files     # Bash + Read, Edit, MultiEdit, Write
 A file tool call is then judged by the paths it names, against **protected paths**: no model runs, and the content
 being read or written is neither judged nor sent. Out of the box, credential stores (`~/.ssh`, `~/.aws`, `~/.gnupg`,
 `~/.kube`, …), `.env*` files and private keys are *reviewed* (Claude Code asks you) when read, credential stores are
-*blocked* when changed, and a write to the agent's own user-level settings and hooks is reviewed
-([`protect.yaml`](src/laya_guard/protect.yaml)). Add your own in `~/.config/laya-guard/protect.yaml`; edits apply to the
+*blocked* when changed, and a write to the agent's own user-level settings and hooks, to a shell startup file
+(`~/.bashrc`, `~/.zshrc`, …) or to `.git/hooks/**` is reviewed ([`protect.yaml`](src/laya_guard/protect.yaml)). A call that
+names more than 50 paths, or a path over 4096 characters, is reviewed too, never skipped. Add your own in `~/.config/laya-guard/protect.yaml`; edits apply to the
 next call:
 
 ```yaml
