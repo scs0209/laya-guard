@@ -69,9 +69,10 @@ All notable changes to this project are documented here. Versions follow
   `footprint --suggest` prints `protect.yaml` entries (action `review`) for two kinds of path, and applies nothing: known
   secret locations an agent touched that the default rules don't cover (cloud CLI credentials, browser profiles, shell
   history, `*.pem`, `*.tfstate`, ...), and folders in your own home, outside the project, that agents touched only a few
-  times. An access alone is not evidence of bad intent.
+  times (never the home itself or a folder holding a project: then the file alone). The entries are printed without a
+  `protect:` header, to paste under the one your file already has. An access alone is not evidence of bad intent.
 - **A File footprint card on the dashboard's Overview**, from `GET /api/footprint?window=` (loopback only, paths shortened
-  with `~`, re-read only when the log changed and at most every 30 seconds). It shows nothing but a hint while the activity
+  with `~`, kept for 30 seconds while the log doesn't change and rebuilt as soon as it does). It shows nothing but a hint while the activity
   log is off and empty.
 
 ### Changed

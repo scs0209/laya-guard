@@ -179,6 +179,16 @@ def test_a_folder_outside_the_project_touched_rarely_is_suggested():
     assert found[0]["count"] == 2 and "not evidence" in found[0]["reason"]
 
 
+def test_the_home_itself_or_a_folder_holding_the_project_is_never_suggested():
+    project = HOME + "/work/app"
+    in_home = sug([ev(5, path=HOME + "/notes.txt", cwd=project)])
+    assert [s["path"] for s in in_home] == ["~/notes.txt"]                              # the file, not ~/**
+    parent = sug([ev(5, path=HOME + "/work/README.md", cwd=project)])
+    assert [s["path"] for s in parent] == ["~/work/README.md"]                          # ~/work/** would cover the project
+    beside = sug([ev(5, path=HOME + "/Documents/taxes/a.pdf", cwd=project)])
+    assert [s["path"] for s in beside] == ["~/Documents/taxes/**"]
+
+
 def test_a_folder_an_agent_uses_all_the_time_is_not_suggested():
     often = [ev(i, path=HOME + "/Documents/notes/a.txt") for i in range(1, 8)]          # 7 touches: it is part of the workflow
     assert sug(often) == []
@@ -209,7 +219,8 @@ def test_the_suggested_yaml_is_a_valid_protect_file_and_says_nothing_is_applied(
                  ev(3, path="/work/a/k.pem")])
     text = footprint.render_rules_yaml(found, home=HOME)
     assert "Nothing is applied" in text and "not evidence of bad intent" in text
-    rules = fileaccess._parse(text, "suggested")
+    assert "\nprotect:" not in text and "version:" not in text.replace("`version: 1`", "")   # pasted under yours, never a 2nd key
+    rules = fileaccess._parse("version: 1\nprotect:\n" + text, "suggested")
     assert [r.glob for r in rules] == [s["path"] for s in found] and all(r.action == "review" for r in rules)
     assert all(r.ops == frozenset({"read", "write"}) for r in rules)
 
@@ -268,11 +279,18 @@ def test_footprint_suggest_prints_yaml_to_stdout_and_applies_nothing(env, capsys
     write_log(env, fresh([ev(10, path=HOME + "/.config/gcloud/c.db")]))
     assert cli.main(["footprint", "--suggest"]) == 0
     cap = capsys.readouterr()
-    assert fileaccess._parse(cap.out, "stdout")[0].glob == "~/.config/gcloud/**"
+    assert fileaccess._parse("version: 1\nprotect:\n" + cap.out, "stdout")[0].glob == "~/.config/gcloud/**"
     assert "protect.yaml" in cap.err
     assert not (tmp_path / "config" / "laya-guard" / "protect.yaml").exists()           # it never writes rules
     assert cli.main(["footprint", "--suggest", "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["suggestions"][0]["kind"] == "sensitive"
+
+
+def test_footprint_never_prints_an_escape_sequence(env, capsys):
+    write_log(env, fresh([ev(10, path="/work/a/x\x1b]0;owned\x07.py", agent="evil\x1b[2J")]))
+    assert cli.main(["footprint", "--since", "all"]) == 0
+    out = capsys.readouterr().out
+    assert "\x1b" not in out and "\x07" not in out and "\\u001b" in out
 
 
 def test_footprint_suggest_has_nothing_to_say_when_there_is_nothing(env, capsys):

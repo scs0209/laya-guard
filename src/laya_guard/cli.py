@@ -94,8 +94,9 @@ def cmd_footprint(args):
             if args.json:
                 print(json.dumps({"suggestions": found}, ensure_ascii=False, indent=1))
             elif found:
-                print(footprint.render_rules_yaml(found), end="")
-                print("\n# Paste what you want into ~/.config/laya-guard/protect.yaml (edits apply to the next call).", file=sys.stderr)
+                print(_shown_text(footprint.render_rules_yaml(found)), end="")
+                print("\n# Paste what you want under `protect:` in ~/.config/laya-guard/protect.yaml (edits apply to the next call).",
+                      file=sys.stderr)
             else:
                 print("Nothing to suggest: no touched path matches a well-known secret location or sits rarely outside "
                       "its project, beyond what protect.yaml already covers.")
@@ -107,13 +108,16 @@ def cmd_footprint(args):
     if args.json:
         print(json.dumps({"log": str(path), "log_events": len(events), **report}, ensure_ascii=False, indent=1))
     else:
-        print(footprint.render_text(report, log_label=f"log: {_short(path)}", total_in_log=len(events)))
+        print(_shown_text(footprint.render_text(report, log_label=f"log: {_short(path)}", total_in_log=len(events))))
     return 0
 
 def _shown(value) -> str:
     """A logged value made safe for a terminal: what an agent named can hold escape sequences that would rewrite the
     screen, so anything unprintable is shown as an escape instead."""
     return "".join(c if c.isprintable() else f"\\u{ord(c):04x}" for c in str(value if value is not None else ""))
+
+def _shown_text(text: str) -> str:
+    return "\n".join(_shown(line) for line in text.split("\n"))
 
 def cmd_watch(args):
     """laya-guard watch: the OS monitor (macOS, optional). Adds what an agent's processes really opened to the file

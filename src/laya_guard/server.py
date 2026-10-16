@@ -122,8 +122,8 @@ _footprint_cache: dict[str, tuple] = {}
 @app.get("/api/footprint")
 def api_footprint(request: Request, window: str = "7d"):
     """The file footprint card: what each project touched, from the opt-in file activity log. Paths come out with ~ for
-    the home directory. Loopback only like everything here; the log is read again only when it changed and at most every
-    30 seconds, because it can be large and the page polls."""
+    the home directory. Loopback only like everything here; the report is kept for 30 seconds while the log doesn't change
+    (it can be large and the page polls), and rebuilt as soon as it does."""
     _require_loopback_host(request)
     if window not in dashboard.WINDOWS:
         raise HTTPException(status_code=400, detail=f"window must be one of {', '.join(dashboard.WINDOWS)}")

@@ -252,12 +252,17 @@ def suggest(events: list[dict], *, rules=None, home: str | None = None, limit: i
             a["last"] = _iso(ts)
     sensitive: dict[str, dict] = {}
     folders: dict[str, dict] = {}
+    projects = {proj for _, _, proj in seen if proj != UNKNOWN}
     for (op, path, proj), a in seen.items():
         match = next(((g, why) for g, why in SENSITIVE if matches_glob(g, path, home)), None)
         if match:
             bucket, key, why = sensitive, match[0], match[1]
         elif proj != UNKNOWN and outside_project(path, proj, home):
-            bucket, key, why = folders, str(Path(path).parent), None
+            parent = str(Path(path).parent)
+            # Never the home itself or a folder that holds a project (~/work around ~/work/app): protecting it would
+            # send every access in the home, or in the project, to review. The file alone is suggested instead.
+            key = path if parent == home or any(_inside(p, parent) for p in projects) else parent + "/**"
+            bucket, why = folders, None
         else:
             continue
         if judge_accesses([(op, path)], proj if proj != UNKNOWN else home, rules) is not None:
@@ -271,9 +276,9 @@ def suggest(events: list[dict], *, rules=None, home: str | None = None, limit: i
         if a["last"] and (item["last"] is None or a["last"] > item["last"]):
             item["last"] = a["last"]
     found = list(sensitive.values())
-    for folder, item in folders.items():
+    for glob, item in folders.items():
         if item["count"] <= RARE_EVENTS and len(item["_sessions"]) <= RARE_SESSIONS:
-            item.update(path=shorten(folder, home) + "/**",
+            item.update(path=shorten(glob, home),
                         reason=f"outside the project, touched {item['count']} time(s) in {len(item['_sessions'])} "
                                f"session(s): worth a look, not evidence of anything")
             found.append(item)
@@ -286,13 +291,18 @@ def suggest(events: list[dict], *, rules=None, home: str | None = None, limit: i
 
 
 def render_rules_yaml(suggestions: list[dict], home: str | None = None) -> str:
-    """The suggestions as protect.yaml entries, ready to paste into ~/.config/laya-guard/protect.yaml."""
+    """The suggestions as protect.yaml list entries, to paste under the `protect:` of ~/.config/laya-guard/protect.yaml.
+
+    Only the entries: a pasted second `protect:` key would silently replace the first, and with it the rules already
+    there."""
     home = (home or os.path.expanduser("~")).rstrip("/")
     lines = ["# Suggested from your file activity. Nothing is applied: read each one, keep what you want.",
              "# An access is not evidence of bad intent; these only mark places you may want a second look at.",
-             "version: 1", "protect:"]
+             "# Paste the entries you keep under the `protect:` line of ~/.config/laya-guard/protect.yaml. A new file",
+             "# starts with two lines, `version: 1` and `protect:`. Don't paste a second `protect:`: it replaces the first."]
     for s in suggestions:
-        lines += [f"  # {s['kind']}: {s['count']} access(es) by {', '.join(s['agents'])}, last {str(s['last'] or '?')[:10]}",
+        agents = ", ".join("".join(c for c in a if c.isprintable()) for a in s["agents"])
+        lines += [f"  # {s['kind']}: {s['count']} access(es) by {agents}, last {str(s['last'] or '?')[:10]}",
                   f"  - path: {json.dumps(s['path'])}",
                   f"    ops: [{', '.join(s['ops'])}]",
                   f"    action: {s['action']}",
