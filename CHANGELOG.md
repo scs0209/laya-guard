@@ -45,8 +45,10 @@ All notable changes to this project are documented here. Versions follow
   `exit`, `open`, `unlink`, `rename`, `create`) and adds the files an agent's own processes really opened, created,
   deleted or renamed to the file activity log with `source: "os-monitor"`, so reads inside scripts and child processes,
   which the hooks can't see, are in the same log. Run `laya-guard watch` (it starts `sudo eslogger` itself) or pipe
-  `sudo eslogger exec fork exit open unlink rename create | laya-guard watch`; only `eslogger` runs as root. It needs sudo
-  and Full Disk Access for the terminal app, and `laya-guard activity on` first (`--stdout` prints the events instead).
+  `sudo eslogger exec fork exit open unlink rename create | laya-guard watch`; only `eslogger` runs as root, and `watch`
+  starts it as `/usr/bin/sudo /usr/bin/eslogger`, never from PATH. It needs sudo and Full Disk Access for the terminal
+  app, and `laya-guard activity on` first (`--stdout` prints the events instead); `laya-guard activity off` stops a
+  running watch.
   A program named for an agent (`claude`, `codex`, `cursor-agent`, `gemini`, `qwen`, `copilot`, `cline`, `opencode`,
   `kilo`, `amp`; `--match NAME[=agent]` adds more) starts a process tree that `fork` carries to every child, agents
   already running are found from `ps`, and everything outside the tree is dropped as it is read. Writes, deletes and

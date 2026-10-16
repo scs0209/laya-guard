@@ -41,6 +41,25 @@ def make_call(event: object) -> dict:
     return {k: v for k, v in call.items() if isinstance(v, str) and v}
 
 
+def bare_command(event: object, call: dict) -> str | None:
+    """The command alone, when the parameters are nothing but that command and where it runs. The delegate is asked
+    about every tool, so another parameter (a script, an env value, a second command) can carry what runs: such a
+    call is judged whole, never by its command field alone."""
+    command = call.get("command")
+    if not command or not isinstance(event, dict):
+        return None
+    for key, value in event.items():
+        if key in ("cmd", "command"):
+            if value != command:
+                return None
+        elif key in ("cwd", "workdir", "directory"):
+            if not isinstance(value, str):
+                return None
+        elif isinstance(value, (str, list, dict)):
+            return None
+    return command
+
+
 def not_judged(why: str) -> dict:
     return {"action": {"open": "allow", "closed": "block"}.get(FAIL_MODE, "review"), "risk": 0.5,
             "policy_id": "offline", "reason": f"{why}; not judged"}
@@ -110,7 +129,7 @@ def main() -> int:
         verdict = judge(text, cwd, call)
         if verdict is None:
             # the offline safe-command list matches a bare command, not the JSON the delegate gets
-            verdict = judge_offline(call.get("command") or text, cwd, call)
+            verdict = judge_offline(bare_command(event, call) or text, cwd, call)
     action = verdict.get("action")
     if action == "block":
         print(f"laya-guard blocked [{verdict.get('policy_id')} risk={verdict.get('risk')}]: "

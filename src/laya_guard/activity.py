@@ -86,6 +86,7 @@ def turn_off() -> None:
 # --- paths from a Bash command (best effort) ----------------------------------------------------------------------------
 
 _SEPARATORS = {";", "&&", "||", "|", "&", "|&", "(", ")"}
+_MOVES = {"cd", "pushd", "popd"}            # after one, a relative path no longer starts from the call's cwd
 _WRITE_REDIRECTS = {">", ">>", ">|", "&>", "&>>"}
 _SKIP_TARGETS = {"-", "/dev/null", "/dev/stdout", "/dev/stderr", "/dev/stdin", "/dev/tty"}
 _WRAPPERS = {"sudo", "doas", "time", "nohup", "command", "exec", "nice", "env"}
@@ -94,6 +95,40 @@ _GREP = {"grep", "egrep", "fgrep", "rg", "ag", "ack"}
 _DELETE = {"rm", "rmdir", "unlink", "shred"}
 _WRITE = {"touch", "tee", "mkdir", "truncate"}
 _ASSIGN = re.compile(r"^[A-Za-z_]\w*=")
+# Options whose value is the next word. That word is a count, a mode, a format or a pattern, never a path to record.
+# A command not listed here can still have such an option: it is then misread as a path only if it is a literal word.
+_VALUE_OPTIONS = {
+    "head": {"-n", "-c", "--lines", "--bytes"},
+    "tail": {"-n", "-c", "-s", "--lines", "--bytes", "--sleep-interval", "--pid", "--max-unchanged-stats"},
+    "less": {"-b", "-h", "-j", "-k", "-o", "-O", "-p", "-P", "-T", "-x", "-y", "-z", "--pattern", "--tag"},
+    "more": {"-n", "-p", "-P"},
+    "nl": {"-b", "-d", "-f", "-h", "-i", "-l", "-n", "-s", "-v", "-w"},
+    "tac": {"-s", "--separator"},
+    "strings": {"-n", "-t", "-e", "-T", "--bytes", "--radix", "--encoding", "--target"},
+    "xxd": {"-c", "-g", "-l", "-o", "-s", "-n", "-cols", "-groupsize", "-len", "-seek", "-name"},
+    "od": {"-A", "-j", "-N", "-t", "-w", "-S", "--address-radix", "--skip-bytes", "--read-bytes", "--format", "--width"},
+    "bat": {"-l", "-H", "-r", "-m", "--language", "--highlight-line", "--line-range", "--map-syntax", "--theme",
+            "--style", "--tabs", "--wrap", "--color", "--paging", "--pager", "--decorations", "--terminal-width",
+            "--italic-text", "--file-name"},
+    "file": {"-e", "-f", "-F", "-m", "-P", "--exclude", "--files-from", "--separator", "--magic-file", "--parameter"},
+    "stat": {"-c", "-f", "-t", "--format", "--printf"},
+    "grep": {"-A", "-B", "-C", "-m", "-d", "-D", "--after-context", "--before-context", "--context", "--max-count",
+             "--directories", "--devices", "--include", "--exclude", "--exclude-dir", "--label", "--binary-files", "--color"},
+    "rg": {"-A", "-B", "-C", "-m", "-M", "-j", "-g", "-t", "-T", "-E", "-r", "--after-context", "--before-context",
+           "--context", "--max-count", "--max-columns", "--threads", "--glob", "--iglob", "--type", "--type-not",
+           "--encoding", "--replace", "--max-depth", "--sort", "--sortr", "--type-add", "--pre", "--color", "--colors"},
+    "ag": {"-A", "-B", "-C", "-m", "-G", "-g", "--after", "--before", "--context", "--max-count", "--depth", "--ignore",
+           "--file-search-regex"},
+    "ack": {"-A", "-B", "-C", "-m", "--after-context", "--before-context", "--context", "--max-count", "--type"},
+    "mkdir": {"-m", "--mode", "--context"},
+    "touch": {"-d", "-r", "-t", "-A", "--date", "--reference"},
+    "truncate": {"-s", "-r", "--size", "--reference"},
+    "cp": {"-S", "--suffix"},
+    "mv": {"-S", "--suffix"},
+    "install": {"-m", "-o", "-g", "-S", "--mode", "--owner", "--group", "--suffix"},
+    "shred": {"-n", "-s", "--iterations", "--size", "--random-source"},
+}
+_VALUE_OPTIONS["egrep"] = _VALUE_OPTIONS["fgrep"] = _VALUE_OPTIONS["grep"]
 
 
 def _literal(token: str) -> bool:
@@ -139,19 +174,23 @@ def _redirects(segment: list[str]) -> tuple[list[str], list[tuple[str, str]]]:
     return args, found
 
 
-def _flags_and_positionals(args: list[str]) -> tuple[list[str], list[str]]:
-    flags, positional, done = [], [], False
-    for t in args:
+def _flags_and_positionals(args: list[str], takes_value: set[str] = frozenset()) -> tuple[list[str], list[str]]:
+    flags, positional, done, i = [], [], False, 0
+    while i < len(args):
+        t = args[i]
         if not done and t == "--":
             done = True
         elif not done and t.startswith("-") and t != "-":
             flags.append(t)
+            if t in takes_value:                                     # `-n 5`: the 5 is the option's, not a path
+                i += 1
         else:
             positional.append(t)
+        i += 1
     return flags, positional
 
 
-def _grep_files(args: list[str]) -> list[str]:
+def _grep_files(args: list[str], takes_value: set[str] = frozenset()) -> list[str]:
     """The files a grep-like command reads. The first word is the pattern unless -e or -f gave it, and the value of
     -e / -f is never a file to read as a path (a -f value is: it is the pattern file)."""
     positional, patterned, done, i = [], False, False, 0
@@ -173,7 +212,8 @@ def _grep_files(args: list[str]) -> list[str]:
             patterned = True
             files.append(t.split("=", 1)[1])
         elif not done and t.startswith("-") and t != "-":
-            pass
+            if t in takes_value:                                     # `-A 3`, `-g '*.py'`: not the pattern, not a file
+                i += 1
         else:
             positional.append(t)
         i += 1
@@ -188,7 +228,8 @@ def _command_accesses(args: list[str]) -> list[tuple[str, str]]:
     if not args:
         return []
     name = os.path.basename(args[0])
-    flags, pos = _flags_and_positionals(args[1:])
+    takes_value = _VALUE_OPTIONS.get(name, frozenset())
+    flags, pos = _flags_and_positionals(args[1:], takes_value)
     found: list[tuple[str, str]] = []
 
     def add(op: str, tokens) -> None:
@@ -199,7 +240,7 @@ def _command_accesses(args: list[str]) -> list[tuple[str, str]]:
     elif name in ("source", "."):
         add("read", pos[:1])
     elif name in _GREP:
-        add("read", _grep_files(args[1:]))
+        add("read", _grep_files(args[1:], takes_value))
     elif name in _DELETE:
         add("delete", pos)
     elif name in ("cp", "mv", "install"):
@@ -215,9 +256,16 @@ def _command_accesses(args: list[str]) -> list[tuple[str, str]]:
 
 def shell_accesses(command: str) -> list[tuple[str, str]]:
     """(op, path) pairs a Bash command plainly names. Best effort: anything unclear is left out, never guessed."""
+    return [(op, path) for op, path, _ in shell_accesses_moved(command)]
+
+
+def shell_accesses_moved(command: str) -> list[tuple[str, str, bool]]:
+    """(op, path, moved) for each path a Bash command plainly names. `moved` is True when a cd, pushd or popd came
+    before it, so a relative path no longer starts from the call's working directory."""
     if not isinstance(command, str) or not command.strip() or len(command) > MAX_COMMAND_CHARS:
         return []
-    found: list[tuple[str, str]] = []
+    found: list[tuple[str, str, bool]] = []
+    moved = False
     for line in command.splitlines():
         try:
             tokens = _tokens(line)
@@ -225,39 +273,67 @@ def shell_accesses(command: str) -> list[tuple[str, str]]:
             continue
         for segment in _segments(tokens):
             args, redirected = _redirects(segment)
-            found += _command_accesses(args) + redirected               # in the order the command reads
-        if "<<" in line and "<<<" not in line:                       # what follows is the heredoc body, not commands
+            found += [(op, path, moved) for op, path in _command_accesses(args) + redirected]   # in the order the command reads
+            if args and os.path.basename(args[0]) in _MOVES:
+                moved = True
+        if "<<" in tokens:                                           # what follows is the heredoc body, not commands
             break
-    return list(dict.fromkeys(found))
+    seen: dict[tuple[str, str], bool] = {}
+    for op, path, m in found:
+        seen.setdefault((op, path), m)
+    return [(op, path, m) for (op, path), m in seen.items()]
 
 
 # --- events -------------------------------------------------------------------------------------------------------------
 
-def _absolute(path: str, cwd: str | None) -> str | None:
+MAX_PATH_CHARS = 4096
+MAX_LABEL_CHARS = 64                # agent, tool_name, policy_id: cut like the verdict log's tool_name
+
+
+def _label(value) -> str | None:
+    if value is None:
+        return None
+    return "".join(c for c in str(value) if c.isprintable())[:MAX_LABEL_CHARS] or None
+
+
+def _absolute(path: str, cwd: str | None, moved: bool = False) -> str | None:
+    """The path made absolute, or None when that can't be known: a relative path with no usable cwd, or after the
+    command changed directory. Too long a result is left out rather than cut into a different path."""
     p = os.path.expanduser(path)
     if os.path.isabs(p):
-        return os.path.normpath(p)
-    return os.path.normpath(os.path.join(cwd, p)) if cwd and os.path.isabs(cwd) else None
+        out = os.path.normpath(p)
+    elif moved or not cwd or not os.path.isabs(cwd) or len(cwd) > MAX_PATH_CHARS:
+        return None
+    else:
+        out = os.path.normpath(os.path.join(cwd, p))
+    return out if len(out) <= MAX_PATH_CHARS else None
 
 
 def build_events(*, agent, tool_name, accesses, source, cwd, action, policy_id) -> list[dict]:
+    """One event per access: (op, path) or (op, path, moved)."""
     ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    where = cwd if isinstance(cwd, str) and os.path.isabs(cwd) else None
-    return [{"ts": ts, "agent": agent, "tool_name": tool_name, "op": op, "path": path[:4096],
-             "abs": _absolute(path, cwd), "cwd": where, "source": source, "action": action, "policy_id": policy_id}
-            for op, path in accesses[:MAX_PER_CALL]]
+    where = cwd if isinstance(cwd, str) and os.path.isabs(cwd) and len(cwd) <= MAX_PATH_CHARS else None
+    events = []
+    for access in accesses[:MAX_PER_CALL]:
+        op, path, moved = (*access, False)[:3]
+        events.append({"ts": ts, "agent": _label(agent), "tool_name": _label(tool_name), "op": op,
+                       "path": path[:MAX_PATH_CHARS], "abs": _absolute(path, cwd, moved), "cwd": where, "source": source,
+                       "action": action, "policy_id": _label(policy_id)})
+    return events
 
 
 def _append(events: list[dict]) -> bool:
     """Add events to the log. False when it is full (over MAX_BYTES) and nothing was written."""
     path = activity_path()
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    if path.exists() and path.stat().st_size > MAX_BYTES:
-        log.warning("file activity: %s is over %d bytes, not recording more", path, MAX_BYTES)
+    data = "".join(json.dumps(e, ensure_ascii=False) + "\n" for e in events).encode("utf-8")
+    size = path.stat().st_size if path.exists() else 0
+    if size + len(data) > MAX_BYTES:
+        log.warning("file activity: %s would pass %d bytes, not recording more", path, MAX_BYTES)
         return False
     fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)    # owner only when we create it
-    with os.fdopen(fd, "a", encoding="utf-8") as f:
-        f.write("".join(json.dumps(e, ensure_ascii=False) + "\n" for e in events))
+    with os.fdopen(fd, "ab") as f:
+        f.write(data)
     return True
 
 
@@ -268,19 +344,19 @@ def append_events(events: list[dict]) -> bool:
 
 def record_call(*, agent: str | None, tool_name: str | None, cwd: str | None, verdict, text: str = "", paths=None,
                 accesses=None, command: str | None = None) -> None:
-    """Remember the files one tool call named, if recording is on. Never raises: a log that can't be written must
-    never stop a hook.
+    """Remember the files one tool call named, if recording is on. Never raises: a log that can't be written (or a
+    config directory that can't even be looked at) must never stop a hook or change its verdict.
 
     Where the paths come from, in this order: `accesses` (an adapter says what the call touches, any agent) or the
     `paths` of a Claude Code file tool, which are source "hook"; else the shell `command` the adapter sent (or, for
     Claude Code's Bash tool, the call text), which is parsed and is source "shell"."""
-    if not (tool_name or command or accesses) or not enabled():
-        return
     try:
+        if not (tool_name or command or accesses) or not enabled():
+            return
         found = accesses_for(tool_name, paths, accesses)
         source = "hook"
         if not found and (command or tool_name == "Bash"):
-            found, source = shell_accesses(command or text), "shell"
+            found, source = shell_accesses_moved(command or text), "shell"
         if found:
             _append(build_events(agent=agent, tool_name=tool_name, accesses=found, source=source, cwd=cwd,
                                  action=verdict.action, policy_id=verdict.policy_id))
@@ -293,7 +369,9 @@ def load_events(path: Path | str | None = None) -> list[dict]:
     if not p.exists():
         return []
     events = []
-    for line in p.read_text(encoding="utf-8").splitlines():
+    for line in p.read_text(encoding="utf-8", errors="replace").split("\n"):    # not splitlines: a path may hold U+2028
+        if not line.strip():
+            continue
         try:
             events.append(json.loads(line))
         except json.JSONDecodeError:

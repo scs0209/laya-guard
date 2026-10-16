@@ -5,6 +5,7 @@ real macOS 26 run showed `event`, `process.audit_token.pid`, `process.ppid`, `pr
 `args`, `cwd`, `env` and `target`). Everything runs with HOME and both logs in a temporary place.
 """
 import io
+import os
 import json
 import sys
 from pathlib import Path
@@ -536,8 +537,48 @@ def test_the_spawned_command_is_exactly_sudo_eslogger_with_the_events(env, monke
 
     monkeypatch.setattr(osmonitor.subprocess, "Popen", Popen)
     REAL_SPAWN()
-    assert seen["argv"][0] == "sudo" and seen["argv"][2:] == list(osmonitor.EVENTS) and "shell" not in seen["kw"]
-    assert seen["argv"][1].endswith("eslogger")
+    # absolute paths: a writable folder early on PATH (Homebrew's) must not get to supply what runs as root
+    assert seen["argv"][:2] == ["/usr/bin/sudo", "/usr/bin/eslogger"]
+    assert seen["argv"][2:] == list(osmonitor.EVENTS) and "shell" not in seen["kw"]
+
+
+def test_the_spawned_command_ignores_an_eslogger_or_sudo_on_path(env, monkeypatch, tmp_path):
+    for name in ("sudo", "eslogger"):
+        fake = tmp_path / name
+        fake.write_text("#!/bin/sh\n")
+        fake.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{tmp_path}:{os.environ.get('PATH', '')}")
+    seen = {}
+
+    class Popen:
+        def __init__(self, argv, **kw):
+            seen["argv"] = argv
+
+    monkeypatch.setattr(osmonitor.subprocess, "Popen", Popen)
+    REAL_SPAWN()
+    assert not any(str(tmp_path) in a for a in seen["argv"])
+
+
+def test_turning_recording_off_stops_a_running_watch(env, capsys, monkeypatch):
+    home, log = env
+    activity.turn_on()
+    monkeypatch.setattr(osmonitor, "FLUSH_EVENTS", 1)
+
+    class Piped:
+        def isatty(self):
+            return False
+
+        def __iter__(self):
+            yield from agent_tree()
+            yield opened(101, str(home / ".ssh" / "id_rsa"))
+            activity.turn_off()                                   # `laya-guard activity off` from another terminal
+            yield opened(101, str(home / ".aws" / "credentials"))
+            yield opened(101, str(home / ".kube" / "config"))
+
+    assert osmonitor.watch(stdin=Piped()) == 0
+    paths = [json.loads(line)["path"] for line in log.read_text().splitlines()]
+    assert paths == [str(home / ".ssh" / "id_rsa")]
+    assert "turned off" in capsys.readouterr().err
 
 
 def test_the_activity_command_shows_what_the_os_saw(env, capsys):
