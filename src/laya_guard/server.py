@@ -12,7 +12,7 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
-from . import activity, agentbridge, aisim, alerts, dashboard, fileaccess, install, service, simulation
+from . import activity, agentbridge, aisim, alerts, dashboard, fileaccess, footprint, install, service, simulation
 from .guard import judge, is_mock
 from .log import load_entries, log_enabled, log_path, log_verdict
 
@@ -115,6 +115,36 @@ def api_stats(request: Request, window: str = "24h"):
     stats["health"] = {"ok": True, "mock": is_mock(), "version": _version(), "logging": log_enabled(),
                        "log_path": dashboard.display_path(log_path())}
     return JSONResponse(stats, headers=dashboard.api_headers())
+
+_FOOTPRINT_TTL = 30.0
+_footprint_cache: dict[str, tuple] = {}
+
+@app.get("/api/footprint")
+def api_footprint(request: Request, window: str = "7d"):
+    """The file footprint card: what each project touched, from the opt-in file activity log. Paths come out with ~ for
+    the home directory. Loopback only like everything here; the report is kept for 30 seconds while the log doesn't change
+    (it can be large and the page polls), and rebuilt as soon as it does."""
+    _require_loopback_host(request)
+    if window not in dashboard.WINDOWS:
+        raise HTTPException(status_code=400, detail=f"window must be one of {', '.join(dashboard.WINDOWS)}")
+    path = activity.activity_path()
+    try:
+        st = path.stat()
+        stamp = (st.st_mtime_ns, st.st_size)
+    except OSError:
+        stamp = None
+    enabled = activity.enabled()
+    hit = _footprint_cache.get(window)
+    now = time.monotonic()
+    if hit and hit[0] == (stamp, enabled) and now - hit[1] < _FOOTPRINT_TTL:
+        body = hit[2]
+    else:
+        events = activity.load_events() if stamp else []
+        report = footprint.build_report(events, window=window, top=5) if events else {"window": window, "projects": [],
+                                                                                     "totals": {}, "suggestions": 0}
+        body = {"enabled": enabled, "log_events": len(events), **report}
+        _footprint_cache[window] = ((stamp, enabled), now, body)
+    return JSONResponse(body, headers=dashboard.api_headers())
 
 def _require_write_access(request: Request) -> None:
     """Everything that edits a settings file: loopback Host, same-origin, a JSON body (a plain

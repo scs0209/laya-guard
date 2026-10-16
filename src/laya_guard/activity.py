@@ -2,7 +2,9 @@
 
 Off by default. `laya-guard activity on` starts it. One JSON line per file an agent touched:
 
-    {"ts", "agent", "tool_name", "op", "path", "abs", "source", "action", "policy_id"}   (+ "would" when source is os-monitor)
+    {"ts", "agent", "tool_name", "op", "path", "abs", "cwd", "source", "action", "policy_id"}   (+ "would" for os-monitor)
+
+cwd     the directory the call ran in (absolute), or null when the adapter sent none: what `laya-guard footprint` groups by.
 
 op      read | write | delete
 source  how the path was learned, which is how far to trust it:
@@ -310,11 +312,12 @@ def _absolute(path: str, cwd: str | None, moved: bool = False) -> str | None:
 def build_events(*, agent, tool_name, accesses, source, cwd, action, policy_id) -> list[dict]:
     """One event per access: (op, path) or (op, path, moved)."""
     ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    where = cwd if isinstance(cwd, str) and os.path.isabs(cwd) and len(cwd) <= MAX_PATH_CHARS else None
     events = []
     for access in accesses[:MAX_PER_CALL]:
         op, path, moved = (*access, False)[:3]
         events.append({"ts": ts, "agent": _label(agent), "tool_name": _label(tool_name), "op": op,
-                       "path": path[:MAX_PATH_CHARS], "abs": _absolute(path, cwd, moved), "source": source,
+                       "path": path[:MAX_PATH_CHARS], "abs": _absolute(path, cwd, moved), "cwd": where, "source": source,
                        "action": action, "policy_id": _label(policy_id)})
     return events
 

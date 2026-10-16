@@ -220,7 +220,8 @@ def test_an_event_has_the_activity_log_shape(env):
     secret = str(home / ".aws" / "credentials")
     events, _ = run(agent_tree() + [opened(101, secret, flags=2)], home=home)
     e = events[0]
-    assert set(e) == {"ts", "agent", "tool_name", "op", "path", "abs", "source", "action", "policy_id", "would"}
+    assert set(e) == {"ts", "agent", "tool_name", "op", "path", "abs", "cwd", "source", "action", "policy_id", "would"}
+    assert e["cwd"] == PROJECT                                                        # where the agent was started
     assert (e["agent"], e["tool_name"], e["op"], e["source"], e["action"]) == ("claude-code", "zsh", "write", "os-monitor", "observed")
     assert (e["abs"], e["policy_id"], e["would"]) == (secret, "protected-path", "block")      # writing a credential store
 
