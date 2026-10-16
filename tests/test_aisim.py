@@ -472,6 +472,28 @@ def test_no_answer_in_time_means_denied(monkeypatch):
     assert d["decision"] == "deny" and d["by"] == "timeout"
 
 
+def test_a_manual_relay_run_announces_what_to_answer(monkeypatch):
+    """The dashboard has no other way to answer a manual run: each parked decision must surface as a relay.wait event
+    carrying its decision id, or the run always ends in a timeout."""
+    fresh = agentbridge.RelayBoard()
+    monkeypatch.setattr(agentbridge, "BOARD", fresh)
+    replies = iter(story_json())
+    run = start(agentbridge.get("manual-relay"), review_policy="deny")
+    deadline = time.monotonic() + 20
+    answered = set()
+    while run.thread.is_alive() and time.monotonic() < deadline:
+        for item in fresh.list():
+            if item["decision_id"] not in answered:
+                answered.add(item["decision_id"])
+                fresh.answer(item["decision_id"], json.dumps(next(replies)))
+        time.sleep(0.05)
+    events = finish(run)
+    assert events[-1]["type"] == "run.finished"
+    waits = [e for e in events if e["type"] == "relay.wait"]
+    assert waits and all(w["decision_id"] for w in waits)
+    assert len(waits) == len(answered) and len(waits) >= 2
+
+
 @pytest.mark.parametrize("policy,state", [("deny", "denied"), ("approve", "approved-executed")])
 def test_the_review_policy_can_decide_without_a_person(monkeypatch, policy, state):
     held(monkeypatch)

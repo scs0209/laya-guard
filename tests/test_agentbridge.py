@@ -140,7 +140,8 @@ def test_detect_all_asks_once_per_half_minute(fake, monkeypatch):
     assert seen == []                                        # served from the cache
     agentbridge.detect_all(fresh=True)
     assert seen == [1]
-    assert [a.id for a in agentbridge.detect_all()] == ["claude-code"]
+    assert [a.id for a in agentbridge.detect_all()] == ["claude-code", "codex-acp", "gemini-acp", "anthropic-api",
+                                                         "openai-api", "gemini-api", "manual-relay", "demo"]
 
 
 def test_another_adapter_can_be_registered(monkeypatch):
@@ -150,7 +151,7 @@ def test_another_adapter_can_be_registered(monkeypatch):
         def complete(self, *a, **k): return agentbridge.Completion("{}")
     monkeypatch.setitem(agentbridge._ADAPTERS, "other", Other())
     agentbridge._cache.clear()
-    assert [a.id for a in agentbridge.detect_all(fresh=True)] == ["claude-code", "other"] and agentbridge.get("other").name == "Other"
+    assert [a.id for a in agentbridge.detect_all(fresh=True)][-1] == "other" and agentbridge.get("other").name == "Other"
 
 
 def test_a_lone_surrogate_in_the_prompt_does_not_break_the_call(fake):

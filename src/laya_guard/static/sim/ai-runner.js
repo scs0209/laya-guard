@@ -79,6 +79,8 @@ export function createAiRunner(bridge) {
     /** Read an existing run from the beginning (a replay of a finished one, or reconnecting to a live one). */
     replay: function (id, onEvent, onProblem) { this.detach(); stream(id, 0, onEvent, onProblem); return id; },
     control: function (id, action, extra) { return json("POST", "/api/sim/ai/runs/" + encodeURIComponent(id) + "/control", Object.assign({ action: action }, extra || {})); },
+    relayPending: function () { return json("GET", "/api/sim/ai/relay/pending"); },
+    relayAnswer: function (decisionId, text) { return json("POST", "/api/sim/ai/relay/answer", { decision_id: decisionId, text: text }); },
     /** Stop reading (the run itself keeps going on the server unless it is stopped with control). */
     detach: function () { if (current) { current.stopped = true; if (current.abort) current.abort.abort(); current = null; } },
   };

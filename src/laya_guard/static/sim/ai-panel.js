@@ -4,17 +4,18 @@
 
 import { el, clear, setText, fmtMs } from "./dom.js";
 import { badge } from "./pipeline.js";
-import { controlsFor, outcomeParts } from "./ai-reduce.js";
+import { controlsFor, outcomeParts, pickAgent, usableAgent } from "./ai-reduce.js";
 import { ACTION_WORD } from "./vocab.js";
 
 function chip(text, tone) { return el("span", { "class": "chip " + tone, text: text }); }
 function src(b) { return el("span", { "class": "src " + b.tone, title: b.detail, text: b.label }); }
 function tone(action) { return action === "allow" ? "ok" : action === "review" ? "warn" : "bad"; }
 
-/** `actions`: start(form), pause, resume, step, stop, review(decision), replay(id), consent(allow), refresh(), selectRow(row), edit. */
+/** `actions`: start(form), pause, resume, step, stop, review(decision), relayAnswer(decisionId, text), replay(id), consent(allow), chooseAgent(id), refresh(),
+ *  selectRow(row), edit. */
 export function createAiPanel(root, actions) {
   var form = { prompt: "", model: "haiku", steps: "8", review: "ask", stepMode: false };
-  var drawn = { run: null, rows: 0, summary: false, status: "", agent: "", lastStatus: "idle" };
+  var drawn = { run: null, rows: 0, summary: false, status: "", agent: "", agents: "", consentFor: "", lastStatus: "idle" };
 
   var intro = el("p", { "class": "lab-intro", text: "Describe any situation. An AI agent interprets it, plays it out in a virtual world, and every command it proposes is judged by the real laya-guard evaluator. Commands are never run." });
   var prompt = el("textarea", { "class": "ai-prompt", rows: "5", maxlength: "2000", spellcheck: "false", "aria-label": "Describe a situation", placeholder: "Describe what should happen, in your own words." });
@@ -31,13 +32,15 @@ export function createAiPanel(root, actions) {
     s.addEventListener("change", function () { onchange(s.value); });
     return el("label", { "class": "ai-opt" }, el("span", { text: label }), s);
   }
+  var agentSel = select("Agent", "ai-agent-pick", [], function (v) { actions.chooseAgent(v); });
+  agentSel.hidden = true;
   var modelSel = select("Model", "ai-model", [["", "Agent's default"]], function (v) { form.model = v; });
   var stepsSel = select("Steps", "ai-steps", [["4", "4"], ["8", "8"], ["12", "12"], ["20", "20"]], function (v) { form.steps = v; });
   stepsSel.querySelector("select").value = "8";
   var reviewSel = select("Held commands", "ai-review", [["ask", "Ask me"], ["deny", "Deny"], ["approve", "Approve"]], function (v) { form.review = v; });
   var stepMode = el("input", { type: "checkbox", id: "ai-stepmode" });
   stepMode.addEventListener("change", function () { form.stepMode = stepMode.checked; });
-  var options = el("div", { "class": "ai-options" }, modelSel, stepsSel, reviewSel, el("label", { "class": "ai-opt check" }, stepMode, el("span", { text: "Step by step" })));
+  var options = el("div", { "class": "ai-options" }, agentSel, modelSel, stepsSel, reviewSel, el("label", { "class": "ai-opt check" }, stepMode, el("span", { text: "Step by step" })));
 
   var bStart = el("button", { type: "button", "class": "sim-run", onclick: function () { actions.start(snapshot()); } }, "Start simulation");
   var bPause = el("button", { type: "button", "class": "sim-btn wide", onclick: function () { actions.pause(); } }, "Pause");
@@ -51,6 +54,7 @@ export function createAiPanel(root, actions) {
   var notice = el("p", { "class": "lab-error", role: "alert", hidden: true });
   var live = el("p", { "class": "ai-live", "aria-live": "polite" });
   var reviewCard = el("div", { "class": "ai-review", role: "alertdialog", "aria-label": "A command is held for review", hidden: true });
+  var relayCard = el("div", { "class": "ai-review", role: "alertdialog", "aria-label": "The manual relay waits for an answer", hidden: true });
   var history = el("ol", { "class": "ai-history", "aria-label": "Actions and decisions, oldest first" });
   var outcome = el("div", { "class": "ai-outcome", hidden: true });
   var recentSel = el("select", { "aria-label": "Earlier runs", id: "ai-recent" });
@@ -63,17 +67,22 @@ export function createAiPanel(root, actions) {
   function sumText() { return formBox.open || !form.prompt ? "Scenario" : "Scenario: " + (form.prompt.length > 90 ? form.prompt.slice(0, 90) + "…" : form.prompt); }
   formBox.addEventListener("toggle", function () { setText(formSum, sumText()); });
   root.appendChild(agentBox); root.appendChild(consentBox); root.appendChild(formBox); root.appendChild(buttons); root.appendChild(notice);
-  root.appendChild(live); root.appendChild(reviewCard); root.appendChild(history); root.appendChild(outcome); root.appendChild(recent);
+  root.appendChild(live); root.appendChild(reviewCard); root.appendChild(relayCard); root.appendChild(history); root.appendChild(outcome); root.appendChild(recent);
 
   function snapshot() {
     return { prompt: form.prompt.trim(), model: form.model, max_steps: Number(form.steps), mode: form.stepMode ? "step" : "run", review_policy: form.review };
   }
 
-  function describeAgent(a) {
-    if (!a) return "Looking for a coding agent…";
+  function describeOne(a) {
     if (!a.found) return a.name + " isn't available. " + (a.detail || "");
-    if (a.logged_in === false) return a.name + " is installed but isn't logged in. " + (a.detail || "");
-    return a.name + (a.version ? " " + a.version : "") + " is ready" + (a.logged_in ? " (logged in)." : ".");
+    if (a.logged_in === false) return a.kind === "api" ? a.name + ": " + a.detail : a.name + " is installed but isn't logged in. " + (a.detail || "");
+    return a.name + (a.version ? " " + a.version : "") + " is ready" + (a.logged_in ? (a.kind === "api" ? " (key accepted)." : " (logged in).") : ".");
+  }
+  function describeAgent(a, agents) {
+    if (!a) return "Looking for a coding agent…";
+    if (usableAgent(a)) return describeOne(a);
+    // nothing is ready: say what each one needs, Claude Code or one of the API keys
+    return "No agent is ready. " + agents.map(describeOne).join(" ");
   }
 
   function rowEl(r) {
@@ -136,29 +145,43 @@ export function createAiPanel(root, actions) {
     focusPrompt: function () { prompt.focus(); },
     form: function () { return snapshot(); },
     update: function (app) {
-      var st = app.ai, ui = app.aiUi, ctl = controlsFor(st), status = ui.status, agent = status && status.agents && status.agents[0];
+      var st = app.ai, ui = app.aiUi, ctl = controlsFor(st), status = ui.status, agents = (status && status.agents) || [];
+      var agent = pickAgent(agents, ui.agent);
       // examples and model choices arrive with the server's status
       if (status && !examples.firstChild) {
         status.examples.forEach(function (text, i) { examples.appendChild(el("button", { type: "button", "class": "chip pol", onclick: function () { actions.example(text); } }, "Example " + (i + 1))); });
         if (!prompt.value) { prompt.placeholder = status.examples[0]; }
       }
-      if (agent && modelSel.querySelector("select").options.length <= 1) {
+      // more than one agent ready (Claude Code and an API key, or several keys): let the user pick
+      var usableList = agents.filter(usableAgent), agentsKey = usableList.map(function (a) { return a.id; }).join(",");
+      if (drawn.agents !== agentsKey) {
+        drawn.agents = agentsKey;
+        var asel = agentSel.querySelector("select");
+        clear(asel);
+        usableList.forEach(function (a) { asel.appendChild(el("option", { value: a.id, text: a.name })); });
+        agentSel.hidden = usableList.length < 2;
+      }
+      if (agent) agentSel.querySelector("select").value = agent.id;
+      // the models are the chosen agent's: drawn again when the agent changes
+      if (agent && drawn.agent !== agent.id) {
+        drawn.agent = agent.id;
         var sel = modelSel.querySelector("select");
         clear(sel);
         agent.models.forEach(function (m) { sel.appendChild(el("option", { value: m.id, text: m.label })); });
-        sel.value = agent.models.some(function (m) { return m.id === form.model; }) ? form.model : "";
+        sel.value = agent.models.some(function (m) { return m.id === form.model; }) ? form.model : (agent.models[0] ? agent.models[0].id : "");
         form.model = sel.value;
       }
-      var usable = !!agent && agent.found && agent.logged_in !== false;
-      setText(agentBox, describeAgent(agent) + (agent && agent.inert && usable ? "" : ""));
+      var usable = usableAgent(agent);
+      setText(agentBox, describeAgent(agent, agents));
       agentBox.className = "ai-agent " + (usable ? "ok" : agent ? "bad" : "");
       consentBox.hidden = !(usable && !agent.consent);
+      if (consentBox.hidden || drawn.consentFor !== agent.id) { clear(consentBox); drawn.consentFor = ""; }
       if (!consentBox.hidden && !consentBox.firstChild) {
-        consentBox.appendChild(el("p", { text: "Using " + agent.name + " sends what you type here, the virtual files and laya-guard's verdicts for this run to " + agent.name + ", which uses its own login and model as it always does. It also adds its own context to every request (for Claude Code: account details and any organisation instructions; your own CLAUDE.md and memory files are switched off for these calls). Nothing from your machine's files, logs or commands is added by laya-guard." }));
+        drawn.consentFor = agent.id;
+        consentBox.appendChild(el("p", { text: agent.sends }));
         consentBox.appendChild(el("p", { "class": "muted", text: "How it is kept from acting: " + agent.inert }));
         consentBox.appendChild(el("button", { type: "button", "class": "sim-run", onclick: function () { actions.consent(true); } }, "Allow for this session"));
       }
-      if (usable && agent.consent && consentBox.firstChild) clear(consentBox);
       var ready = usable && agent.consent && form.prompt.trim().length > 0;
       bStart.hidden = !ctl.canStart || st.status !== "idle"; bStart.disabled = !ready;
       bAgain.hidden = !(ctl.canStart && st.status !== "idle"); bAgain.disabled = !ready;
@@ -168,9 +191,10 @@ export function createAiPanel(root, actions) {
       drawn.lastStatus = st.status;
       setText(formSum, sumText());
       var locked = !ctl.canStart;
-      prompt.disabled = false; [modelSel, stepsSel, reviewSel].forEach(function (o) { o.querySelector("select").disabled = locked; }); stepMode.disabled = locked;
+      prompt.disabled = false;       [agentSel, modelSel, stepsSel, reviewSel].forEach(function (o) { o.querySelector("select").disabled = locked; }); stepMode.disabled = locked;
       notice.hidden = !(ui.notice || st.error);
-      if (!notice.hidden) setText(notice, ui.notice || (st.error.message + (st.error.kind === "not-logged-in" ? " Run `claude` once in a terminal to log in." : "")));
+      var loginHint = st.error && st.error.kind === "not-logged-in" && st.agent && st.agent.id === "claude-code" ? " Run `claude` once in a terminal to log in." : "";
+      if (!notice.hidden) setText(notice, ui.notice || (st.error.message + loginHint));
 
       // what the agent is doing right now
       var line = "";
@@ -193,6 +217,26 @@ export function createAiPanel(root, actions) {
             el("button", { type: "button", "class": "sim-btn wide", onclick: function () { actions.review("deny"); } }, "Deny")));
         }
       } else if (!reviewCard.hidden) { reviewCard.hidden = true; clear(reviewCard); }
+
+      // the manual relay waits for you: answer with one JSON object so the run can go on
+      if (st.relay) {
+        if (relayCard.hidden || relayCard.dataset.decision !== st.relay.decisionId) {
+          relayCard.hidden = false; clear(relayCard);
+          relayCard.dataset.decision = st.relay.decisionId;
+          relayCard.appendChild(el("b", { text: "The run waits for your answer (manual relay)" }));
+          relayCard.appendChild(el("p", { "class": "muted", text: "Step " + (st.relay.step || 0) + " (" + st.relay.phase + "). Reply with one JSON object, e.g. {\"type\": \"finish\", \"outcome\": \"done\"} or {\"type\": \"message\", \"text\": \"…\"}." }));
+          var answer = el("textarea", { "class": "ai-prompt", rows: "3", spellcheck: "false", "aria-label": "Answer the waiting decision" });
+          relayCard.appendChild(answer);
+          var send = el("button", { type: "button", "class": "sim-run" }, "Answer");
+          send.addEventListener("click", function () {
+            var text = answer.value;
+            if (!text.trim()) return;
+            send.disabled = true;
+            actions.relayAnswer(st.relay.decisionId, text);
+          });
+          relayCard.appendChild(el("div", { "class": "lab-actions" }, send));
+        }
+      } else if (!relayCard.hidden) { relayCard.hidden = true; clear(relayCard); relayCard.dataset.decision = ""; }
 
       // the history: new rows are appended, a new run starts it over
       if (drawn.run !== st.id || drawn.rows > st.rows.length) { clear(history); drawn.rows = 0; drawn.run = st.id; drawn.summary = false; outcome.hidden = true; clear(outcome); }

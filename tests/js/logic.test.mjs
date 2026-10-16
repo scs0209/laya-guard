@@ -283,6 +283,11 @@ test("statuses follow the events: thinking, pausing, a held command, the end", a
   ai.reduceAiEvent(s, ev("review.decision", { step: 1, decision: "deny", by: "timeout" }));
   assert.equal(s.review, null);
   assert.equal(s.rows.at(-1).text, "no answer in time, so denied");
+  ai.reduceAiEvent(s, ev("relay.wait", { phase: "act", step: 2, attempt: 1, decision_id: "d1", deadline_s: 120 }));
+  assert.equal(s.relay.decisionId, "d1");
+  assert.ok(s.rows.at(-1).title.includes("Waiting for your answer"));
+  ai.reduceAiEvent(s, ev("ai.reply", { phase: "act", step: 2, attempt: 1, total_cost_usd: 0 }));
+  assert.equal(s.relay, null);
   ai.reduceAiEvent(s, ev("ai.invalid", { phase: "act", step: 2, attempt: 1, errors: ["type must be one of ..."], will_retry: true }));
   assert.ok(s.rows.at(-1).text.includes("it is asked again"));
   ai.reduceAiEvent(s, ev("run.error", { kind: "timeout", message: "no answer in 120 s" }));
@@ -328,6 +333,24 @@ test("unknown events and an empty run are harmless, and no summary means no outc
   assert.equal(ai.outcomeParts(s), null);
   assert.equal(ai.describeAction({ type: "write_file", path: "a" }), "Writes a");
   assert.equal(ai.describeAction({ type: "list_dir" }), "Lists .");
+});
+
+test("the run goes to the chosen agent when it is usable, else the first usable one", async () => {
+  const ai = await import(SIM + "ai-reduce.js");
+  const claude = { id: "claude-code", found: true, logged_in: true };
+  const api = { id: "openai-api", found: true, logged_in: true };
+  const refused = { id: "anthropic-api", found: true, logged_in: false };
+  const missing = { id: "gemini-api", found: false };
+  assert.equal(ai.usableAgent(claude), true);
+  assert.equal(ai.usableAgent(refused), false, "a refused key is not usable");
+  assert.equal(ai.usableAgent(missing), false);
+  assert.equal(ai.usableAgent(null), false);
+  const agents = [claude, api, refused, missing];
+  assert.equal(ai.pickAgent(agents, "openai-api"), api, "the user's pick wins when it is usable");
+  assert.equal(ai.pickAgent(agents, "anthropic-api"), claude, "a refused pick falls back to the first usable one");
+  assert.equal(ai.pickAgent(agents, null), claude, "Claude Code stays first: the server lists it first");
+  assert.equal(ai.pickAgent([refused, missing], "gemini-api").id, "anthropic-api", "nothing usable: the first one, so the page can say why");
+  assert.equal(ai.pickAgent([], null), null);
 });
 
 // ---- the sequencer ----------------------------------------------------------------------------------------------------

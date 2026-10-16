@@ -10,7 +10,7 @@ import { badge } from "./pipeline.js";
 export function initialAiState() {
   return {
     id: null, status: "idle", prompt: "", agent: null, model: null, maxSteps: 8, mode: "run", reviewPolicy: "ask", limits: null,
-    plan: null, files: Object.create(null), rows: [], step: 0, thinking: null, review: null, summary: null, error: null,
+    plan: null, files: Object.create(null), rows: [], step: 0, thinking: null, review: null, relay: null, summary: null, error: null,
     counts: { allow: 0, review: 0, block: 0 }, commands: [], cost: 0, aiCalls: 0, lastSeq: 0,
   };
 }
@@ -29,6 +29,17 @@ export function controlsFor(state) {
     canStop: live || state.status === "connecting",
     canReview: state.status === "waiting-review",
   };
+}
+
+/** An agent from the server's status that a run can use now: there, and not known to be logged out or refusing its key. */
+export function usableAgent(a) { return !!a && !!a.found && a.logged_in !== false; }
+
+/** The agent a run goes to: the one chosen if it is usable, else the first usable one (the server lists Claude Code first),
+ *  else the first one, so the page can say why nothing is ready. */
+export function pickAgent(agents, chosenId) {
+  var list = agents || [];
+  var chosen = list.filter(function (a) { return a.id === chosenId && usableAgent(a); })[0];
+  return chosen || list.filter(usableAgent)[0] || list[0] || null;
 }
 
 export function describeAction(a) {
@@ -64,11 +75,16 @@ export function reduceAiEvent(state, e) {
       state.aiCalls += 1;
       break;
     case "ai.reply":
-      state.thinking = null;
+      state.thinking = null; state.relay = null;
       state.cost = e.total_cost_usd != null ? e.total_cost_usd : state.cost;
       break;
     case "ai.invalid":
+      state.relay = null;
       row(state, e, "system", { badge: ENGINE(), title: "The agent's reply was rejected", text: e.errors.join("; ") + (e.will_retry ? " (it is asked again)" : "") });
+      break;
+    case "relay.wait":
+      state.relay = { decisionId: e.decision_id, phase: e.phase, step: e.step, attempt: e.attempt, deadlineS: e.deadline_s, since: e.t };
+      row(state, e, "system", { badge: ENGINE(), title: "Waiting for your answer", text: "The manual relay is holding step " + (e.step || 0) + " (" + e.phase + "). Answer below so the run can go on." });
       break;
     case "plan":
       state.plan = e.plan; state.status = state.status === "paused" ? "paused" : "running";
@@ -137,15 +153,15 @@ export function reduceAiEvent(state, e) {
       state.summary = { facts: e.facts, ai: e.ai };
       break;
     case "run.finished":
-      state.status = "finished"; state.thinking = null; state.review = null;
+      state.status = "finished"; state.thinking = null; state.review = null; state.relay = null;
       row(state, e, "system", { badge: ENGINE(), title: "Finished", text: { "agent-finished": "the agent finished", "step-limit": "the step limit was reached" }[e.reason] || e.reason });
       break;
     case "run.stopped":
-      state.status = "stopped"; state.thinking = null; state.review = null;
+      state.status = "stopped"; state.thinking = null; state.review = null; state.relay = null;
       row(state, e, "system", { badge: ENGINE(), title: "Stopped", text: e.message || "stopped" });
       break;
     case "run.error":
-      state.status = "error"; state.thinking = null; state.review = null; state.error = { kind: e.kind, message: e.message };
+      state.status = "error"; state.thinking = null; state.review = null; state.relay = null; state.error = { kind: e.kind, message: e.message };
       row(state, e, "system", { badge: ENGINE(), title: "The run ended with an error", text: e.message });
       break;
     default:

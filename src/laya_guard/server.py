@@ -173,7 +173,8 @@ def api_ai_status(request: Request):
     and the limits every run is held to."""
     _require_loopback_host(request)
     agents = [{"id": a.id, "name": a.name, "found": a.found, "logged_in": a.logged_in, "version": a.version, "detail": a.detail,
-               "models": a.models, "inert": a.inert, "consent": a.id in aisim.MANAGER.consent} for a in agentbridge.detect_all()]
+               "models": a.models, "inert": a.inert, "sends": a.sends, "kind": a.kind, "consent": a.id in aisim.MANAGER.consent}
+              for a in agentbridge.detect_all()]
     return JSONResponse({"agents": agents, "examples": EXAMPLE_PROMPTS,
                          "limits": {"prompt_chars": aisim.MAX_PROMPT_CHARS, "default_steps": aisim.DEFAULT_STEPS, "max_steps": aisim.MAX_STEPS,
                                     "run_seconds": aisim.RUN_SECONDS, "review_seconds": aisim.REVIEW_SECONDS, "max_cost_usd": aisim.MAX_COST_USD,
@@ -257,6 +258,30 @@ class AiControlReq(BaseModel):
     action: str
     decision: str | None = None      # for "review": approve or deny
     step: int | None = None          # for "review": the step of the held command it answers
+
+
+@app.get("/api/sim/ai/relay/pending")
+def api_ai_relay_pending(request: Request):
+    """Decisions a manual-relay run is waiting on: what was asked, so someone on this machine can answer it."""
+    _require_loopback_host(request)
+    return JSONResponse({"pending": agentbridge.BOARD.list()}, headers=dashboard.api_headers())
+
+
+class RelayAnswerReq(BaseModel):
+    decision_id: str
+    text: str
+
+
+@app.post("/api/sim/ai/relay/answer", dependencies=[Depends(_require_write_access)])
+def api_ai_relay_answer(req: RelayAnswerReq):
+    """Answer a waiting manual-relay decision. The run goes on with the text like with any other agent's reply."""
+    try:
+        agentbridge.BOARD.answer(req.decision_id, req.text)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="unknown decision: it was answered already, or the run moved on")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return JSONResponse({"decision_id": req.decision_id, "answered": True}, headers=dashboard.api_headers())
 
 
 @app.post("/api/sim/ai/runs/{run_id}/control", dependencies=[Depends(_require_write_access)])
