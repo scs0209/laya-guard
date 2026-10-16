@@ -82,6 +82,28 @@ def test_the_parser_leaves_out_what_it_cannot_read(command):
     assert shell_accesses(command) == []
 
 
+@pytest.mark.parametrize("command, expected", [
+    ("grep -A 3 password .env", [("read", ".env")]),                    # 3 is the option's, password the pattern
+    ("tail -n +5 f.log", [("read", "f.log")]),
+    ("mkdir -m 700 d", [("write", "d")]),
+    ("bat -l py main.py", [("read", "main.py")]),
+    ("stat -f %z a.bin", [("read", "a.bin")]),
+    ("xxd -l 16 a.bin", [("read", "a.bin")]),
+    ("rg -g '*.py' TODO src", [("read", "src")]),
+    ("cat <<< hi; cat <<EOF\nrm -rf /\nEOF", []),                       # a here-string and a heredoc on one line
+])
+def test_an_options_value_is_never_recorded_as_a_path(command, expected):
+    assert shell_accesses(command) == expected
+
+
+def test_a_path_after_cd_has_no_absolute_form(env):
+    _, log = env
+    activity.turn_on()
+    _guard(tool_call="rm a.txt && cd sub && rm junk.txt && rm /tmp/x", tool_name="Bash", cwd="/work", agent="claude-code")
+    got = [(e["path"], e["abs"]) for e in events(log)]
+    assert got == [("a.txt", "/work/a.txt"), ("junk.txt", None), ("/tmp/x", "/tmp/x")]
+
+
 def test_the_parser_never_raises_on_odd_input():
     for command in ["\x00\x01", "((((", "))))", "a;;;;b", "> ", "< ", "cat >", "rm", "cp onlyone", "x" * 50_000,
                     "cat " + "a " * 5000, "\\", "'", '"', "$(", "cat ${"]:
@@ -168,6 +190,48 @@ def test_a_log_that_cannot_be_written_never_breaks_the_call(env, tmp_path, monke
     activity.turn_on()
     v = _guard(tool_call="Read: src/a.py", tool_name="Read", paths=["src/a.py"], cwd="/p")
     assert v.action == "allow"
+
+
+def test_a_config_directory_that_cannot_be_looked_at_never_changes_the_verdict(env, monkeypatch, capsys):
+    def denied():
+        raise PermissionError("config directory not readable")
+    monkeypatch.setattr(activity, "enabled", denied)
+    assert cli.main(["check", "--offline", "--json", "--tool-name", "Bash", "--agent", "claude-code", "rm -rf /"]) == 2
+    assert json.loads(capsys.readouterr().out)["action"] == "block"
+    assert _guard(tool_call="rm -rf /", tool_name="Bash", agent="claude-code").action == "block"
+
+
+def test_long_labels_and_paths_are_cut_so_one_call_stays_small(env):
+    _, log = env
+    activity.turn_on()
+    huge = "x" * 1_000_000
+    activity.record_call(agent=huge, tool_name="Read", text="", paths=[huge] * 50, cwd="/" + huge, verdict=ALLOW)
+    got = events(log)
+    assert len(got) == 50 and log.stat().st_size < 50 * (activity.MAX_PATH_CHARS + 1000)
+    assert len(got[0]["agent"]) == activity.MAX_LABEL_CHARS and got[0]["abs"] is None
+
+
+def test_a_call_that_would_pass_the_cap_is_not_written(env, monkeypatch):
+    _, log = env
+    activity.turn_on()
+    monkeypatch.setattr(activity, "MAX_BYTES", 1000)
+    activity.record_call(agent="a", tool_name="Read", text="", paths=[f"f{i}" for i in range(50)], cwd="/p", verdict=ALLOW)
+    assert not log.exists() or log.stat().st_size <= 1000
+
+
+def test_a_path_with_a_line_separator_is_read_back(env):
+    _, log = env
+    activity.turn_on()
+    activity.record_call(agent="a", tool_name="Read", text="", paths=["odd\u2028name.txt", "b.txt"], cwd="/p", verdict=ALLOW)
+    assert [e["path"] for e in activity.load_events()] == ["odd\u2028name.txt", "b.txt"]
+
+
+def test_the_activity_command_never_prints_an_escape_sequence(env, capsys):
+    activity.turn_on()
+    activity.record_call(agent="evil\x1b[2J", tool_name="Read", text="", paths=["a\x1b]0;x\x07.txt"], cwd="/p", verdict=ALLOW)
+    assert cli.main(["activity"]) == 0
+    out = capsys.readouterr().out
+    assert "\x1b" not in out and "\x07" not in out and "\\u001b" in out
 
 
 def test_recording_stops_past_the_size_cap(env, monkeypatch):
