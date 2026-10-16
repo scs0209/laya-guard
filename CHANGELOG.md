@@ -19,7 +19,10 @@ All notable changes to this project are documented here. Versions follow
   next call). It is a rule lane: no model, and the path is never written to the verdict log. Paths are checked as named
   and through symlinks and `..`, ignoring case. `POST /guard` takes `paths`, `laya-guard check` takes `--tool-name` and
   `--path`, and the hook's offline fallback applies the same rules. It sees declared access only: a file read inside a
-  shell command, a script or a child process never reaches it.
+  shell command, a script or a child process never reaches it. Writes to shell startup files (`~/.bashrc`, `~/.zshrc`,
+  `~/.profile`, …) and to `.git/hooks/**` are reviewed too: a payload put there runs by itself later. A call that names
+  more than 50 paths, or a path over 4096 characters, is reviewed (policy `protected-path`, verdict source `limit`)
+  rather than having the extra paths skipped.
 
 ### Changed
 

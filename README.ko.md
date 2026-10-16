@@ -310,7 +310,8 @@ laya-guard install claude-code --files     # Bash + Read, Edit, MultiEdit, Write
 그러면 파일 도구 호출은 그 호출이 지목한 경로를 **보호 경로**와 대조해 판정합니다. 모델은 돌지 않고, 읽거나 쓰는
 내용은 판정하지도 전송하지도 않습니다. 기본값은 자격 증명 저장소(`~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.kube` 등), `.env*`
 파일, 개인 키를 읽을 때 *검토*(Claude Code가 묻습니다), 자격 증명 저장소를 바꿀 때 *차단*, 에이전트 자신의 사용자
-수준 설정과 훅에 쓸 때 *검토*입니다([`protect.yaml`](src/laya_guard/protect.yaml)). 내 규칙은
+수준 설정과 훅, 셸 시작 파일(`~/.bashrc`, `~/.zshrc` 등), `.git/hooks/**`에 쓸 때 *검토*입니다([`protect.yaml`](src/laya_guard/protect.yaml)).
+경로가 50개를 넘거나 한 경로가 4096자를 넘는 호출도 건너뛰지 않고 *검토*합니다. 내 규칙은
 `~/.config/laya-guard/protect.yaml`에 추가하면 다음 호출부터 적용됩니다. 형식은 영문 README의 예시를 참고하세요.
 
 상대 경로 글롭은 에이전트가 실행 중인 디렉터리 기준이라 모든 프로젝트에 적용됩니다. 한 프로젝트에만 적용하려면

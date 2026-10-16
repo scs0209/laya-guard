@@ -160,17 +160,31 @@ def _protects(rule: Rule, candidates: list[str], cwd: str, home: str) -> bool:
     return any(rx.match(c) and not any(s.match(c) for s in skips) for c in candidates)
 
 
+def _over_limit(paths) -> bool:
+    """A call that names more paths than we look at, or a path too long to look at. Skipping what is past a limit would
+    let an unchecked path through (the 51st could be ~/.ssh/id_rsa), so such a call is reviewed instead."""
+    return len(paths) > MAX_PATHS or any(isinstance(p, str) and len(p) > MAX_PATH_LEN for p in paths)
+
+
+def _limit_verdict() -> Verdict:
+    return Verdict(action="review", risk=_RISK["review"], policy_id="protected-path",
+                   reason="too many or too long paths to check", mock=is_mock(), verdict_source="limit")
+
+
 def judge_paths(tool_name: str | None, paths, cwd: str | None = None, rules: list[Rule] | None = None) -> Verdict | None:
-    """The verdict for a file tool call, or None when no rule applies (not a file tool, no paths, no matching rule)."""
+    """The verdict for a file tool call, or None when no rule applies (not a file tool, no paths, no matching rule). A call
+    past a limit (MAX_PATHS paths, MAX_PATH_LEN characters each) is reviewed: nothing is skipped."""
     op = FILE_TOOLS.get(tool_name or "")
     if op is None or not isinstance(paths, (list, tuple)) or not paths:
         return None
+    if _over_limit(paths):
+        return _limit_verdict()
     rules = load_rules() if rules is None else rules
     cwd = cwd if cwd and os.path.isabs(cwd) else os.getcwd()
     home = os.path.expanduser("~")
     worst: Rule | None = None
-    for raw in list(paths)[:MAX_PATHS]:
-        if not isinstance(raw, str) or not raw.strip() or len(raw) > MAX_PATH_LEN:
+    for raw in paths:
+        if not isinstance(raw, str) or not raw.strip():
             continue
         candidates = _candidates(raw, cwd)
         for rule in rules:
@@ -189,8 +203,8 @@ def judge_file_call(tool_name: str | None, paths, cwd: str | None = None) -> Ver
     else is allowed. The content being read or written is not judged, and no model runs."""
     if tool_name not in FILE_TOOLS or not isinstance(paths, (list, tuple)):
         return None
-    if not any(isinstance(p, str) and p.strip() and len(p) <= MAX_PATH_LEN for p in paths):
-        return None
+    if not any(isinstance(p, str) and p.strip() for p in paths):
+        return None                                      # (a call past a limit has paths: judge_paths reviews it)
     return judge_paths(tool_name, paths, cwd) or Verdict(
         action="allow", risk=0.0, policy_id="general", reason="File tool call: no protected path matched",
         mock=is_mock(), verdict_source="allowlist")

@@ -70,6 +70,23 @@ def test_the_agents_own_hooks_are_reviewed_to_change_but_not_to_read(home, proje
     assert judge_paths("Write", [".claude/settings.json"], str(project)) is None     # a project's own file is fine
 
 
+@pytest.mark.parametrize("path", ["~/.bashrc", "~/.bash_profile", "~/.profile", "~/.zshrc", "~/.zshenv", "~/.zprofile",
+                                  "~/.config/fish/config.fish", "{project}/.git/hooks/pre-commit", "{project}/.git/hooks"])
+def test_shell_startup_files_and_git_hooks_are_reviewed_to_change_but_not_to_read(home, project, path):
+    path = path.format(project=project)
+    for tool in ("Write", "Edit", "MultiEdit"):
+        v = judge_paths(tool, [path], str(project))
+        assert (v.action, v.policy_id) == ("review", "protected-path"), (tool, path)
+    assert judge_paths("Read", [path], str(project)) is None                           # reading them is fine
+    assert judge_file_call("Write", [path], str(project)).action == "review"
+
+
+def test_other_files_next_to_them_are_not_caught(home, project):
+    for path in ("~/.zshrc.bak", "~/.config/fish/functions/x.fish", "{project}/.git/config", "{project}/hooks/pre-commit",
+                 "{project}/notes.md"):
+        assert judge_paths("Write", [path.format(project=project)], str(project)) is None, path
+
+
 def test_the_reason_never_names_the_file(home, project):
     v = judge_paths("Read", ["~/.ssh/id_rsa"], str(project))
     assert "id_rsa" not in v.reason and ".ssh" not in v.reason
@@ -191,10 +208,24 @@ def test_a_link_named_like_an_exception_does_not_become_one(home, project):
     assert judge_paths("Read", [".env.example"], str(project)).action == "review"  # its target isn't an example
 
 
-def test_many_or_huge_paths_are_bounded(home, project):
-    many = ["a"] * 500 + ["~/.ssh/id_rsa"]                                            # the protected one is past the cap
-    assert judge_paths("Read", many, str(project)) is None
-    assert judge_paths("Read", ["x" * (fileaccess.MAX_PATH_LEN + 1)], str(project)) is None
+@pytest.mark.parametrize("paths", [
+    ["a"] * fileaccess.MAX_PATHS + ["~/.ssh/id_rsa"],                                  # the protected one is the 51st
+    ["a"] * 500 + ["~/.ssh/id_rsa"],
+    ["a.txt", "../" * 1500 + ".ssh/id_rsa"],                                           # one short path, one padded past the limit
+    ["x" * (fileaccess.MAX_PATH_LEN + 1)],                                             # nothing protected, but not checkable
+])
+def test_a_call_past_a_limit_is_reviewed_not_skipped(home, project, paths):
+    for verdict in (judge_paths("Read", paths, str(project)), judge_file_call("Read", paths, str(project))):
+        assert (verdict.action, verdict.policy_id, verdict.verdict_source) == ("review", "protected-path", "limit")
+        assert ".ssh" not in verdict.reason                                            # the reason never names a path
+
+
+def test_a_call_at_the_limits_is_still_judged_path_by_path(home, project):
+    at_cap = ["a.txt"] * fileaccess.MAX_PATHS
+    assert judge_paths("Read", at_cap, str(project)) is None
+    assert judge_file_call("Read", at_cap, str(project)).action == "allow"
+    assert judge_paths("Read", ["x" * fileaccess.MAX_PATH_LEN], str(project)) is None
+    assert judge_paths("Read", at_cap[:-1] + ["~/.ssh/id_rsa"], str(project)).verdict_source == "regex"   # still found at 50
 
 
 # --- globs --------------------------------------------------------------------------------------------------------------
