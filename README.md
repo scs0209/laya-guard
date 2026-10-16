@@ -11,19 +11,40 @@
   <strong>English</strong> · <a href="README.ko.md">한국어</a>
 </p>
 
-> **Every `tool_call` judged on your laptop in ~0.1s. No per-decision billing.**
+> **Your coding agent can run `cat ~/.ssh/id_rsa`, `curl … | sh` or `rm -rf ~` on your machine. laya-guard answers
+> *before* the command runs: block it, ask you, or let it through. Free, on your laptop, in ~0.1 s.**
 
-**Demo EN:**
-<img src="demo/demo_en.gif" width="750" alt="demo in English">
+<p align="center"><img src="demo/hero_en.gif" width="750" alt="laya-guard blocks cat ~/.ssh/id_rsa, curl | sh and rm -rf ~, and lets pytest through"></p>
 
-**Demo KO:**
-<img src="demo/demo.gif" width="750" alt="demo in Korean">
+**Try it in 10 seconds** (no model, no server, no hook; this is what the demo above runs):
+
+```bash
+pip install --no-deps laya-guardrail pyyaml
+laya-guard check --offline "cat ~/.ssh/id_rsa"     # [BLOCK] ... policy=credential-read
+```
+
+**Use it with your agent** (Claude Code, Codex CLI, Cursor, Gemini CLI and seven more):
+
+```bash
+pip install laya-guardrail          # the PyPI name; the command it installs is `laya-guard`
+laya-guard install claude-code      # shows a diff first, backs up your settings, then checks the hook
+```
+
+(`pip install laya-guard` is an unrelated project: the package is **`laya-guardrail`**.)
 
 AI coding agents run shell commands, move money, and ship data outward. Each step
 deserves a safety check — but per-decision API pricing makes per-step judging
-prohibitively expensive. laya-guard judges every call **locally** with a small
-multilingual model (Laya, ~322M, Apache-2.0): regex prefilter for known-dangerous
-patterns, model judgment for everything else → `allow` / `review` / `block`.
+prohibitively expensive, so laya-guard judges every call **locally**, with no per-decision billing: a regex
+prefilter for known-dangerous patterns and a small multilingual model (Laya, ~322M, Apache-2.0) for everything
+else → `allow` / `review` / `block`.
+
+<details>
+<summary>More demos (mock mode, no model download: English and Korean cases)</summary>
+
+<img src="demo/demo_en.gif" width="750" alt="demo in English">
+<img src="demo/demo.gif" width="750" alt="demo in Korean">
+
+</details>
 
 한국어 버전: [README.ko.md](README.ko.md)
 
