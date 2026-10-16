@@ -72,10 +72,16 @@ def cmd_activity(args):
     if not events and not activity.enabled():
         print("Turn it on with: laya-guard activity on")
     for e in shown:
-        action = str(e.get("action", "")) + (f"!{e['would']}" if e.get("would") else "")    # observed!review: it happened
-        print(f"  {str(e.get('ts', ''))[:19]}  {str(e.get('agent') or '-'):12} {str(e.get('tool_name') or '-'):10} "
-              f"{str(e.get('op', '')):7} {action:14} {str(e.get('source', '')):10} {e.get('path', '')}")
+        f = {k: _shown(e.get(k)) for k in ("ts", "agent", "tool_name", "op", "source", "path")}
+        action = _shown(e.get("action")) + (f"!{_shown(e['would'])}" if e.get("would") else "")    # observed!review: it happened
+        print(f"  {f['ts'][:19]}  {f['agent'] or '-':12} {f['tool_name'] or '-':10} "
+              f"{f['op']:7} {action:14} {f['source']:10} {f['path']}")
     return 0
+
+def _shown(value) -> str:
+    """A logged value made safe for a terminal: what an agent named can hold escape sequences that would rewrite the
+    screen, so anything unprintable is shown as an escape instead."""
+    return "".join(c if c.isprintable() else f"\\u{ord(c):04x}" for c in str(value if value is not None else ""))
 
 def cmd_watch(args):
     """laya-guard watch: the OS monitor (macOS, optional). Adds what an agent's processes really opened to the file
