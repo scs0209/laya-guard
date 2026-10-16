@@ -38,6 +38,23 @@ All notable changes to this project are documented here. Versions follow
   `laya-guard check` takes `--shell` and `--access OP PATH`. `accesses` are judged against the protected paths like a
   Claude Code file tool's `paths` (a delete counts as a write), so any adapter can use them.
 
+- **An optional OS monitor for macOS: `laya-guard watch`.** It reads Apple's `eslogger` (Endpoint Security: `exec`, `fork`,
+  `exit`, `open`, `unlink`, `rename`, `create`) and adds the files an agent's own processes really opened, created,
+  deleted or renamed to the file activity log with `source: "os-monitor"`, so reads inside scripts and child processes,
+  which the hooks can't see, are in the same log. Run `laya-guard watch` (it starts `sudo eslogger` itself) or pipe
+  `sudo eslogger exec fork exit open unlink rename create | laya-guard watch`; only `eslogger` runs as root. It needs sudo
+  and Full Disk Access for the terminal app, and `laya-guard activity on` first (`--stdout` prints the events instead).
+  A program named for an agent (`claude`, `codex`, `cursor-agent`, `gemini`, `qwen`, `copilot`, `cline`, `opencode`,
+  `kilo`, `amp`; `--match NAME[=agent]` adds more) starts a process tree that `fork` carries to every child, agents
+  already running are found from `ps`, and everything outside the tree is dropped as it is read. Writes, deletes and
+  renames are always kept; reads are kept when a protected path is named or the file is in one of your own folders
+  outside the project (`--reads protected|outside|all`; `--ignore GLOB` cuts noise); repeats within five seconds are one
+  event. OS events carry `action: "observed"` (it already happened; nothing is blocked) and `would` (what a
+  protected-path rule would have answered). An `exec`'s environment, command lines and file contents are never read or
+  stored. Apple documents `eslogger` output as "NOT API", so unrecognised messages are skipped and a stream that never
+  matches the expected shape is reported. Not yet run for long sessions with real agents.
+- `laya-guard activity` lists `os-monitor` events with `observed!review` / `observed!block` in the action column.
+
 ### Changed
 
 - **The Amp helper hands the offline check the bare command** instead of the JSON it receives, like the other adapters,

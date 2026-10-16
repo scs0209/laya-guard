@@ -393,6 +393,46 @@ for shell commands only. It records declared access only. An adapter that knows 
 report it as `accesses` (`POST /guard`, or `laya-guard check --access read PATH`), which is judged against the protected
 paths and recorded like a file tool.
 
+#### See what the OS saw, not just what the agent said (macOS, optional)
+
+The hooks only know what a tool call says it will touch. A script the agent runs, a child process or a build tool never
+reaches them. On macOS, `laya-guard watch` asks the operating system instead: it reads Apple's `eslogger` (Endpoint
+Security), keeps the files **the agent's own processes** really opened, created, deleted or renamed, and adds them to the
+same file activity log with `source: "os-monitor"`.
+
+```bash
+laya-guard activity on        # the log it writes to
+laya-guard watch              # starts `sudo eslogger` for you (it asks for your password); Ctrl+C stops it
+# or run the privileged part yourself and pipe it in (only eslogger runs as root, laya-guard runs as you):
+sudo eslogger exec fork exit open unlink rename create | laya-guard watch
+```
+
+It needs `sudo`, and Full Disk Access for the terminal app you run it from (System Settings > Privacy & Security > Full
+Disk Access; quit and reopen the app). Then `laya-guard activity` shows the events next to the hook ones.
+
+- **Which processes.** A program named for an agent (`claude`, `codex`, `cursor-agent`, `gemini`, `qwen`, `copilot`,
+  `cline`, `opencode`, `kilo`, `amp`; `--match NAME[=agent]` adds more) starts a tree, and everything it starts is in it,
+  scripts and child processes included. Agents already running when you start are found from `ps`. Everything else on the
+  machine is dropped as soon as it is read.
+- **What is kept.** Writes, deletes and renames always. Reads when a protected path is named, and (by default) when the
+  file is in one of your own folders outside the project the agent was started in; system directories, hidden
+  directories (`~/.nvm`, `~/.zshrc`, …) and `~/Library` are ambient noise unless a rule names them. `--reads
+  protected|outside|all` changes that (`all` is very large) and `--ignore GLOB` cuts your own noise (a protected path is
+  never ignored). The same program doing the same thing to the same path within five seconds is one event.
+- **The record.** Like the hook events, plus `action: "observed"` (it already happened; nothing was stopped) and `would`:
+  what a [protected-path](#protect-files-from-the-agents-file-tools-opt-in) rule would have answered (`review`, `block` or
+  `null`). `tool_name` is the program that touched the file (`cat`, `python3`, …).
+- **Privacy.** An `exec` message carries the process's whole environment, which holds secrets: it is never read, stored or
+  logged, and neither are command lines or file contents. Paths are written in clear to the same owner-only file.
+
+It reports; it cannot block, so blocking stays with the hooks. Apple documents `eslogger`'s output as "NOT API": the shape
+can change with a macOS release, an unrecognised message is skipped rather than guessed at, and `watch` says so when a
+stream never looks like what it expects. Events can be lost if the machine is overloaded, and macOS reports the file that
+was opened, which may not be the name the agent used to reach it (a symlink), so write rules with real paths. A probe on
+one Mac (macOS 26) saw every read, write, delete and rename a stand-in agent made, including reads inside Python and Node
+child processes, at about 700 messages a second and 8 % of one core for `eslogger`. It has not been run for long sessions
+with real agents yet.
+
 ### 1b. Guard Cursor (beforeShellExecution hook)
 
 ```bash
@@ -689,8 +729,9 @@ the same as one model call, so a 6-window input takes a few seconds.
   is read. Five adapters (Cline, Gemini, Qwen, Kilo, Amp) send the tool call as
   JSON, so it never qualifies as a safe command and goes to the model instead.
 - Protected paths see declared access only: the path a file tool call names. A file read by a shell command, a script
-  or a child process is invisible to them, and a rule can't tell an honest `Read` of `.env` from a harmful one: a
-  match is reviewed or blocked, not understood.
+  or a child process is invisible to them (the optional macOS [OS monitor](#see-what-the-os-saw-not-just-what-the-agent-said-macos-optional)
+  sees those, but only reports), and a rule can't tell an honest `Read` of `.env` from a harmful one: a match is
+  reviewed or blocked, not understood.
 - Chain commands are judged one by one, so the model doesn't see that `cd /etc`
   came before `cat shadow`. Sensitive-path checks and whole-string regexes cover
   the common cases, not all of them.

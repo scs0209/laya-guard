@@ -2,17 +2,22 @@
 
 Off by default. `laya-guard activity on` starts it. One JSON line per file an agent touched:
 
-    {"ts", "agent", "tool_name", "op", "path", "abs", "source", "action", "policy_id"}
+    {"ts", "agent", "tool_name", "op", "path", "abs", "source", "action", "policy_id"}   (+ "would" when source is os-monitor)
 
 op      read | write | delete
 source  how the path was learned, which is how far to trust it:
         hook   a file tool (Read, Edit, Write, ...) named it. The agent's own report of what it is about to do.
         shell  guessed from a Bash command. Simple forms only (cat, rm, cp, mv, redirects, ...); anything that needs
                the shell to resolve (variables, globs, substitutions) is skipped, so this misses things.
+        os-monitor  seen by the operating system (`laya-guard watch`, macOS, optional): a file a process of the agent
+               really opened, whatever it was run from, so reads inside scripts and child processes are here. Reported
+               after the fact, nothing was stopped: `action` is "observed" and `would` is what a protected-path rule
+               would have answered (review | block | null). `tool_name` is the program that touched the file.
 action  what the guard answered for the call (allow | review | block), so an attempt that was stopped is not
         mistaken for an access.
 
-This is declared access: what a call said it would touch. A file read inside a script or a child process is not here.
+Hook and shell events are declared access: what a call said it would touch. A file read inside a script or a child
+process is only here when the OS monitor is running.
 File contents are never stored. Paths are, in clear, in a file only the owner can read; that is why it is opt-in and
 why it lives next to, not inside, verdicts.jsonl (which never holds anything but hashes and lengths).
 """
@@ -240,15 +245,22 @@ def build_events(*, agent, tool_name, accesses, source, cwd, action, policy_id) 
             for op, path in accesses[:MAX_PER_CALL]]
 
 
-def _append(events: list[dict]) -> None:
+def _append(events: list[dict]) -> bool:
+    """Add events to the log. False when it is full (over MAX_BYTES) and nothing was written."""
     path = activity_path()
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     if path.exists() and path.stat().st_size > MAX_BYTES:
         log.warning("file activity: %s is over %d bytes, not recording more", path, MAX_BYTES)
-        return
+        return False
     fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)    # owner only when we create it
     with os.fdopen(fd, "a", encoding="utf-8") as f:
         f.write("".join(json.dumps(e, ensure_ascii=False) + "\n" for e in events))
+    return True
+
+
+def append_events(events: list[dict]) -> bool:
+    """For another recorder (the OS monitor): add events that build_events made. False when the log is full."""
+    return _append(events)
 
 
 def record_call(*, agent: str | None, tool_name: str | None, cwd: str | None, verdict, text: str = "", paths=None,

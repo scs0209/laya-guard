@@ -1,7 +1,7 @@
 """CLI: laya-guard check / serve / eval."""
 from __future__ import annotations
 import argparse, dataclasses, json, os, sys, time
-from . import activity
+from . import activity, osmonitor
 from .fileaccess import judge_file_call
 from .guard import judge, judge_offline, is_mock, warmup
 from .install import InstallError
@@ -72,9 +72,16 @@ def cmd_activity(args):
     if not events and not activity.enabled():
         print("Turn it on with: laya-guard activity on")
     for e in shown:
+        action = str(e.get("action", "")) + (f"!{e['would']}" if e.get("would") else "")    # observed!review: it happened
         print(f"  {str(e.get('ts', ''))[:19]}  {str(e.get('agent') or '-'):12} {str(e.get('tool_name') or '-'):10} "
-              f"{str(e.get('op', '')):7} {str(e.get('action', '')):7} {str(e.get('source', '')):5} {e.get('path', '')}")
+              f"{str(e.get('op', '')):7} {action:14} {str(e.get('source', '')):10} {e.get('path', '')}")
     return 0
+
+def cmd_watch(args):
+    """laya-guard watch: the OS monitor (macOS, optional). Adds what an agent's processes really opened to the file
+    activity log, from Apple's eslogger."""
+    return osmonitor.watch(matches=args.match, reads=args.reads, ignore=args.ignore, to_stdout=args.stdout,
+                           seed=not args.no_seed)
 
 def cmd_serve(args):
     from .server import run
@@ -412,6 +419,25 @@ def main(argv=None):
     ac.add_argument("--last", type=int, default=20, help="how many of the latest events to show (default 20)")
     ac.add_argument("--json", action="store_true", help="print the state and events as JSON")
     ac.set_defaults(fn=cmd_activity)
+    w = sub.add_parser("watch", help="(macOS, optional) record the files an agent's processes really open, as the OS sees them",
+                       description="Reads Apple's eslogger output and adds the files an agent's own processes open, create, "
+                                   "delete or rename to the file activity log (source os-monitor). It sees what scripts and "
+                                   "child processes do, which the hooks can't, but it only reports: nothing is blocked. On a "
+                                   f"terminal it starts `sudo eslogger` itself; or pipe it in: {osmonitor.PIPE_COMMAND}. Needs sudo and Full "
+                                   "Disk Access for the terminal app. Turn the log on first: laya-guard activity on.")
+    w.add_argument("--match", action="append", default=[], metavar="PROGRAM[=AGENT]",
+                   help="also treat a program with this name as an agent (repeat for more); built in: claude, codex, "
+                        "cursor-agent, gemini, qwen, copilot, cline, opencode, kilo, amp")
+    w.add_argument("--reads", choices=("protected", "outside", "all"), default="outside",
+                   help="which reads to keep: protected (only protected paths), outside (default: those plus files in your own "
+                        "folders outside the project), all (every file the agent's processes read: very large). Writes, "
+                        "deletes and renames are always kept")
+    w.add_argument("--ignore", action="append", default=[], metavar="GLOB",
+                   help="don't record paths matching this glob (repeat for more; written like protect.yaml's, e.g. "
+                        "'~/.claude/**'). A path a protected-path rule names is still recorded")
+    w.add_argument("--stdout", action="store_true", help="print the events as JSON lines instead of recording them")
+    w.add_argument("--no-seed", action="store_true", help="don't look for agents that are already running (from ps)")
+    w.set_defaults(fn=cmd_watch)
     s = sub.add_parser("serve"); s.add_argument("--host", default="127.0.0.1"); s.add_argument("--port", type=int, default=8787)
     s.add_argument("--no-warmup", action="store_true", help="skip loading the model before listening"); s.set_defaults(fn=cmd_serve)
     t = sub.add_parser("stats"); t.add_argument("--path", default=None); t.add_argument("--json", action="store_true"); t.set_defaults(fn=cmd_stats)
