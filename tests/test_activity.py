@@ -14,7 +14,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 from laya_guard import activity, cli, server  # noqa: E402
-from laya_guard.activity import shell_accesses  # noqa: E402
+from laya_guard.shellpaths import shell_accesses  # noqa: E402
 from laya_guard.guard import Verdict  # noqa: E402
 
 
