@@ -103,6 +103,25 @@ Aider, Roo Code, Continue and Junie have no hook mechanism, so there is no adapt
 what's left for you to do, and how to call the guard from your own agent loop over HTTP:
 **[Agents guide](docs/guide/agents.md)**.
 
+## 🔐 Files: protect, record, review
+
+The hooks judge commands out of the box. Four opt-in pieces cover files:
+
+```bash
+laya-guard install claude-code --files   # also check Claude Code's file tools (Read, Edit, Write, …) against protected paths
+laya-guard activity on                   # record the files your agents' tool calls name (paths only, never contents)
+laya-guard watch                         # macOS: add what the agents' own processes really opened (needs sudo)
+laya-guard footprint --suggest           # per project: what was touched, and protect.yaml entries worth a look
+```
+
+* **Protected paths.** Reading a credential store, a `.env*` file or a private key is reviewed, changing a credential
+  store is blocked, and writes to shell startup files, `.git/hooks` and the agent's own settings are reviewed. Add your
+  own rules in `~/.config/laya-guard/protect.yaml`. File tools are guarded for Claude Code so far.
+* **What it sees.** The hooks see the paths a tool call names. A file read inside a script or a child process reaches
+  only `watch`, which records it but can't block it.
+
+More in the **[Files guide](docs/guide/file-protection.md)**.
+
 ## 📸 Screenshots
 
 | | |

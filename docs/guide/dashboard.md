@@ -22,7 +22,9 @@ with a click. The screenshots use made-up data.
 
 - **Overview**: how many calls were judged and how they split, a tape with one fine line per call (blocks stand tall
   and red; click one to open that call), and cards for what needs a look: an outline and a count when there are blocks or
-  reviews, and one card per agent that isn't protected yet.
+  reviews, and one card per agent that isn't protected yet. With the [file activity log](file-protection.md#see-which-files-your-agents-touched-opt-in)
+  on, a File footprint card shows what each project touched (click a project for the detail); while the log is off and
+  empty it shows only a hint.
 - **Agents**: it finds the coding agents on this machine by itself (an executable on `PATH`, an app bundle or a config
   directory; read-only, it never opens those files) and shows whether each one has the hook. **Install hook** opens a
   sheet with the exact diff. Nothing is written until you press **Apply change**; then the file is backed up, written

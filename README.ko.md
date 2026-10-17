@@ -102,6 +102,25 @@ Aider, Roo Code, Continue, Junie는 훅 메커니즘이 없어 어댑터가 없�
 무엇인지, 직접 만든 에이전트 루프에서 HTTP로 가드를 부르는 방법은 **[에이전트 가이드](docs/ko/guide/agents.md)**에
 있습니다.
 
+## 🔐 파일: 보호, 기록, 검토
+
+훅은 기본으로 명령을 판정합니다. 파일은 직접 켜는 네 가지가 맡습니다:
+
+```bash
+laya-guard install claude-code --files   # Claude Code의 파일 도구(Read, Edit, Write 등)도 보호 경로와 대조
+laya-guard activity on                   # 에이전트의 도구 호출이 지목한 파일 기록 (경로만, 내용은 절대 아님)
+laya-guard watch                         # macOS: 에이전트 프로세스가 실제로 연 파일까지 추가 (sudo 필요)
+laya-guard footprint --suggest           # 프로젝트별로 무엇을 건드렸는지, 살펴볼 만한 protect.yaml 항목
+```
+
+* **보호 경로.** 자격 증명 저장소, `.env*` 파일, 개인 키를 읽으면 검토, 자격 증명 저장소를 바꾸면 차단, 셸 시작 파일,
+  `.git/hooks`, 에이전트 자신의 설정에 쓰면 검토입니다. 내 규칙은 `~/.config/laya-guard/protect.yaml`에 추가합니다.
+  파일 도구 보호는 지금은 Claude Code만 지원합니다.
+* **보는 범위.** 훅은 도구 호출이 지목한 경로만 봅니다. 스크립트나 자식 프로세스 안에서 읽는 파일은 `watch`에만 닿고,
+  `watch`는 기록할 뿐 막지 못합니다.
+
+자세히는 **[파일 가이드](docs/ko/guide/file-protection.md)**에 있습니다.
+
 ## 📸 스크린샷
 
 | | |
