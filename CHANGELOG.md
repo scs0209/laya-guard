@@ -5,6 +5,14 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-17
+
+laya-guard now looks at files, not only commands. With `install claude-code --files`, Claude Code's file tools are
+judged against protected paths (credential stores, `.env*`, private keys, shell startup files, `.git/hooks`). An opt-in
+log records which files every supported agent's tool calls named, an optional macOS monitor adds what the agents'
+processes really opened, and `laya-guard footprint` sums it up per project and suggests paths to protect. The verdict
+log field `via` is renamed `verdict_source`.
+
 ### Added
 
 - **`POST /guard` accepts an optional `tool_name`** (`Bash`, `Edit`, an MCP tool, …). It is logged in clear as
@@ -454,7 +462,8 @@ a verdict.
   Claude Code PreToolUse hook, local redacted telemetry, Korean 30-case eval,
   AgentDojo judge-level eval, E2E rollout harness.
 
-[Unreleased]: https://github.com/scs0209/laya-guard/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/scs0209/laya-guard/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/scs0209/laya-guard/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/scs0209/laya-guard/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/scs0209/laya-guard/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/scs0209/laya-guard/compare/v0.2.6...v0.3.0
