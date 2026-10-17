@@ -116,9 +116,10 @@ laya-guard footprint --suggest           # per project: what was touched, and pr
 
 * **Protected paths.** Reading a credential store, a `.env*` file or a private key is reviewed, changing a credential
   store is blocked, and writes to shell startup files, `.git/hooks` and the agent's own settings are reviewed. Add your
-  own rules in `~/.config/laya-guard/protect.yaml`. File tools are guarded for Claude Code so far.
-* **What it sees.** The hooks see the paths a tool call names. A file read inside a script or a child process reaches
-  only `watch`, which records it but can't block it.
+  own rules in `~/.config/laya-guard/protect.yaml`. File tools are guarded for Claude Code so far; shell commands are
+  held to the same rules in every agent.
+* **What it sees.** The hooks see the paths a tool call or a command's text names, including one inside `python -c`
+  code. A path a script only builds while it runs reaches only `watch`, which records it but can't block it.
 
 More in the **[Files guide](docs/guide/file-protection.md)**.
 
@@ -249,8 +250,9 @@ rest goes to you, or is blocked by agents that can't ask. `LAYA_GUARD_FAIL=close
 
 <details><summary><b>Can it stop a script from reading my secrets?</b></summary>
 
-Not on its own. The hooks see the command and the paths a tool call names, so a file read inside a script or a child
-process never reaches them. On macOS, `laya-guard watch` records those reads from the OS, but it only reports.
+Partly. A protected path written in the command, even inside `python -c` code, is reviewed or blocked. A file a script
+or a child process opens by a path it builds while running never reaches the hooks. On macOS, `laya-guard watch`
+records those reads from the OS, but it only reports.
 [Files guide](docs/guide/file-protection.md)
 </details>
 

@@ -1,11 +1,12 @@
-"""Protected paths: rules for the files an agent touches with its own file tools.
+"""Protected paths: rules for the files an agent touches, with its own file tools or in a shell command.
 
 The hook that guards Claude Code's file tools (Read, Edit, Write, ...) tells the server which paths a call names. A
 rule turns a path and an operation into review or block, before the access happens. It is a rule lane, like the regex
 policies: no model is involved, and the path itself is never logged (the log keeps hashes and lengths).
 
-This sees declared access only: the path a tool call names. A file read inside a shell command, a script or a child
-process never reaches it.
+A shell command is held to the same rules by the paths its text names (judge_shell): the files its commands plainly
+read or change, and any path-like string elsewhere in it, like the code of `python -c`. A path a script or a child
+process only builds at run time never reaches this.
 """
 from __future__ import annotations
 
@@ -18,7 +19,8 @@ from pathlib import Path
 
 import yaml
 
-from .guard import Verdict, is_mock
+from .guard import MAX_INPUT_CHARS, Verdict, is_mock
+from .shellpaths import path_literals, shell_accesses_in
 
 log = logging.getLogger("laya_guard")
 
@@ -33,6 +35,7 @@ _RISK = {"review": 0.55, "block": 0.92}  # the fixed values the regex short-circ
 _RANK = {"review": 1, "block": 2}
 MAX_PATHS = 50
 MAX_PATH_LEN = 4096
+MAX_SHELL_PATHS = 200     # path-like strings in one shell command; a long command names many that are no file at all
 
 
 @dataclass(frozen=True)
@@ -288,3 +291,32 @@ def judge_file_call(tool_name: str | None, paths, cwd: str | None = None, access
     return judge_accesses(pairs, cwd) or Verdict(
         action="allow", risk=0.0, policy_id="general", reason="File tool call: no protected path matched",
         mock=is_mock(), verdict_source="allowlist")
+
+
+def judge_shell(command: str | None, cwd: str | None = None, rules: list[Rule] | None = None) -> Verdict | None:
+    """The protected-path verdict for a shell command, or None when its text names no protected path. It only ever adds
+    to what the judge says about the command (see stricter): a command naming nothing protected is not allowed here.
+
+    The files its commands plainly read or change count with what is done to them, a relative path following a plain
+    `cd`. Any other path-like string (in the code of `python -c`, an option's value, a quoted word) counts as a read:
+    what the program does with it is unknown, and a write rule is not applied on a guess. A command with more
+    path-like strings than MAX_SHELL_PATHS is reviewed, since the one past the cap could be the protected one."""
+    if not isinstance(command, str) or not command.strip() or len(command) > MAX_INPUT_CHARS:
+        return None                                                  # an oversized command is blocked by the judge
+    accesses = shell_accesses_in(command, cwd) + [("read", p) for p in path_literals(command, MAX_PATH_LEN)]
+    accesses = list(dict.fromkeys(accesses))
+    if len(accesses) > MAX_SHELL_PATHS:
+        return _limit_verdict()
+    return judge_accesses(accesses, cwd, rules)
+
+
+_ACTION_RANK = {"allow": 0, "review": 1, "block": 2}
+
+
+def stricter(verdict: Verdict, other: Verdict | None) -> Verdict:
+    """Whichever of two verdicts is stricter: the action first, then the risk. On a tie the first one stands."""
+    if other is None:
+        return verdict
+    if (_ACTION_RANK[other.action], other.risk) > (_ACTION_RANK[verdict.action], verdict.risk):
+        return other
+    return verdict

@@ -28,8 +28,11 @@ def _judge_and_log(text: str, source: str, cwd: str | None = None, tool_name: st
                    command: str | None = None):
     t0 = time.perf_counter()
     # A file tool call is judged by the paths it names alone (the protected paths: no model, no content);
-    # everything else goes through the judge as before.
-    v = fileaccess.judge_file_call(tool_name, paths, cwd, accesses) or judge(text, source=source, cwd=cwd)
+    # everything else goes through the judge, and a shell command is also held to the protected paths it names.
+    v = fileaccess.judge_file_call(tool_name, paths, cwd, accesses)
+    if v is None:
+        shell = command or (text if tool_name == "Bash" else None)
+        v = fileaccess.stricter(judge(text, source=source, cwd=cwd), fileaccess.judge_shell(shell, cwd))
     log_verdict(
         action=v.action, risk=v.risk, policy_id=v.policy_id, reason=v.reason,
         mock=v.mock, source=source,
@@ -50,7 +53,7 @@ class GuardReq(BaseModel):
     tool_name: str | None = None  # the agent's name for the tool (Bash, Edit, an MCP tool); logged, and tells a file tool from the rest
     paths: list[str] | None = None  # the files a file tool call names (never their content); with a file tool, only these are judged
     agent: str | None = None  # which agent is calling (claude-code, ...); only used to label the opt-in file activity log
-    command: str | None = None  # the bare shell command, when this call is one and tool_call wraps it; read for the activity log only
+    command: str | None = None  # the bare shell command, when this call is one and tool_call wraps it; held to the protected paths and read for the activity log
     accesses: list[dict] | None = None  # what the call touches, as the adapter reads it: [{"op": read|write|delete, "path": ...}]; judged like paths
 
 class GuardRes(BaseModel):

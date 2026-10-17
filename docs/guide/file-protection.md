@@ -38,8 +38,19 @@ verdict log (the log keeps the tool name, a hash and a length). Try one without 
 `laya-guard check --offline --tool-name Read --path ~/.ssh/id_rsa x`. With the server down, the offline check applies the
 same rules, and a file call that matches none is allowed instead of asked about.
 
-This sees the **path a tool call names, nothing more**: a file read inside a shell command, a script or a child process
-never reaches it. The shell is still judged as before, with its own sensitive-path checks.
+### Shell commands
+
+Every agent's shell commands are held to the same rules, by the paths their text names, online and offline. The files a
+command plainly reads or changes (`cat`, `grep`, `source`, `<`, `rm`, `mv`, `cp`'s target, `>`, …) count with what is
+done to them, and a relative path follows a plain `cd`, so `cd /etc && cat shadow` is a read of `/etc/shadow`. Any other
+path-like string in the command, like the code in `python -c "open('/home/me/.ssh/id_rsa')"`, counts as a read: what
+the program does with it is unknown, so a write rule is not applied on a guess. This only ever makes a verdict stricter:
+the command is still judged by the regexes and the model, and the stricter answer wins. A command with more than 200
+path-like strings is reviewed. Try it: `laya-guard check --offline --shell "cd /etc && cat shadow"`.
+
+A path a script or a child process only builds while it runs (`open(os.environ["KEY_FILE"])`, a file read by a build
+tool) never reaches the hooks; on macOS the [OS monitor](#see-what-the-os-saw-not-just-what-the-agent-said-macos-optional)
+records it. A `cd` that can't be read off the text (`cd -`, `cd $DIR`, `pushd`) isn't followed.
 
 ## See which files your agents touched (opt-in)
 
