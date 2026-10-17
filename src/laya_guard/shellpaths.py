@@ -189,13 +189,9 @@ def shell_accesses(command: str) -> list[tuple[str, str]]:
     return [(op, path) for op, path, _ in shell_accesses_moved(command)]
 
 
-def shell_accesses_moved(command: str) -> list[tuple[str, str, bool]]:
-    """(op, path, moved) for each path a Bash command plainly names. `moved` is True when a cd, pushd or popd came
-    before it, so a relative path no longer starts from the call's working directory."""
-    if not isinstance(command, str) or not command.strip() or len(command) > MAX_COMMAND_CHARS:
-        return []
-    found: list[tuple[str, str, bool]] = []
-    moved = False
+def _parsed(command: str):
+    """(args, accesses) for each command in the text, in the order they run: the words without redirections, and the
+    (op, path) pairs the command and its redirections name."""
     for line in command.splitlines():
         try:
             tokens = _tokens(line)
@@ -203,12 +199,79 @@ def shell_accesses_moved(command: str) -> list[tuple[str, str, bool]]:
             continue
         for segment in _segments(tokens):
             args, redirected = _redirects(segment)
-            found += [(op, path, moved) for op, path in _command_accesses(args) + redirected]   # in the order the command reads
-            if args and os.path.basename(args[0]) in _MOVES:
-                moved = True
+            yield args, _command_accesses(args) + redirected
         if "<<" in tokens:                                           # what follows is the heredoc body, not commands
             break
+
+
+def _moves(args: list[str]) -> bool:
+    return bool(args) and os.path.basename(args[0]) in _MOVES
+
+
+def shell_accesses_moved(command: str) -> list[tuple[str, str, bool]]:
+    """(op, path, moved) for each path a Bash command plainly names. `moved` is True when a cd, pushd or popd came
+    before it, so a relative path no longer starts from the call's working directory."""
+    if not isinstance(command, str) or not command.strip() or len(command) > MAX_COMMAND_CHARS:
+        return []
+    found: list[tuple[str, str, bool]] = []
+    moved = False
+    for args, accesses in _parsed(command):
+        found += [(op, path, moved) for op, path in accesses]
+        moved = moved or _moves(args)
     seen: dict[tuple[str, str], bool] = {}
     for op, path, m in found:
         seen.setdefault((op, path), m)
     return [(op, path, m) for (op, path), m in seen.items()]
+
+
+def _after_move(args: list[str], here: str | None) -> str | None:
+    """The directory a cd leaves the shell in, or None when that can't be read off the text (cd -, cd $X, pushd, popd)."""
+    if args[0] != "cd":
+        return None
+    rest = [a for a in args[1:] if a not in ("-L", "-P", "--")]
+    if not rest:
+        return os.path.expanduser("~")
+    if len(rest) > 1 or rest[0] == "-" or not _literal(rest[0]):
+        return None
+    target = os.path.expanduser(rest[0])
+    if os.path.isabs(target):
+        return os.path.normpath(target)
+    return os.path.normpath(os.path.join(here, target)) if here else None
+
+
+def shell_accesses_in(command: str, cwd: str | None) -> list[tuple[str, str]]:
+    """(op, path) for each path a shell command plainly names, a relative path made absolute against the directory it
+    is used in: the call's cwd, or where a plain `cd DIR` before it went. After a cd that can't be followed, or with no
+    cwd, a relative path stays as written. Unlike shell_accesses_moved there is no length cap: this is for judging,
+    where a path past a cap would go unchecked."""
+    if not isinstance(command, str) or not command.strip():
+        return []
+    here = cwd if cwd and os.path.isabs(cwd) else None
+    found: list[tuple[str, str]] = []
+    for args, accesses in _parsed(command):
+        for op, path in accesses:
+            p = os.path.expanduser(path)
+            if not os.path.isabs(p) and here:
+                p = os.path.normpath(os.path.join(here, p))
+            found.append((op, p if os.path.isabs(p) else path))
+        if _moves(args):
+            here = _after_move(args, here)
+    return list(dict.fromkeys(found))
+
+
+# Paths inside other text, like the code of `python -c "open('/home/me/.ssh/id_rsa')"`: an absolute or ~ path that
+# starts a word or follows a quote, bracket, `=` or comma, and any quoted string without spaces (a relative path in
+# code). A URL's `//` follows a colon, which is not in the list.
+_HOME_VAR = re.compile(r"\$(?:\{HOME\}|HOME\b)")
+_PATH_IN_TEXT = re.compile(r"""(?:^|(?<=[\s'"`(\[{=,]))(~?/[^\s'"`;|&<>(){}\[\],]+)""")
+_QUOTED = re.compile(r"""(['"])([^\s'"]+)\1""")
+
+
+def path_literals(command: str, max_len: int = 4096) -> list[str]:
+    """Every string in a command that may name a file, wherever it sits, as written. What is done to it is unknown, so
+    the caller decides what that means. $HOME and ${HOME} read as ~."""
+    if not isinstance(command, str):
+        return []
+    text = _HOME_VAR.sub("~", command)
+    found = [m.group(1) for m in _PATH_IN_TEXT.finditer(text)] + [m.group(2) for m in _QUOTED.finditer(text)]
+    return list(dict.fromkeys(p for p in found if len(p) <= max_len))
