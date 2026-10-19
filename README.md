@@ -187,6 +187,7 @@ Deep dive: [Under the hood](docs/guide/how-it-works.md).
 |---|---|
 | [Agents](docs/guide/agents.md) | Per-agent install, what each one writes, guarding any agent loop over HTTP, batch audits |
 | [Files](docs/guide/file-protection.md) | Protected paths, the file activity log, the macOS OS monitor, `laya-guard footprint` |
+| [OS sandbox](docs/guide/sandbox.md) | `laya-guard sandbox <agent>`: the protected paths in Claude Code's, Codex's, Copilot's, Gemini's and Qwen's own sandbox; `laya-guard run` for the rest |
 | [Dashboard](docs/guide/dashboard.md) | The local dashboard, the pipeline simulation, AI scenarios |
 | [Under the hood](docs/guide/how-it-works.md) | The pipeline, the 12 policies, long input, benchmarks, comparison with other guardrails |
 | [Real incidents](docs/guide/incidents.md) | Seven reported AI coding agent incidents replayed: what was held, what was missed and why |
