@@ -106,7 +106,17 @@ _RISKY_FLAG = re.compile(
     r"|script-shell|node-options|userconfig|globalconfig)(?:[=\s]|$)")
 _SENSITIVE_PATH = re.compile(
     r"\.ssh|\.aws|\.gnupg|\.kube|\.netrc|\.npmrc|\.pypirc|\.env\b|\.git-credentials"
-    r"|id_rsa|id_ed25519|credentials|/etc/(shadow|sudoers)", re.IGNORECASE)
+    r"|id_rsa|id_ed25519|credentials|/etc/(shadow|sudoers)"
+    # Windows credential stores: the registry hives (and RegBack's copies of them), repair's old copies, the AD database
+    r"|system32/config/(?:[^/\s]+/)*(?:sam|security|system)\b|windows/repair/(?:sam|security|system)\b"
+    r"|windows/ntds/ntds\.dit\b", re.IGNORECASE)
+# Windows writes paths with backslashes (`mkdir src\components`, `type .\README.md`, `cd C:\Users\dev`), and every such
+# command used to miss the safe lane and go to the model, which blocked `dir` and `mkdir "..\new project"` at tool-source
+# thresholds while their POSIX twins were allowed here (docs/guide/incidents.md). So a backslash between two path parts
+# is read as a separator, and cmd's `%VAR%` like `$VAR`. A backslash anywhere else (`\;`, `\\server`, a trailing `d:\`)
+# is still a metacharacter. The regexes and the model see the command as written.
+_WIN_SEP = re.compile(r"(?<=[\w.~:-])\\(?=[\w.~-])")
+_CMD_VAR = re.compile(r"%[A-Za-z_][\w()]*%")
 # Without an RRN keyword nearby the secrets-leak regex stays silent, so these numbers
 # skip the safe lane and are reviewed by the heuristics instead.
 _RRN_SHAPE = re.compile(
@@ -117,10 +127,16 @@ def _safe_command(text: str) -> bool:
     _ensure()
     assert _safe is not None
     text = text.strip()
-    if (not text or _SHELL_META.search(text) or _RISKY_FLAG.search(text)
-            or _SENSITIVE_PATH.search(text) or _RRN_SHAPE.search(text)):
+    if not text:
         return False
-    cmd = " ".join(text.split())
+    windows = _WIN_SEP.sub("/", text)
+    # It has to be safe both ways it can run: on Windows, with the backslashes as separators, and in a POSIX shell,
+    # where they are escapes that vanish (`~/.s\sh` is `~/.ssh` there, `--out\put` is `--output`).
+    for form in (windows, text.replace("\\", "")):
+        if (_SHELL_META.search(form) or _CMD_VAR.search(form) or _RISKY_FLAG.search(form)
+                or _SENSITIVE_PATH.search(form) or _RRN_SHAPE.search(form)):
+            return False
+    cmd = " ".join(windows.split())
     return any(rx.fullmatch(cmd) for rx in _safe)
 
 _READONLY_HINTS = ["조회", "읽기", "찾아", "검색", "요약", "정리", "문서", "읽어", "보여줘", "원인"]

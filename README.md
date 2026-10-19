@@ -146,12 +146,14 @@ command it proposes is judged by the real evaluator. Nothing is run. The screens
 | AgentDojo v1, attacks (judge-level) | **25/27 blocked** | `eval/run_agentdojo.py` |
 | AgentDojo v1, benign (judge-level) | **92/97 kept** (allow+review) | `eval/run_agentdojo.py` |
 | E2E rollout (qwen2.5:7b agent + guard) | **4/4 scenarios** (1 defended, 2 not attempted, 1 benign OK) | `eval/run_rollout.py` |
+| Real incident replays (7 publicly reported incidents) | **13/13 held** (12/13 on 0.5.1; the miss, a delete inside a GraphQL call, got a rule) | `eval/run_incidents.py` |
 | Shell commands (own set: 35 everyday + 36 dangerous/bypass) | **69/71** (real model) | `eval/run_eval.py --set shell` |
 | Korean 30 (own set) | **30/30** (mock **and** real) | `eval/run_eval.py` |
 
 The two in-house sets were written alongside the rules they test, so treat them as regression gates, not accuracy
 claims. AgentDojo is the external number, and it is self-reported and judge-level. The misses and what's behind each
-number: [Benchmarks in detail](docs/guide/how-it-works.md#benchmarks-reproducible-not-cherry-picked).
+number: [Benchmarks in detail](docs/guide/how-it-works.md#benchmarks-reproducible-not-cherry-picked). Each replayed
+incident, with sources and whether that agent would actually have been stopped: [Real incidents](docs/guide/incidents.md).
 
 ## 🧠 How it works
 
@@ -171,7 +173,8 @@ agent tool_call
 * **Rules first.** Twelve regex policies in [policy.yaml](src/laya_guard/policy.yaml) catch known patterns without
   calling the model. Edit them or add your own, no code changes needed.
 * **A safe-command lane.** A single plain command with no shell metacharacters, risky flags or sensitive paths is
-  allowed instantly. For `npm test` and the like, the package.json script it would really run is regex-checked first.
+  allowed instantly, Windows paths and cmd/PowerShell equivalents included. For `npm test` and the like, the
+  package.json script it would really run is regex-checked first.
 * **Stricter for untrusted sources.** A call derived from tool output, an email or a web page gets lower thresholds,
   which is what stops indirect injections.
 * **Private by default.** The verdict log keeps the action, risk, policy, latency and a hash, never the command text.
@@ -186,6 +189,7 @@ Deep dive: [Under the hood](docs/guide/how-it-works.md).
 | [Files](docs/guide/file-protection.md) | Protected paths, the file activity log, the macOS OS monitor, `laya-guard footprint` |
 | [Dashboard](docs/guide/dashboard.md) | The local dashboard, the pipeline simulation, AI scenarios |
 | [Under the hood](docs/guide/how-it-works.md) | The pipeline, the 12 policies, long input, benchmarks, comparison with other guardrails |
+| [Real incidents](docs/guide/incidents.md) | Seven reported AI coding agent incidents replayed: what was held, what was missed and why |
 | [Server down](docs/guide/reliability.md) | The offline fallback, `LAYA_GUARD_FAIL`, running as a service, outage alerts |
 | [Reference](docs/guide/reference.md) | HTTP API, configuration, telemetry, the full list of limitations |
 

@@ -32,6 +32,14 @@ no program-running/file-writing flags (`-exec`, `--config`, `--output`…), and 
 sensitive paths (`.ssh`, `.aws`, `.env`…). Installs, `git push`, and `npx` always
 go to the model.
 
+Windows commands get the same lane: a backslash between two path parts is read as a
+path separator (`cd C:\work\api`, `type src\app.py`, `pytest tests\unit`), cmd's
+`%VAR%` counts like `$VAR`, and the list has the cmd.exe and PowerShell equivalents
+(`dir`, `type`, `findstr`, `where`, `md`, `cd /d`, `Get-ChildItem`, `Get-Content`,
+`Set-Location`, `Select-String`, `New-Item -ItemType Directory`). Because a POSIX shell
+reads the same backslash as an escape, the command must also be clean with the
+backslashes dropped: `cat ~/.s\sh/id_r\sa` still goes to the model.
+
 `npm test` is a safe command, but what it actually runs is `scripts.test` in
 package.json, which an agent (or an injection it read) can edit first. So when
 the adapter sends the command's directory (`cwd`, all 11 do), the guard reads the
@@ -77,7 +85,7 @@ the same as one model call, so a 6-window input takes a few seconds.
 | `remote-exec` | sketchy package indexes, remote scripts, local pipes into a shell, encoded PS | review |
 | `priv-escalation` | `sudo sh`, `chmod 777`, setuid, redirects into `/etc/` | review |
 | `persistence` | cron, services, shell-rc hooks, git `core.hooksPath`/`core.pager` | review |
-| `mass-delete` | `DROP TABLE`, `s3 rm --recursive`, `kubectl delete --all`, `git push --force`, `git reset --hard`, `git clean -f`, `git checkout -- .` | review |
+| `mass-delete` | `DROP TABLE`, `s3 rm --recursive`, `kubectl delete --all`, `git push --force`, `git reset --hard`, `git clean -f`, `git checkout -- .`, a delete inside an API request body (`mutation { volumeDelete(...) }`, `{"method": "deleteDatabase"}`) | review |
 | `auth-bypass` | auth/TLS disabling, password resets, KR+EN | block |
 | `credential-read` | reading private keys / cloud credentials (`cat ~/.ssh/id_rsa`, `cat ~/.aws/credentials`, …) | review |
 
@@ -90,6 +98,7 @@ All patterns live in [policy.yaml](../../src/laya_guard/policy.yaml) — edit, a
 | AgentDojo v1, attacks (judge-level) | **25/27 blocked** | `eval/run_agentdojo.py` |
 | AgentDojo v1, benign (judge-level) | **92/97 kept** (allow+review) | `eval/run_agentdojo.py` |
 | E2E rollout (qwen2.5:7b agent + guard) | **4/4 scenarios** (1 defended, 2 not attempted, 1 benign OK) | `eval/run_rollout.py` → [results](../../eval/rollout_results.md) |
+| Real incident replays (7 publicly reported incidents, 13 scored commands) | **13/13 held** (review or block; 12/13 on 0.5.1, where a `volumeDelete` GraphQL call was allowed until a rule was added for it) | `eval/run_incidents.py` → [write-up](incidents.md) |
 | Shell commands (own set: 35 everyday + 36 dangerous/bypass, 10 of them chains) | **69/71** (real, `source=user` and `tool`; the first 50 scored 32/50 and 29/50 before the safe-command lane) | `eval/run_eval.py --set shell` |
 | Korean 30 (own set) | **30/30** (mock **and** real) | `eval/run_eval.py` |
 

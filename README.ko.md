@@ -144,12 +144,14 @@ laya-guard footprint --suggest           # 프로젝트별로 무엇을 건드�
 | AgentDojo v1 공격 (심판 레벨) | **25/27 차단** | `eval/run_agentdojo.py` |
 | AgentDojo v1 정상 (심판 레벨) | **92/97 유지** (allow+review) | `eval/run_agentdojo.py` |
 | E2E 롤아웃 (qwen2.5:7b 에이전트 + 가드) | **4/4 시나리오** (1 방어, 2 미시도, 1 정상 OK) | `eval/run_rollout.py` |
+| 실제 사고 재현 (공개된 사고 7건) | **13/13 붙잡음** (0.5.1에선 12/13. 놓친 GraphQL 호출 안의 삭제에 규칙 추가) | `eval/run_incidents.py` |
 | 셸 명령 (자체: 일상 35 + 위험/우회 36) | **69/71** (실전 모델) | `eval/run_eval.py --set shell` |
 | 한국어 30문항 (자체) | **30/30** (MOCK·실전 모두) | `eval/run_eval.py` |
 
 두 자체 셋은 검증 대상 규칙과 함께 만들어졌으니 정확도 주장이 아니라 회귀 게이트로 봐주세요. 외부 기준 수치는
 AgentDojo이며, 자체 측정이고 심판 레벨입니다. 놓친 사례와 각 수치의 배경은
-[벤치마크 자세히](docs/ko/guide/how-it-works.md#벤치마크-재현-가능-좋은-것만-골라내지-않음)에 있습니다.
+[벤치마크 자세히](docs/ko/guide/how-it-works.md#벤치마크-재현-가능-좋은-것만-골라내지-않음)에 있습니다. 재현한 사고별
+출처와, 그 에이전트가 실제로 멈췄을지는 [실제 사고 재현](docs/ko/guide/incidents.md)에 있습니다.
 
 ## 🧠 동작 구조
 
@@ -168,8 +170,9 @@ AgentDojo이며, 자체 측정이고 심판 레벨입니다. 놓친 사례와 �
 
 * **규칙이 먼저.** [policy.yaml](src/laya_guard/policy.yaml)의 정규식 정책 12종이 모델을 부르지 않고 알려진 패턴을
   잡습니다. 코드 수정 없이 고치거나 추가할 수 있습니다.
-* **안전 명령 레인.** 셸 메타문자, 위험한 플래그, 민감 경로가 없는 단일 명령은 즉시 허용합니다. `npm test` 같은 명령은
-  실제로 실행될 package.json 스크립트를 먼저 정규식으로 검사합니다.
+* **안전 명령 레인.** 셸 메타문자, 위험한 플래그, 민감 경로가 없는 단일 명령은 즉시 허용합니다. Windows 경로와
+  cmd·PowerShell의 같은 명령도 포함됩니다. `npm test` 같은 명령은 실제로 실행될 package.json 스크립트를 먼저 정규식으로
+  검사합니다.
 * **믿을 수 없는 출처는 더 엄격하게.** 도구 결과, 이메일, 웹 페이지에서 나온 호출은 임계값이 낮아집니다. 간접 인젝션을
   막는 장치가 이것입니다.
 * **기본이 비공개.** 판정 로그에는 판정, 위험도, 정책, 지연 시간, 해시만 남고 명령 원문은 없습니다.
@@ -184,6 +187,7 @@ AgentDojo이며, 자체 측정이고 심판 레벨입니다. 놓친 사례와 �
 | [파일](docs/ko/guide/file-protection.md) | 보호 경로, 파일 활동 기록, macOS OS 모니터, `laya-guard footprint` |
 | [대시보드](docs/ko/guide/dashboard.md) | 로컬 대시보드, 파이프라인 시뮬레이션, AI 시나리오 |
 | [내부 구조](docs/ko/guide/how-it-works.md) | 파이프라인, 정책 12종, 긴 입력, 벤치마크, 다른 가드레일과의 비교 |
+| [실제 사고 재현](docs/ko/guide/incidents.md) | 공개된 AI 코딩 에이전트 사고 7건 재현: 붙잡은 것, 놓친 것과 그 이유 |
 | [서버 장애](docs/ko/guide/reliability.md) | 오프라인 대체 검사, `LAYA_GUARD_FAIL`, 서비스로 실행, 장애 알림 |
 | [레퍼런스](docs/ko/guide/reference.md) | HTTP API, 설정, 텔레메트리, 전체 한계 목록 |
 
