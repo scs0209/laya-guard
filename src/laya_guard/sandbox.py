@@ -152,16 +152,33 @@ def _state_key(agent: str, path: Path) -> str:
 
 
 def apply_plan(plan: SandboxPlan) -> list:
-    backups = [b for b in (write_artifact(a) for a in plan.artifacts if a.changed) if b]
+    """Write every changed file, then the record. If any write fails, the files already written go back to what they
+    were and the record is left as it was, so a half-applied change can't outlive its record."""
     state = _state()
     key = _state_key(plan.agent, plan.artifacts[0].path)
     if plan.state is None:
         state.pop(key, None)
     else:
         state[key] = plan.state
+    written, backups = [], []
     sp = state_path()
-    sp.parent.mkdir(parents=True, exist_ok=True)
-    sp.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    sp_before = sp.read_text(encoding="utf-8") if sp.is_file() else None
+    try:
+        for a in plan.artifacts:
+            if a.changed:
+                backup = write_artifact(a)
+                written.append(a)
+                if backup:
+                    backups.append(backup)
+        sp.parent.mkdir(parents=True, exist_ok=True)
+        write_artifact(Artifact(sp, sp_before, json.dumps(state, indent=2, ensure_ascii=False) + "\n"))
+    except BaseException:
+        for a in reversed(written):
+            try:
+                write_artifact(Artifact(a.path, a.after, a.before))
+            except OSError:
+                pass
+        raise
     return backups
 
 
@@ -211,6 +228,9 @@ def _json_plan(action: str, agent: str, settings: Settings, enable: tuple, lists
             node = _obj(node, p, path)
         prior = _state().get(key, {})
         enabled_by_us = prior.get("enabled_by_us", node.get(last) != enable[1])
+        # what the switch was before, so remove puts back an explicit "disabled"/false instead of dropping the key
+        had_prior = prior.get("had_prior", last in node)
+        prior_value = prior.get("prior_value", node.get(last))
         node[last] = enable[1]
         added = {".".join(k): list(prior.get("added", {}).get(".".join(k), [])) for k in lists}
         for keys, values in lists.items():
@@ -223,6 +243,7 @@ def _json_plan(action: str, agent: str, settings: Settings, enable: tuple, lists
                     target.append(v)
                     added[".".join(keys)].append(v)
         state = {"agent": agent, "file": str(path), "enabled_by_us": enabled_by_us, "added": added,
+                 "had_prior": had_prior, "prior_value": prior_value,
                  "created": prior.get("created", not settings.exists)}
     else:
         prior = _state().get(key)
@@ -241,7 +262,10 @@ def _json_plan(action: str, agent: str, settings: Settings, enable: tuple, lists
             for p in parents:
                 node = node.get(p) if isinstance(node, dict) else None
             if isinstance(node, dict):
-                node.pop(last, None)
+                if prior.get("had_prior"):
+                    node[last] = prior.get("prior_value")
+                else:
+                    node.pop(last, None)
         _prune(data)
         state = None
     before = settings.raw if settings.exists else None
@@ -531,7 +555,7 @@ DEFAULT_DOMAINS = (
 )
 
 
-def srt_settings(pol: Policy, home: Path, cwd: Path, allow_write=(), allow_domains=()) -> dict:
+def srt_settings(pol: Policy, home: Path, cwd: Path, allow_write=(), allow_domains=(), agent: str = "") -> dict:
     deny_read, deny_write = [], []
     for e in pol.entries:
         if e.kind == "anywhere":
@@ -541,8 +565,13 @@ def srt_settings(pol: Policy, home: Path, cwd: Path, allow_write=(), allow_domai
         if sys.platform != "darwin" and (e.glob or e.kind == "anywhere") and e.write and not e.read:
             continue                                # srt takes globs in write lists on macOS only
         (deny_read if e.read else deny_write).append(p)
+    # Not all of ~/.config: from there a process could rewrite laya-guard's own rules or drop a file that runs at
+    # every login (~/.config/autostart, ~/.config/systemd/user). Only the agent's own folder, and never laya-guard's.
+    name = Path(agent).name
+    own = [str(home / ".config" / name)] if name and name not in (".", "..", "laya-guard") else []
     writable = [str(cwd), tempfile.gettempdir(), "/tmp", str(home / ".cache"), str(home / ".local" / "share"),
-                str(home / ".local" / "state"), str(home / ".config"), *[str(Path(p).expanduser()) for p in allow_write]]
+                str(home / ".local" / "state"), *own, *[str(Path(p).expanduser()) for p in allow_write]]
+    deny_write.append(str(fileaccess.config_dir()))
     return {"network": {"allowedDomains": sorted(set(DEFAULT_DOMAINS) | set(allow_domains)), "deniedDomains": []},
             "filesystem": {"denyRead": deny_read, "allowRead": [], "allowWrite": writable,
                            "denyWrite": [p for p in deny_write if p not in deny_read] + deny_read},
@@ -562,7 +591,7 @@ def run(argv: list[str], allow_write=(), allow_domains=(), rules=None, home: Pat
     if not argv:
         raise InstallError("nothing to run: laya-guard run -- <agent> [args]")
     home, cwd = home or Path.home(), cwd or Path.cwd()
-    settings = srt_settings(policy(rules), home, cwd, allow_write, allow_domains)
+    settings = srt_settings(policy(rules), home, cwd, allow_write, allow_domains, agent=argv[0])
     fd, cfg = tempfile.mkstemp(prefix="laya-guard-srt-", suffix=".json")
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         json.dump(settings, fh, indent=2)

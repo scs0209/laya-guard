@@ -145,6 +145,34 @@ def test_cursor_turns_the_cli_sandbox_on_and_tolerates_trailing_commas(home):
     _write(plan)
     data = json.loads(path.read_text())
     assert data["sandbox"]["mode"] == "enabled" and data["approvalMode"] == "allowlist"
+    _write(_plan("remove", "cursor", home))
+    # the user's explicit "disabled" comes back; the key isn't dropped to the CLI's default (pointed out in review)
+    assert json.loads(path.read_text()) == {"approvalMode": "allowlist", "sandbox": {"mode": "disabled"}}
+
+
+def test_a_failed_write_puts_back_the_files_already_written(home, tmp_path, monkeypatch):
+    """Gemini writes three files; if a later one fails, the earlier ones go back and nothing is recorded."""
+    base = tmp_path / "sandbox-macos-permissive-open.sb"
+    base.write_text("(version 1)\n(allow default)\n")
+    monkeypatch.setenv("LAYA_GUARD_SEATBELT_BASE", str(base))
+    monkeypatch.setattr(sandbox.sys, "platform", "darwin")
+    project = tmp_path / "proj"
+    (project / ".gemini").mkdir(parents=True)
+    settings = project / ".gemini" / "settings.json"
+    settings.write_text('{"theme": "dark"}\n')
+    plan = _plan("apply", "gemini-cli", home, scope="project", project=project)
+    real = sandbox.write_artifact
+
+    def failing(artifact):
+        if artifact.path.name == ".env":
+            raise OSError("disk full")
+        return real(artifact)
+    monkeypatch.setattr(sandbox, "write_artifact", failing)
+    with pytest.raises(OSError):
+        sandbox.apply_plan(plan)
+    assert settings.read_text() == '{"theme": "dark"}\n'
+    assert not (project / ".gemini" / "sandbox-macos-laya-guard.sb").exists()
+    assert not sandbox.state_path().exists()
 
 
 # --- Gemini CLI / Qwen Code ------------------------------------------------------------------------------------------
@@ -203,6 +231,17 @@ def test_srt_settings_deny_the_protected_paths_and_keep_the_project_writable(hom
     assert str(home / ".bashrc") in s["filesystem"]["denyWrite"]
     assert "api.anthropic.com" in s["network"]["allowedDomains"] and "x.example" in s["network"]["allowedDomains"]
     assert "*" not in s["network"]["allowedDomains"] and s["allowPty"] is True
+
+
+def test_srt_never_lets_the_agent_write_laya_guards_config_or_all_of_dot_config(home, tmp_path):
+    """From ~/.config a process could rewrite protect.yaml or add a login autostart (pointed out in review)."""
+    s = sandbox.srt_settings(sandbox.policy(), home, tmp_path, agent="/opt/homebrew/bin/opencode")
+    fs = s["filesystem"]
+    assert str(home / ".config") not in fs["allowWrite"]
+    assert str(home / ".config" / "opencode") in fs["allowWrite"]
+    assert str(home / ".config" / "laya-guard") in fs["denyWrite"]
+    s = sandbox.srt_settings(sandbox.policy(), home, tmp_path, agent="laya-guard")
+    assert str(home / ".config" / "laya-guard") not in s["filesystem"]["allowWrite"]
 
 
 def test_run_says_how_to_get_srt(home, monkeypatch, capsys):
