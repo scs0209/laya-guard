@@ -117,7 +117,7 @@ Most guardrails scan **prompt text**. laya-guard sits one step later: it judges 
 | Verdict | allow / **review** / block + risk | allow / confirm / block | binary detected | valid + score | scores / thresholds |
 | Korean evaluation | ✅ 30-case set, 30/30 | ❌ none verified | ❌ | ❌ | ❌ |
 | AgentDojo numbers | ✅ 25/27, 92/97 (judge-level, self-reported) | ❌ none verified | ❌ | ❌ | ❌ |
-| Status | active, v0.5.0, MIT | MIT | ⚠️ archived May 2025 | ⚠️ archived, unmaintained | alpha, Apache-2.0 |
+| Status | active, v0.5.1, MIT | MIT | ⚠️ archived May 2025 | ⚠️ archived, unmaintained | alpha, Apache-2.0 |
 
 No verified third-party AgentDojo score exists for any tool in this table —
 ours is self-reported and judge-level (see [Limitations](reference.md#limitations-read-before-trusting-it)).
