@@ -1,17 +1,20 @@
 # laya-guard: protected paths
-# Rules for the files an agent touches with its own file tools (Claude Code's Read, Edit, Write, ...).
+# Rules for the files an agent touches with its own file tools (Claude Code's Read, Edit, Write, ...) or names in a
+# shell command.
 # Your own rules in ~/.config/laya-guard/protect.yaml are added to these; the stricter answer wins.
 #
 #   path:    a glob. ~ is your home directory. A relative glob is relative to the directory the agent runs in, so it
 #            applies in every project; write an absolute path to limit a rule to one. A glob that starts with **/
 #            matches at any depth. `dir/**` matches dir itself and everything below it.
 #   ops:     read and/or write (default: both). read is Read, Glob, Grep; write is Edit, MultiEdit, Write, NotebookEdit.
+#            In a shell command, cat, grep, source, `<` ... read; rm, mv, cp's target, `>` ... write. Any other path in
+#            it (the code of `python -c`, an option's value) counts as a read.
 #   action:  review (a human is asked) or block (default: review).
 #   reason:  shown with the verdict; never put a file name in it, it is written to the verdict log.
 #   except:  globs that are not protected by this rule even though `path` matches.
 #
-# This sees the path a tool call names. A file read inside a shell command, a script or a child process never
-# reaches it.
+# This sees the paths a tool call or a command's text names. A path a script or a child process only builds while it
+# runs never reaches it.
 version: 1
 protect:
   # Credential stores: ask before an agent reads one, refuse to let it change one.
@@ -33,6 +36,8 @@ protect:
   - {path: "~/.pypirc",              ops: [write], action: block,  reason: "package registry tokens"}
   - {path: "~/.git-credentials",     ops: [read],  action: review, reason: "stored git logins"}
   - {path: "~/.git-credentials",     ops: [write], action: block,  reason: "stored git logins"}
+  - {path: "/etc/shadow",            ops: [read],  action: review, reason: "system password hashes"}
+  - {path: "/etc/shadow",            ops: [write], action: block,  reason: "system password hashes"}
   # Environment files and private keys can sit in any project.
   - path: "**/.env"
     action: review
