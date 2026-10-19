@@ -14,6 +14,15 @@ All notable changes to this project are documented here. Versions follow
   of the 13 scored commands; the miss got the rule below, and with it all 13 are held. It also showed Windows commands
   being overblocked (fixed below). Per incident, with sources and whether that agent would actually have been stopped:
   [docs/guide/incidents.md](docs/guide/incidents.md).
+- **`laya-guard sandbox <agent>`: the protected paths in the agent's own OS sandbox.** The hook only sees a
+  command's text; a script or child process reading `~/.ssh` gets past it, and the agents' sandboxes stop writes but
+  leave reads open by default. This turns the sandbox on and denies the protected paths: Claude Code
+  (`sandbox.filesystem.denyRead`/`denyWrite`), Codex (a permissions profile), Copilot CLI (`deniedPaths`), Gemini CLI
+  and Qwen Code (a Seatbelt profile per project, macOS), and Cursor (sandbox on; it can't deny reads). It shows the
+  change first, backs up the file, lists what that sandbox can't take (left to the hook), and `--remove` takes out
+  exactly what it added. Checked on macOS with Claude Code 2.1.280 (a real session), Codex 0.163.0, Gemini CLI 0.20.0
+  and Qwen Code 0.25.2. `laya-guard run -- <agent>` runs an agent with no sandbox of its own (OpenCode, Amp, ...)
+  inside Anthropic's sandbox-runtime (`srt`). [docs/guide/sandbox.md](docs/guide/sandbox.md).
 
 ### Fixed
 
@@ -30,6 +39,10 @@ All notable changes to this project are documented here. Versions follow
 
 ### Security
 
+- **A write to laya-guard's own rules is reviewed.** `~/.config/laya-guard/**` (your `protect.yaml`, the sandbox
+  record) joins the default protected paths, write only, like the agent's own settings and hooks: an agent told to
+  delete a rule would otherwise switch the protection off from then on. You edit the file as before. It also goes
+  into every sandbox `laya-guard sandbox` sets up, and `laya-guard run` denies writing there outright.
 - **A delete inside an API request body is reviewed.** PocketOS lost its production database to one curl call carrying
   a GraphQL `mutation { volumeDelete(...) }`, which the model scored 0.00, while `curl -X DELETE` to the same kind of
   resource was blocked. `mass-delete` now also matches a GraphQL mutation field that deletes and is called with

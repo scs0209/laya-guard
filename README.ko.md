@@ -185,6 +185,7 @@ AgentDojo이며, 자체 측정이고 심판 레벨입니다. 놓친 사례와 �
 |---|---|
 | [에이전트](docs/ko/guide/agents.md) | 에이전트별 설치, 각각 무엇을 쓰는지, HTTP로 아무 에이전트 루프 가드, 명령 묶음 감사 |
 | [파일](docs/ko/guide/file-protection.md) | 보호 경로, 파일 활동 기록, macOS OS 모니터, `laya-guard footprint` |
+| [OS 샌드박스](docs/ko/guide/sandbox.md) | `laya-guard sandbox <에이전트>`: Claude Code·Codex·Copilot·Gemini·Qwen 자체 샌드박스에 보호 경로 적용, 나머지는 `laya-guard run` |
 | [대시보드](docs/ko/guide/dashboard.md) | 로컬 대시보드, 파이프라인 시뮬레이션, AI 시나리오 |
 | [내부 구조](docs/ko/guide/how-it-works.md) | 파이프라인, 정책 12종, 긴 입력, 벤치마크, 다른 가드레일과의 비교 |
 | [실제 사고 재현](docs/ko/guide/incidents.md) | 공개된 AI 코딩 에이전트 사고 7건 재현: 붙잡은 것, 놓친 것과 그 이유 |

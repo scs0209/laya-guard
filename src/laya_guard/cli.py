@@ -305,6 +305,50 @@ def cmd_install(args):
         return 1
     return 0
 
+def cmd_sandbox(args):
+    """Turn an agent's own OS sandbox on, denying the protected paths (shows the change first)."""
+    from pathlib import Path
+    from . import sandbox as sbx
+    if args.list or not args.agent:
+        print("Agents whose own sandbox laya-guard can configure (`laya-guard sandbox <agent>`):")
+        rows = [("claude-code", "user, project, local", "denies reading and writing the protected paths"),
+                ("codex", "user, project", "a permissions profile: protected paths \"deny\""),
+                ("copilot-cli", "user", "deniedPaths / readonlyPaths (existing paths, no globs)"),
+                ("gemini-cli", "project", "a Seatbelt profile (macOS) in .gemini/"),
+                ("qwen-code", "project", "a Seatbelt profile (macOS) in .qwen/"),
+                ("cursor", "user", "turns cursor-agent's sandbox on; reads stay with the hook")]
+        for agent, scopes, what in rows:
+            print(f"  {agent:<12} {scopes:<22} {what}")
+        print("\nAn agent with no sandbox of its own, run in a terminal (opencode, amp, kilo, ...):\n"
+              "  laya-guard run -- <agent> [args]      (needs Anthropic's sandbox-runtime, `srt`)\n"
+              "Agents inside an IDE (Windsurf, Cline, ...) can't be wrapped; the hook stays their guard.")
+        return 0
+    try:
+        agent = sbx.agent_id(args.agent)
+        scope = args.scope or ("project" if agent in ("gemini-cli", "qwen-code") else "user")
+        plan = sbx.make_plan("remove" if args.remove else "apply", agent, scope, Path.home(),
+                             Path(args.project_dir).resolve())
+    except InstallError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    what = "Removing laya-guard's sandbox settings for" if args.remove else "Turning on the sandbox of"
+    print(f"{what} {plan.agent}:\n")
+    code, _ = _apply(lambda p: (sbx.apply_plan(p), None), plan, args)
+    if code == 0 and not args.remove and not args.dry_run and plan.changed:
+        print("\nRestart the agent so it reads the new settings.")
+    return code
+
+def cmd_run(args):
+    from . import sandbox as sbx
+    argv = list(args.command)
+    if argv and argv[0] == "--":
+        argv = argv[1:]
+    try:
+        return sbx.run(argv, allow_write=args.allow_write, allow_domains=args.allow_domain, dry_run=args.print_settings)
+    except InstallError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
 def cmd_uninstall(args):
     try:
         ins, plan = _plan(args, "uninstall")
@@ -532,6 +576,21 @@ def main(argv=None):
     u.add_argument("-y", "--yes", action="store_true", help="apply without asking")
     u.add_argument("--force", action="store_true", help="also remove a hand-written laya-guard hook entry")
     u.set_defaults(fn=cmd_uninstall)
+    sb = sub.add_parser("sandbox", help="turn an agent's own OS sandbox on, denying the protected paths (shows a diff first)")
+    sb.add_argument("agent", nargs="?", help="claude-code, codex, copilot-cli, gemini-cli, qwen-code or cursor")
+    _scope_args(sb, None)
+    sb.add_argument("--list", action="store_true", help="what each agent's sandbox can take")
+    sb.add_argument("--remove", action="store_true", help="take out what `laya-guard sandbox` added")
+    sb.add_argument("--dry-run", action="store_true", help="print the diff, write nothing")
+    sb.add_argument("-y", "--yes", action="store_true", help="apply without asking")
+    sb.set_defaults(fn=cmd_sandbox)
+    rn = sub.add_parser("run", help="run an agent with no sandbox of its own inside sandbox-runtime (srt), "
+                                    "denying the protected paths")
+    rn.add_argument("--allow-write", action="append", default=[], help="another directory it may write to (repeat)")
+    rn.add_argument("--allow-domain", action="append", default=[], help="another host it may reach (repeat)")
+    rn.add_argument("--print-settings", action="store_true", help="print the srt settings and run nothing")
+    rn.add_argument("command", nargs=argparse.REMAINDER, help="-- <agent> [args]")
+    rn.set_defaults(fn=cmd_run)
     sv = sub.add_parser("service", help="start the server at login (macOS LaunchAgent / Linux systemd user unit); opt-in")
     svs = sv.add_subparsers(dest="service_cmd", required=True)
     si = svs.add_parser("install", help="start the server now and at every login (shows the file first)")
