@@ -106,7 +106,10 @@ _RISKY_FLAG = re.compile(
     r"|script-shell|node-options|userconfig|globalconfig)(?:[=\s]|$)")
 _SENSITIVE_PATH = re.compile(
     r"\.ssh|\.aws|\.gnupg|\.kube|\.netrc|\.npmrc|\.pypirc|\.env\b|\.git-credentials"
-    r"|id_rsa|id_ed25519|credentials|/etc/(shadow|sudoers)|system32/config/(sam|security|system)\b", re.IGNORECASE)
+    r"|id_rsa|id_ed25519|credentials|/etc/(shadow|sudoers)"
+    # Windows credential stores: the registry hives (and RegBack's copies of them), repair's old copies, the AD database
+    r"|system32/config/(?:[^/\s]+/)*(?:sam|security|system)\b|windows/repair/(?:sam|security|system)\b"
+    r"|windows/ntds/ntds\.dit\b", re.IGNORECASE)
 # Windows writes paths with backslashes (`mkdir src\components`, `type .\README.md`, `cd C:\Users\dev`), and every such
 # command used to miss the safe lane and go to the model, which blocked `dir` and `mkdir "..\new project"` at tool-source
 # thresholds while their POSIX twins were allowed here (docs/guide/incidents.md). So a backslash between two path parts

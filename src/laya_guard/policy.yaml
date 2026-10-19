@@ -213,11 +213,14 @@ policies:
       - '\bgit\s+checkout\s+(?:\S+\s+)*--\s+\.(?:\s|$)'
       # A delete sent to an API inside the request body: the model scored PocketOS's Railway call
       # (curl ... graphql ... 'mutation { volumeDelete(volumeId: ...) }') as harmless (docs/guide/incidents.md).
+      # The verb has to be a word of the name, not a substring: at its start or after `_` / `.` (deleteRepository,
+      # delete_users, projects.delete), or capitalized at its end (volumeDelete). So undelete, GetDeletedItems,
+      # dropdown_open and getDropRate don't count; a verb mid-name (projectDeleteAll) is left to the model.
       # GraphQL: a mutation field called with arguments, so input fields like `deletedAt: null` don't count.
-      - '\bmutation\b[^\n]{0,400}?\b\w*(?:delete|destroy|drop|purge|wipe|terminate|truncate|remove)\w*\s*\('
+      - '\bmutation\b[^\n]{0,400}?\b(?:(?:\w*_)?(?:delete|destroy|drop|purge|wipe|terminate|truncate|remove)(?:(?-i:[A-Z])\w*|_\w*)?|\w*?(?-i:Delete|Destroy|Drop|Purge|Wipe|Terminate|Truncate|Remove))\s*\('
       # JSON-RPC style bodies: {"method": "deleteDatabase"}, {"action": "destroy"}. Not "remove": JSON Patch uses
       # {"op": "remove"} for a field.
-      - '\\?["''](?:method|action|operation|operationName|op|command)\\?["'']\s*:\s*\\?["''][\w./:-]*?(?:delete|destroy|drop|purge|wipe|terminate|truncate)'
+      - '\\?["''](?:method|action|operation|operationName|op|command)\\?["'']\s*:\s*\\?["''](?:(?:[\w.:/-]*[./:_-])?(?:delete|destroy|drop|purge|wipe|terminate|truncate)(?=\\?["'']|[./:_-]|(?-i:[A-Z]))|[\w./:-]*?(?-i:Delete|Destroy|Drop|Purge|Wipe|Terminate|Truncate)(?=\\?["'']|[./:_-]))'
     laya:
       choice: ["allow", "review", "block"]
       score_hint: "risk of an irreversible mass deletion"

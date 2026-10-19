@@ -23,8 +23,9 @@ All notable changes to this project are documented here. Versions follow
   between two path parts is now read as a separator, cmd's `%VAR%` counts like `$VAR`, and the list has `dir`, `type`,
   `findstr`, `where`, `md`, `cd /d`, `Get-ChildItem`, `Get-Content`, `Get-Location`, `Set-Location`, `Select-String`
   and `New-Item -ItemType Directory`. A command must also be clean with the backslashes dropped, the way a POSIX shell
-  reads them, so `cat ~/.s\sh/id_r\sa` and `git log --out\put=x` still go to the model, and reading
-  `System32\config\SAM` counts as a sensitive path. On 37 everyday Windows commands, blocks went from 9 to 4 and
+  reads them, so `cat ~/.s\sh/id_r\sa` and `git log --out\put=x` still go to the model, and the Windows credential
+  stores (the registry hives under `System32\config`, their `RegBack` and `repair` copies, `NTDS\ntds.dit`) count as
+  sensitive paths. On 37 everyday Windows commands, blocks went from 9 to 4 and
   reviews from 13 to 2 (the 4 left are blocked on POSIX too); none of 21 dangerous Windows commands changed verdict.
 
 ### Security
@@ -33,9 +34,10 @@ All notable changes to this project are documented here. Versions follow
   a GraphQL `mutation { volumeDelete(...) }`, which the model scored 0.00, while `curl -X DELETE` to the same kind of
   resource was blocked. `mass-delete` now also matches a GraphQL mutation field that deletes and is called with
   arguments, and a JSON `method` / `action` / `operation` / `command` that deletes (`{"method": "deleteDatabase"}`), in
-  any command that carries the body. It is review-level, so the model still judges. Input fields like
-  `deletedAt: null` and JSON Patch's `{"op": "remove"}` don't count. Real-model shell (69/71) and Korean (30/30) evals
-  are unchanged.
+  any command that carries the body. It is review-level, so the model still judges. The verb has to be a word of the
+  name (`deleteRepository`, `delete_users`, `projects.delete`, `volumeDelete`), so `undelete`, `GetDeletedItems` and
+  `getDropRate` don't count, nor do input fields like `deletedAt: null` or JSON Patch's `{"op": "remove"}`. Real-model
+  shell (69/71) and Korean (30/30) evals are unchanged.
 
 ## [0.5.1] - 2026-10-19
 
