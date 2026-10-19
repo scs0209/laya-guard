@@ -144,12 +144,14 @@ laya-guard footprint --suggest           # 프로젝트별로 무엇을 건드�
 | AgentDojo v1 공격 (심판 레벨) | **25/27 차단** | `eval/run_agentdojo.py` |
 | AgentDojo v1 정상 (심판 레벨) | **92/97 유지** (allow+review) | `eval/run_agentdojo.py` |
 | E2E 롤아웃 (qwen2.5:7b 에이전트 + 가드) | **4/4 시나리오** (1 방어, 2 미시도, 1 정상 OK) | `eval/run_rollout.py` |
+| 실제 사고 재현 (공개된 사고 7건) | **12/13 붙잡음** (놓친 1건: GraphQL 호출 안의 삭제) | `eval/run_incidents.py` |
 | 셸 명령 (자체: 일상 35 + 위험/우회 36) | **69/71** (실전 모델) | `eval/run_eval.py --set shell` |
 | 한국어 30문항 (자체) | **30/30** (MOCK·실전 모두) | `eval/run_eval.py` |
 
 두 자체 셋은 검증 대상 규칙과 함께 만들어졌으니 정확도 주장이 아니라 회귀 게이트로 봐주세요. 외부 기준 수치는
 AgentDojo이며, 자체 측정이고 심판 레벨입니다. 놓친 사례와 각 수치의 배경은
-[벤치마크 자세히](docs/ko/guide/how-it-works.md#벤치마크-재현-가능-좋은-것만-골라내지-않음)에 있습니다.
+[벤치마크 자세히](docs/ko/guide/how-it-works.md#벤치마크-재현-가능-좋은-것만-골라내지-않음)에 있습니다. 재현한 사고별
+출처와, 그 에이전트가 실제로 멈췄을지는 [실제 사고 재현](docs/ko/guide/incidents.md)에 있습니다.
 
 ## 🧠 동작 구조
 
@@ -184,6 +186,7 @@ AgentDojo이며, 자체 측정이고 심판 레벨입니다. 놓친 사례와 �
 | [파일](docs/ko/guide/file-protection.md) | 보호 경로, 파일 활동 기록, macOS OS 모니터, `laya-guard footprint` |
 | [대시보드](docs/ko/guide/dashboard.md) | 로컬 대시보드, 파이프라인 시뮬레이션, AI 시나리오 |
 | [내부 구조](docs/ko/guide/how-it-works.md) | 파이프라인, 정책 12종, 긴 입력, 벤치마크, 다른 가드레일과의 비교 |
+| [실제 사고 재현](docs/ko/guide/incidents.md) | 공개된 AI 코딩 에이전트 사고 7건 재현: 붙잡은 것, 놓친 것과 그 이유 |
 | [서버 장애](docs/ko/guide/reliability.md) | 오프라인 대체 검사, `LAYA_GUARD_FAIL`, 서비스로 실행, 장애 알림 |
 | [레퍼런스](docs/ko/guide/reference.md) | HTTP API, 설정, 텔레메트리, 전체 한계 목록 |
 

@@ -5,6 +5,16 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- **Real incident replays.** `eval/run_incidents.py` judges the commands behind seven publicly reported AI coding agent
+  incidents (a Claude Code home directory wipe, an Antigravity drive wipe, Gemini CLI losing a folder of files, the Nx
+  "s1ngularity" packages, the Amazon Q wiper prompt, PocketOS's database deleted through Railway's API, and Replit's
+  database deletion, which published no command) through the route a hook calls. With the real model 12 of the 13
+  scored commands are held. The miss is a destructive GraphQL mutation (`volumeDelete`) sent with curl, and Windows
+  paths turned out to be overblocked. Per incident, with sources and whether that agent would actually have been
+  stopped: [docs/guide/incidents.md](docs/guide/incidents.md).
+
 ## [0.5.1] - 2026-10-19
 
 Shell commands are now held to the same protected paths as Claude Code's file tools, so reading a key file through

@@ -78,6 +78,7 @@ build`, `vite build`, `jest` 같은 평범한 스크립트를 차단하기 때�
 | AgentDojo v1 공격 (심판 레벨) | **25/27 차단** | `eval/run_agentdojo.py` |
 | AgentDojo v1 정상 (심판 레벨) | **92/97 유지** (allow+review) | `eval/run_agentdojo.py` |
 | E2E 롤아웃 (qwen2.5:7b 에이전트 + 가드) | **4/4 시나리오** (1 방어, 2 미시도, 1 정상 OK) | `eval/run_rollout.py` → [결과](../../../eval/rollout_results.md) |
+| 실제 사고 재현 (공개된 사고 7건, 채점 명령 13개) | **12/13 붙잡음** (검토 또는 차단. 놓친 것은 `volumeDelete` GraphQL 호출) | `eval/run_incidents.py` → [정리](incidents.md) |
 | 셸 명령 (자체: 일상 35 + 위험/우회 36, 그중 체인 10) | **69/71** (실전, `source=user`·`tool` 모두. 앞 50개는 안전 명령 레인 전 32/50·29/50) | `eval/run_eval.py --set shell` |
 | 한국어 30문항 (자체) | **30/30** (MOCK·실전 모두) | `eval/run_eval.py` |
 
