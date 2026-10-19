@@ -32,6 +32,14 @@ no program-running/file-writing flags (`-exec`, `--config`, `--output`…), and 
 sensitive paths (`.ssh`, `.aws`, `.env`…). Installs, `git push`, and `npx` always
 go to the model.
 
+Windows commands get the same lane: a backslash between two path parts is read as a
+path separator (`cd C:\work\api`, `type src\app.py`, `pytest tests\unit`), cmd's
+`%VAR%` counts like `$VAR`, and the list has the cmd.exe and PowerShell equivalents
+(`dir`, `type`, `findstr`, `where`, `md`, `cd /d`, `Get-ChildItem`, `Get-Content`,
+`Set-Location`, `Select-String`, `New-Item -ItemType Directory`). Because a POSIX shell
+reads the same backslash as an escape, the command must also be clean with the
+backslashes dropped: `cat ~/.s\sh/id_r\sa` still goes to the model.
+
 `npm test` is a safe command, but what it actually runs is `scripts.test` in
 package.json, which an agent (or an injection it read) can edit first. So when
 the adapter sends the command's directory (`cwd`, all 11 do), the guard reads the

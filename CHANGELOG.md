@@ -11,9 +11,21 @@ All notable changes to this project are documented here. Versions follow
   incidents (a Claude Code home directory wipe, an Antigravity drive wipe, Gemini CLI losing a folder of files, the Nx
   "s1ngularity" packages, the Amazon Q wiper prompt, PocketOS's database deleted through Railway's API, and Replit's
   database deletion, which published no command) through the route a hook calls. With the real model 0.5.1 held 12
-  of the 13 scored commands; the miss got the rule below, and with it all 13 are held. Windows paths turned out to be
-  overblocked. Per incident, with sources and whether that agent would actually have been stopped:
+  of the 13 scored commands; the miss got the rule below, and with it all 13 are held. It also showed Windows commands
+  being overblocked (fixed below). Per incident, with sources and whether that agent would actually have been stopped:
   [docs/guide/incidents.md](docs/guide/incidents.md).
+
+### Fixed
+
+- **Windows commands get the safe-command lane.** A backslash is a shell metacharacter to the lane, so every command
+  with a Windows path (`cd src\app`, `mkdir "..\new project"`) and every cmd/PowerShell command (`dir`) went to the
+  model, which blocked them at tool-source thresholds while their POSIX twins were allowed instantly. A backslash
+  between two path parts is now read as a separator, cmd's `%VAR%` counts like `$VAR`, and the list has `dir`, `type`,
+  `findstr`, `where`, `md`, `cd /d`, `Get-ChildItem`, `Get-Content`, `Get-Location`, `Set-Location`, `Select-String`
+  and `New-Item -ItemType Directory`. A command must also be clean with the backslashes dropped, the way a POSIX shell
+  reads them, so `cat ~/.s\sh/id_r\sa` and `git log --out\put=x` still go to the model, and reading
+  `System32\config\SAM` counts as a sensitive path. On 37 everyday Windows commands, blocks went from 9 to 4 and
+  reviews from 13 to 2 (the 4 left are blocked on POSIX too); none of 21 dangerous Windows commands changed verdict.
 
 ### Security
 

@@ -30,6 +30,14 @@
 `--output` 등), 민감 경로(`.ssh`, `.aws`, `.env` 등)가 없는 단일 명령에만 열립니다.
 설치, `git push`, `npx`는 항상 모델이 심판합니다.
 
+Windows 명령도 같은 레인을 탑니다. 경로 사이의 백슬래시는 경로 구분자로 읽고
+(`cd C:\work\api`, `type src\app.py`, `pytest tests\unit`), cmd의 `%VAR%`는 `$VAR`처럼
+취급하며, cmd.exe·PowerShell의 같은 명령(`dir`, `type`, `findstr`, `where`, `md`,
+`cd /d`, `Get-ChildItem`, `Get-Content`, `Set-Location`, `Select-String`,
+`New-Item -ItemType Directory`)이 목록에 있습니다. POSIX 셸은 같은 백슬래시를 이스케이프로
+읽으므로, 백슬래시를 지운 형태로도 깨끗해야 합니다. `cat ~/.s\sh/id_r\sa`는 여전히 모델이
+심판합니다.
+
 `npm test`는 안전 명령이지만, 실제로 실행되는 건 package.json의 `scripts.test`이고,
 에이전트(또는 에이전트가 읽은 주입 지시)가 먼저 고칠 수 있습니다. 그래서 어댑터가
 명령이 실행될 디렉터리(`cwd`, 어댑터 11개 모두 전송)를 보내면, 가드는 가장 가까운

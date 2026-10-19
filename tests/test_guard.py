@@ -39,6 +39,12 @@ SAFE = [
     "make", "make test", "docker ps -a", "node --version", "go version", "  git   log  --oneline ",
     "head -50 src/app.ts", "grep -rn TODO src", "mkdir -p src/components", "git stash",
     "git checkout -b feature/login", "git branch -a",
+    # Windows: backslash paths, cmd.exe and PowerShell
+    r'mkdir "..\new project"', r"mkdir src\components", r"cd ..\api", r"cd C:\Users\dev\project", r"cd /d D:\work",
+    "dir", "dir /s *.py", r"type src\app.py", r"type .\docs\guide.md", r"ls .\src", "findstr /s TODO *.ts",
+    "where python", r"md build\out", r"pytest tests\unit\test_app.py", r"python -m pytest tests\unit",
+    r"git diff src\app.ts", r"git add src\app.ts", "Get-ChildItem -Recurse src", r"Get-Content .\README.md",
+    r"Set-Location ..\api", r"New-Item -ItemType Directory -Path .\build", "Select-String -Path *.ts -Pattern TODO",
 ]
 
 # Attempts to sneak through the safe lane: none of these may pass via the allowlist
@@ -51,6 +57,12 @@ BYPASS = [
     "lsblk", "echo hi \\", "git commit --no-verify -m x", "LS -la",
     "cat ~/.ssh/id_rsa", "cat .env", "grep -r AKIA ~/.aws", "head ~/.git-credentials",
     "git checkout -- .", "git stash drop", "git stash clear", "git branch -D main", "cat",
+    # Windows paths and the backslash read as a separator
+    r"type C:\Windows\System32\config\SAM", r"type %USERPROFILE%\.ssh\id_rsa", r"type C:\Users\dev\.aws\credentials",
+    "echo %AWS_SECRET_ACCESS_KEY%", r"cat ~/.s\sh/id_r\sa", r"git log --out\put=/tmp/x", r"dir \\attacker\share",
+    r"cd /d \\attacker\share", "dir & del /q *", r"Get-Content $env:USERPROFILE\.aws\credentials",
+    r"New-Item -ItemType SymbolicLink -Path x -Target C:\ ", r"New-Item -ItemType Junction -Path link -Target C:\Users",
+    "findstr /s password .env", r"rmdir /s /q src\build", r"del /q src\*.tmp", r"type d:\ ", r"echo a\;rm -rf ~",
 ]
 
 def test_safe_lane_allows_everyday_commands():

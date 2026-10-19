@@ -173,7 +173,8 @@ agent tool_call
 * **Rules first.** Twelve regex policies in [policy.yaml](src/laya_guard/policy.yaml) catch known patterns without
   calling the model. Edit them or add your own, no code changes needed.
 * **A safe-command lane.** A single plain command with no shell metacharacters, risky flags or sensitive paths is
-  allowed instantly. For `npm test` and the like, the package.json script it would really run is regex-checked first.
+  allowed instantly, Windows paths and cmd/PowerShell equivalents included. For `npm test` and the like, the
+  package.json script it would really run is regex-checked first.
 * **Stricter for untrusted sources.** A call derived from tool output, an email or a web page gets lower thresholds,
   which is what stops indirect injections.
 * **Private by default.** The verdict log keeps the action, risk, policy, latency and a hash, never the command text.

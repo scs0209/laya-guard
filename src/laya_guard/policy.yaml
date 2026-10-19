@@ -10,7 +10,8 @@ defaults:
 
 # Safe command lane: skip the model and allow. The code (guard.py) enforces these conditions:
 #   · no risk policy regex below matches (if one does, the policy wins)
-#   · no shell metacharacters: ; & | ` $ < > ( ) { } \ newline (pipes/redirects/substitution)
+#   · no shell metacharacters: ; & | ` $ < > ( ) { } \ newline (pipes/redirects/substitution), or cmd's %VAR%
+#     (a backslash between two path parts is a Windows path separator, not a metacharacter)
 #   · no flags that run programs or write files: -exec, -toolexec, --config, --output, --upload-pack, --receive-pack
 #   · no sensitive paths: .ssh, .aws, .gnupg, .kube, .netrc, .npmrc, .pypirc, .env, id_rsa, etc.
 #   · after whitespace normalization, a "full" match against one pattern (case-sensitive)
@@ -41,6 +42,15 @@ safe_commands:
   - 'make( (build|test|lint|check|all))?'
   - 'docker (ps|images)( \S+)*'
   - '(node|npm|pnpm|yarn|bun|python3?|pip3?|go|cargo|rustc|git|docker|java|ruby) (--version|-v|-V|version)'
+  # The same everyday commands on Windows (cmd.exe and PowerShell). Backslash paths are read as paths (guard.py),
+  # so `cd C:\work\api`, `type src\app.py` and `pytest tests\unit` match the lines above or these.
+  - 'cd /d \S+'
+  - 'dir( \S+)*'
+  - '(type|findstr)( \S+)+'
+  - '(where|md)( \S+)+'
+  - '(Get-ChildItem|Get-Location|Set-Location)( \S+)*'
+  - '(Get-Content|Select-String)( \S+)+'
+  - 'New-Item -ItemType Directory( -Path)? \S+( -Force)?'
 
 policies:
   - id: destructive-fs
