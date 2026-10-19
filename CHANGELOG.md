@@ -5,6 +5,12 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-10-19
+
+Protected paths reach the agents' own OS sandboxes, so a script that reads `~/.ssh` is refused by the kernel, not just
+a command that names it; and the commands behind seven real agent incidents are replayed, which found a delete hidden
+in a GraphQL call and overblocked Windows commands, both fixed.
+
 ### Added
 
 - **Real incident replays.** `eval/run_incidents.py` judges the commands behind seven publicly reported AI coding agent
@@ -531,7 +537,8 @@ a verdict.
   Claude Code PreToolUse hook, local redacted telemetry, Korean 30-case eval,
   AgentDojo judge-level eval, E2E rollout harness.
 
-[Unreleased]: https://github.com/scs0209/laya-guard/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/scs0209/laya-guard/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/scs0209/laya-guard/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/scs0209/laya-guard/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/scs0209/laya-guard/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/scs0209/laya-guard/compare/v0.4.0...v0.4.1
