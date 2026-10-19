@@ -10,10 +10,20 @@ All notable changes to this project are documented here. Versions follow
 - **Real incident replays.** `eval/run_incidents.py` judges the commands behind seven publicly reported AI coding agent
   incidents (a Claude Code home directory wipe, an Antigravity drive wipe, Gemini CLI losing a folder of files, the Nx
   "s1ngularity" packages, the Amazon Q wiper prompt, PocketOS's database deleted through Railway's API, and Replit's
-  database deletion, which published no command) through the route a hook calls. With the real model 12 of the 13
-  scored commands are held. The miss is a destructive GraphQL mutation (`volumeDelete`) sent with curl, and Windows
-  paths turned out to be overblocked. Per incident, with sources and whether that agent would actually have been
-  stopped: [docs/guide/incidents.md](docs/guide/incidents.md).
+  database deletion, which published no command) through the route a hook calls. With the real model 0.5.1 held 12
+  of the 13 scored commands; the miss got the rule below, and with it all 13 are held. Windows paths turned out to be
+  overblocked. Per incident, with sources and whether that agent would actually have been stopped:
+  [docs/guide/incidents.md](docs/guide/incidents.md).
+
+### Security
+
+- **A delete inside an API request body is reviewed.** PocketOS lost its production database to one curl call carrying
+  a GraphQL `mutation { volumeDelete(...) }`, which the model scored 0.00, while `curl -X DELETE` to the same kind of
+  resource was blocked. `mass-delete` now also matches a GraphQL mutation field that deletes and is called with
+  arguments, and a JSON `method` / `action` / `operation` / `command` that deletes (`{"method": "deleteDatabase"}`), in
+  any command that carries the body. It is review-level, so the model still judges. Input fields like
+  `deletedAt: null` and JSON Patch's `{"op": "remove"}` don't count. Real-model shell (69/71) and Korean (30/30) evals
+  are unchanged.
 
 ## [0.5.1] - 2026-10-19
 

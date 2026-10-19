@@ -65,7 +65,7 @@ build`, `vite build`, `jest` 같은 평범한 스크립트를 차단하기 때�
 | `remote-exec` | 수상한 패키지 인덱스, 원격 스크립트, 로컬 내용을 셸로 파이프, 인코딩된 PS | review |
 | `priv-escalation` | `sudo sh`, `chmod 777`, setuid, `/etc/`로 리다이렉트 | review |
 | `persistence` | cron, 서비스 등록, 셸rc 후킹, git `core.hooksPath`/`core.pager` | review |
-| `mass-delete` | `DROP TABLE`, `s3 rm --recursive`, `kubectl delete --all`, `git push --force`, `git reset --hard`, `git clean -f`, `git checkout -- .` | review |
+| `mass-delete` | `DROP TABLE`, `s3 rm --recursive`, `kubectl delete --all`, `git push --force`, `git reset --hard`, `git clean -f`, `git checkout -- .`, API 요청 본문 안의 삭제(`mutation { volumeDelete(...) }`, `{"method": "deleteDatabase"}`) | review |
 | `auth-bypass` | 인증/TLS 무력화, 비밀번호 초기화, 한영 | block |
 | `credential-read` | 개인키·클라우드 자격 증명 읽기(`cat ~/.ssh/id_rsa`, `cat ~/.aws/credentials` 등) | review |
 
@@ -78,7 +78,7 @@ build`, `vite build`, `jest` 같은 평범한 스크립트를 차단하기 때�
 | AgentDojo v1 공격 (심판 레벨) | **25/27 차단** | `eval/run_agentdojo.py` |
 | AgentDojo v1 정상 (심판 레벨) | **92/97 유지** (allow+review) | `eval/run_agentdojo.py` |
 | E2E 롤아웃 (qwen2.5:7b 에이전트 + 가드) | **4/4 시나리오** (1 방어, 2 미시도, 1 정상 OK) | `eval/run_rollout.py` → [결과](../../../eval/rollout_results.md) |
-| 실제 사고 재현 (공개된 사고 7건, 채점 명령 13개) | **12/13 붙잡음** (검토 또는 차단. 놓친 것은 `volumeDelete` GraphQL 호출) | `eval/run_incidents.py` → [정리](incidents.md) |
+| 실제 사고 재현 (공개된 사고 7건, 채점 명령 13개) | **13/13 붙잡음** (검토 또는 차단. 0.5.1에선 12/13으로, `volumeDelete` GraphQL 호출을 허용했고 이후 규칙을 추가) | `eval/run_incidents.py` → [정리](incidents.md) |
 | 셸 명령 (자체: 일상 35 + 위험/우회 36, 그중 체인 10) | **69/71** (실전, `source=user`·`tool` 모두. 앞 50개는 안전 명령 레인 전 32/50·29/50) | `eval/run_eval.py --set shell` |
 | 한국어 30문항 (자체) | **30/30** (MOCK·실전 모두) | `eval/run_eval.py` |
 

@@ -146,7 +146,7 @@ command it proposes is judged by the real evaluator. Nothing is run. The screens
 | AgentDojo v1, attacks (judge-level) | **25/27 blocked** | `eval/run_agentdojo.py` |
 | AgentDojo v1, benign (judge-level) | **92/97 kept** (allow+review) | `eval/run_agentdojo.py` |
 | E2E rollout (qwen2.5:7b agent + guard) | **4/4 scenarios** (1 defended, 2 not attempted, 1 benign OK) | `eval/run_rollout.py` |
-| Real incident replays (7 publicly reported incidents) | **12/13 held** (1 miss: a delete inside a GraphQL call) | `eval/run_incidents.py` |
+| Real incident replays (7 publicly reported incidents) | **13/13 held** (12/13 on 0.5.1; the miss, a delete inside a GraphQL call, got a rule) | `eval/run_incidents.py` |
 | Shell commands (own set: 35 everyday + 36 dangerous/bypass) | **69/71** (real model) | `eval/run_eval.py --set shell` |
 | Korean 30 (own set) | **30/30** (mock **and** real) | `eval/run_eval.py` |
 

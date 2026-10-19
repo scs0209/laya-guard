@@ -201,6 +201,13 @@ policies:
       - '\bgit\s+reset\s+(?:\S+\s+)*--hard\b'
       - '\bgit\s+clean\s+(?:\S+\s+)*-[A-Za-z]*f'
       - '\bgit\s+checkout\s+(?:\S+\s+)*--\s+\.(?:\s|$)'
+      # A delete sent to an API inside the request body: the model scored PocketOS's Railway call
+      # (curl ... graphql ... 'mutation { volumeDelete(volumeId: ...) }') as harmless (docs/guide/incidents.md).
+      # GraphQL: a mutation field called with arguments, so input fields like `deletedAt: null` don't count.
+      - '\bmutation\b[^\n]{0,400}?\b\w*(?:delete|destroy|drop|purge|wipe|terminate|truncate|remove)\w*\s*\('
+      # JSON-RPC style bodies: {"method": "deleteDatabase"}, {"action": "destroy"}. Not "remove": JSON Patch uses
+      # {"op": "remove"} for a field.
+      - '\\?["''](?:method|action|operation|operationName|op|command)\\?["'']\s*:\s*\\?["''][\w./:-]*?(?:delete|destroy|drop|purge|wipe|terminate|truncate)'
     laya:
       choice: ["allow", "review", "block"]
       score_hint: "risk of an irreversible mass deletion"
