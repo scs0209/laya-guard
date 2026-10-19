@@ -39,6 +39,10 @@ All notable changes to this project are documented here. Versions follow
 
 ### Security
 
+- **A write to laya-guard's own rules is reviewed.** `~/.config/laya-guard/**` (your `protect.yaml`, the sandbox
+  record) joins the default protected paths, write only, like the agent's own settings and hooks: an agent told to
+  delete a rule would otherwise switch the protection off from then on. You edit the file as before. It also goes
+  into every sandbox `laya-guard sandbox` sets up, and `laya-guard run` denies writing there outright.
 - **A delete inside an API request body is reviewed.** PocketOS lost its production database to one curl call carrying
   a GraphQL `mutation { volumeDelete(...) }`, which the model scored 0.00, while `curl -X DELETE` to the same kind of
   resource was blocked. `mass-delete` now also matches a GraphQL mutation field that deletes and is called with
