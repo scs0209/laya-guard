@@ -120,7 +120,8 @@ Publish the aggregates (never raw prompts) as field evidence next to benchmarks.
   reviewed or blocked, not understood.
 - Chain commands are judged one by one, so the model doesn't see that `cd /etc`
   came before `cat shadow`. The protected paths follow a plain `cd` (that one is
-  reviewed), but not `cd -`, `cd $DIR` or `pushd`.
+  reviewed), also written `builtin cd` or `command cd`, and a `pushd` to a directory,
+  but not `cd -`, `cd $DIR`, `popd`, or a `cd` inside a subshell or a pipeline stage.
 - Regex `block` hits return a hardcoded `risk: 0.92` — the model is skipped, so the
   score is a flag, not a calibrated probability.
 - Per-policy Laya hints (`choice_hint`/`score_hint` in `policy.yaml`) are declared

@@ -42,7 +42,7 @@ same rules, and a file call that matches none is allowed instead of asked about.
 
 Every agent's shell commands are held to the same rules, by the paths their text names, online and offline. The files a
 command plainly reads or changes (`cat`, `grep`, `source`, `<`, `rm`, `mv`, `cp`'s target, `>`, …) count with what is
-done to them, and a relative path follows a plain `cd`, so `cd /etc && cat shadow` is a read of `/etc/shadow`. Any other
+done to them, and a relative path follows a plain `cd` (or `builtin cd`, `command cd`, `pushd`), so `cd /etc && cat shadow` is a read of `/etc/shadow`. Any other
 path-like string in the command, like the code in `python -c "open('/home/me/.ssh/id_rsa')"`, counts as a read: what
 the program does with it is unknown, so a write rule is not applied on a guess. This only ever makes a verdict stricter:
 the command is still judged by the regexes and the model, and the stricter answer wins. A command with more than 200

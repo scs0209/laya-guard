@@ -12,7 +12,7 @@ All notable changes to this project are documented here. Versions follow
   `python -c "print(open('/home/me/.ssh/id_rsa').read())"` was allowed (risk 0.01 with the real model), and
   `cd /etc && cat shadow` passed as two safe commands. Now the paths a command's text names are checked too, for every
   agent, online and offline: the files its commands plainly read or change count with what is done to them, a relative
-  path follows a plain `cd`, and any other path-like string (the code of `python -c`, an option's value) counts as a
+  path follows a plain `cd` (also with `builtin` or `command` in front) or a `pushd` to a directory, and any other path-like string (the code of `python -c`, an option's value) counts as a
   read. It only makes a verdict stricter. A command with more than 200 path-like strings is reviewed. Pointed out in a
   Reddit comment.
 - `/etc/shadow` is protected by default: reading it is reviewed, changing it is blocked.

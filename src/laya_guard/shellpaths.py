@@ -204,8 +204,21 @@ def _parsed(command: str):
             break
 
 
+def _move_args(args: list[str]) -> list[str] | None:
+    """The words of the cd, pushd or popd a command runs, without the `builtin` or `command` bash lets in front of it
+    (`builtin cd /etc` is the cd itself), or None when the command doesn't change directory. `command -v cd` only
+    prints where cd is."""
+    while args and args[0] in ("builtin", "command"):
+        prefix, args = args[0], args[1:]
+        while prefix == "command" and args and args[0].startswith("-"):
+            if args[0] in ("-v", "-V"):
+                return None
+            args = args[1:]                                          # command -p cd ..., command -- cd ...: still runs it
+    return args if args and os.path.basename(args[0]) in _MOVES else None
+
+
 def _moves(args: list[str]) -> bool:
-    return bool(args) and os.path.basename(args[0]) in _MOVES
+    return _move_args(args) is not None
 
 
 def shell_accesses_moved(command: str) -> list[tuple[str, str, bool]]:
@@ -225,12 +238,20 @@ def shell_accesses_moved(command: str) -> list[tuple[str, str, bool]]:
 
 
 def _after_move(args: list[str], here: str | None) -> str | None:
-    """The directory a cd leaves the shell in, or None when that can't be read off the text (cd -, cd $X, pushd, popd)."""
-    if args[0] != "cd":
+    """The directory a cd, or a pushd to a directory, leaves the shell in, or None when that can't be read off the text
+    (cd -, cd $X, pushd with no directory or with +N / -n, popd)."""
+    args = _move_args(args) or []
+    name = os.path.basename(args[0]) if args else ""
+    if name == "pushd":
+        rest = args[1:]
+        if len(rest) != 1 or rest[0].startswith(("+", "-")):
+            return None
+    elif name == "cd":
+        rest = [a for a in args[1:] if a not in ("-L", "-P", "--")]
+        if not rest:
+            return os.path.expanduser("~")
+    else:
         return None
-    rest = [a for a in args[1:] if a not in ("-L", "-P", "--")]
-    if not rest:
-        return os.path.expanduser("~")
     if len(rest) > 1 or rest[0] == "-" or not _literal(rest[0]):
         return None
     target = os.path.expanduser(rest[0])

@@ -50,9 +50,19 @@ def test_cd_with_no_directory_goes_home(home):
 
 
 def test_a_cd_that_cant_be_followed_leaves_relative_paths_as_written():
-    for cd in ("cd -", "cd $X", "pushd /etc", "popd"):
+    for cd in ("cd -", "cd $X", "pushd", "pushd +1", "pushd -n /etc", "popd"):
         assert shell_accesses_in(f"{cd} && cat shadow", "/work") == [("read", "shadow")], cd
     assert shell_accesses_in("cat shadow", None) == [("read", "shadow")]
+
+
+def test_a_cd_with_builtin_or_command_in_front_or_a_pushd_is_followed_too():
+    """Bash runs `builtin cd /etc` and `command cd /etc` as the cd itself, and `pushd /etc` goes there as well: a one-word
+    prefix used to stop the tracking, so `shadow` read as /work/shadow. Pointed out in review."""
+    for cd in ("builtin cd /etc", "command cd /etc", "command -p cd /etc", "command -- cd /etc", "pushd /etc", "builtin pushd /etc"):
+        assert shell_accesses_in(f"{cd} && cat shadow", "/work") == [("read", "/etc/shadow")], cd
+    assert shell_accesses_in("builtin cd src && cat a.txt", "/work") == [("read", "/work/src/a.txt")]
+    assert shell_accesses_in("pushd src && cat a.txt", "/work") == [("read", "/work/src/a.txt")]
+    assert shell_accesses_in("command -v cd && cat a.txt", "/work") == [("read", "/work/a.txt")]       # only prints where cd is
 
 
 def test_path_like_strings_are_found_inside_code():
@@ -90,6 +100,10 @@ def test_a_change_the_shell_itself_makes_is_blocked(home):
 def test_cd_into_a_protected_place_is_followed(home):
     assert judge_shell("cd /etc && cat shadow", "/work").action == "review"
     assert judge_shell("cd ~/.ssh && cat id_rsa", "/work").action == "review"
+    for cd in ("builtin cd /etc", "command cd /etc", "pushd /etc"):
+        v = judge_shell(f"{cd} && cat shadow", "/work")
+        assert v is not None and (v.action, v.policy_id) == ("review", "protected-path"), cd
+    assert judge_shell("builtin cd src && cat a.txt", "/work") is None
 
 
 def test_a_command_naming_nothing_protected_gets_no_verdict_here(home):
