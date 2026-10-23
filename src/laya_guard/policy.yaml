@@ -12,7 +12,8 @@ defaults:
 #   · no risk policy regex below matches (if one does, the policy wins)
 #   · no shell metacharacters: ; & | ` $ < > ( ) { } \ newline (pipes/redirects/substitution), or cmd's %VAR%
 #     (a backslash between two path parts is a Windows path separator, not a metacharacter; what sits inside single
-#     quotes is text, and inside double quotes only $ ` \ still count)
+#     quotes is text, and inside double quotes only $ ` \ still count; a $var set to a plain value earlier in the same
+#     command is checked as that value, and a quoted heredoc's body is data for its command)
 #   · a pipeline counts when every stage is a safe command (`grep x f | head`), and output thrown away or merged
 #     (2>/dev/null, >/dev/null, 2>&1) is not a redirect to a file
 #   · no flags that run programs or write files: -exec, -execdir, -delete, -fprint, -toolexec, --config, --output, ...
@@ -26,7 +27,8 @@ safe_commands:
   - 'ls( \S+)*'
   - 'pwd'
   - 'cd( \S+)?'
-  - '(true|false|whoami|date|uptime|clear)'
+  - '(true|false|whoami|uptime|clear|break|continue)'
+  - 'date( (?!-s|--set)\S+)*'
   - 'sleep [0-9.]+[smh]?'
   - '(uname|df|free)( -\w+)*'
   - 'du( \S+)+'
@@ -38,11 +40,17 @@ safe_commands:
   - 'git branch( (-a|-r|-v|-vv|--list|--show-current|\w[\w./-]*))*'
   - 'git stash( (list|show|push)( \S+)*)?'
   - 'git checkout -b \S+'
+  # Reading the repository and its host: nothing here changes a ref, a file or anything on GitHub.
+  - 'git (fetch|rev-parse|check-ignore|ls-files|ls-remote|merge-base|blame|shortlog|describe)( \S+)*'
+  - 'git remote( -v| show \S+| get-url \S+)?'
+  - 'gh (pr (view|checks|list|diff|status)|issue (view|list)|run (view|list)|repo view|release (view|list))( \S+)*'
+  - 'gh api (?!(.* )?(-[XfF]|--method|--field|--raw-field|--input))\S+( \S+)*'     # a GET: no method, no body
+  - '(jq|seq|printf)( \S+)+'
   - '(npm|pnpm|yarn|bun) (test|build|lint|run (build|test|lint|typecheck|format|check))( \S+)*'
   # Only a python on PATH or in the project's venv: `./tools/python` could be any program named python.
   - '(pytest|((\.?venv|env)/bin/)?python3?(\.[0-9]+)? -m pytest)( \S+)*'
-  # Shell syntax that runs nothing by itself: a variable set or unset, a loop header, a test.
-  - '[A-Za-z_][A-Za-z0-9_]*=\S*'
+  # Shell syntax that runs nothing by itself: a variable unset, a loop header, a test. Assignments (`X=1`,
+  # `export X=1`, `X=1 pytest`) are handled in guard.py, which refuses names that change what runs (PATH, LD_PRELOAD…).
   - 'unset( [A-Za-z_][A-Za-z0-9_]*)+'
   - 'for [A-Za-z_][A-Za-z0-9_]* in( \S+)*'
   - '(\[|test)( \S+)+'

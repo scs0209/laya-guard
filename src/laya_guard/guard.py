@@ -2,6 +2,7 @@
 from __future__ import annotations
 import contextlib
 import contextvars
+import itertools
 import json
 import logging
 import os
@@ -167,14 +168,53 @@ def _safe_single(raw: str) -> bool:
         if (blank is None or _SHELL_META.search(blank) or _CMD_VAR.search(form) or _RRN_SHAPE.search(form)
                 or any(rx.search(f) for rx in (_RISKY_FLAG, _SENSITIVE_PATH) for f in (form, bare))):
             return False
+    # `X=1 pytest`, `export A=b`: an assignment runs nothing, unless the name changes what runs next (PATH, LD_PRELOAD…)
+    m = _ASSIGN_PREFIX.match(windows)
+    if m:
+        if any(_RISKY_ENV.fullmatch(n) for n in _ASSIGN_NAME.findall(m.group(0))):
+            return False
+        windows = windows[m.end():]
+        if not windows.strip():
+            return True
+        if m.group(0).startswith("export"):
+            return False
     cmd = " ".join(windows.split())
     bare = " ".join(windows.replace("'", "").replace('"', "").split())
     return all(any(rx.fullmatch(c) for rx in _safe) for c in (cmd, bare))
 
+_ASSIGN_VALUE = r"""(?:"[^"$`\\]*"|'[^']*'|[^\s'"`$;&|<>()]*)"""
+_ASSIGN_ONE = rf"[A-Za-z_]\w*={_ASSIGN_VALUE}"
+_ASSIGN_PREFIX = re.compile(rf"(?:export\s+)?(?:{_ASSIGN_ONE}(?:\s+|$))+")
+_ASSIGN_NAME = re.compile(r"""(?:^|\s)(?:export\s+)?([A-Za-z_]\w*)=""")
+_RISKY_ENV = re.compile(r"(?:LD_|DYLD_)\w*|\w*(?:PATH|OPTIONS|_COMMAND)|BASH_ENV|ENV|PAGER|GIT_\w*|EDITOR|VISUAL"
+                        r"|SHELL|SHELLOPTS|BASHOPTS|PROMPT_COMMAND|PS4|IFS")
+
+def _heredoc_data(text: str) -> str | None:
+    """The command without its heredoc when the body is only data for it (`git commit -F - <<'EOF'`): the delimiter is
+    quoted, or the body has nothing the shell expands. None when the body could run something, or it isn't one heredoc."""
+    first, _, rest = text.partition("\n")
+    m = _HEREDOC.search(first)
+    if not m or _HEREDOC.search(first, m.end()):
+        return None
+    delim = m.group(2) or m.group(3) or m.group(4)
+    lines = rest.split("\n")
+    if (lines[-1].lstrip("\t") if m.group(1) else lines[-1]) != delim or any(
+            (ln.lstrip("\t") if m.group(1) else ln) == delim for ln in lines[:-1]):
+        return None
+    quoted = bool(m.group(2) or m.group(3)) or "\\" in m.group(0)       # 'EOF', "EOF", \EOF: nothing is expanded
+    if not quoted and re.search(r"[$`\\]", rest):
+        return None
+    return first[:m.start()] + first[m.end():]
+
 def _safe_command(text: str) -> bool:
     _ensure()
     assert _safe is not None
-    text = _HARMLESS_REDIRECT.sub(" ", text.strip())
+    text = text.strip()
+    if "\n" in (_blank_quotes(text) or ""):          # a newline outside quotes: only a heredoc that is data is let in
+        text = _heredoc_data(text) or ""
+        if "\n" in text:
+            return False
+    text = _HARMLESS_REDIRECT.sub(" ", text)
     blank = _blank_quotes(text)
     if not text.strip() or blank is None:
         return False
@@ -372,8 +412,9 @@ def _is_korean(text: str) -> bool:
 # model blocked about a quarter of real Claude Code commands, while each line on its own is ordinary.
 _CHAIN_MAX = 8                 # commands on one line
 _SCRIPT_MAX = 40               # lines of a script; past that it is judged whole, as before
-_CMD_HEAD = re.compile(r"(?:[A-Za-z_]\w*=\S*\s+)*[a-z0-9_./~-]+(?:\s|$)|[A-Za-z_]\w*=\S*$")   # or a bare X=value
-_SCRIPT_HEAD = re.compile(r"(?:[A-Za-z_]\w*=\S*\s+)*(?:[a-z0-9_./~-]+|\[\[?|!)(?:\s|$)|[A-Za-z_]\w*=\S*$")
+_ASSIGN_HEAD = r"""[A-Za-z_]\w*=(?:"[^"\n]*"|'[^'\n]*'|\S*)"""          # X=value, X="a b", X='a b'
+_CMD_HEAD = re.compile(rf"(?:{_ASSIGN_HEAD}\s+)*[a-z0-9_./~-]+(?:\s|$)|(?:{_ASSIGN_HEAD}\s*)+$")   # or a bare X=value
+_SCRIPT_HEAD = re.compile(rf"(?:{_ASSIGN_HEAD}\s+)*(?:[a-z0-9_./~-]+|\[\[?|!)(?:\s|$)|(?:{_ASSIGN_HEAD}\s*)+$")
 _KEYWORD_LEAD = re.compile(r"^(?:then|do|else|elif|if|while|until|time|!)\s+")
 _KEYWORD_ONLY = frozenset({"then", "do", "done", "fi", "else", "esac", "{", "}", "(", ")"})
 _ACTION_RANK = {"allow": 0, "review": 1, "block": 2}
@@ -424,22 +465,21 @@ def _split_chain(text: str) -> list[str]:
     if quote or depth != 0:
         return [text]
     parts.append(s[start:])
+    # `for f in a b; do sed -n 1p $f; done` on one line has the same syntax as on several: `do`, `done` run nothing
+    cleaned = []
+    for p in parts:
+        p = p.strip()
+        while (m := _KEYWORD_LEAD.match(p)) is not None:
+            p = p[m.end():].lstrip()
+        if p and p not in _KEYWORD_ONLY:
+            cleaned.append(p)
     if script:
-        cleaned = []
-        for p in parts:
-            p = p.strip()
-            while (m := _KEYWORD_LEAD.match(p)) is not None:
-                p = p[m.end():].lstrip()
-            if p and p not in _KEYWORD_ONLY:
-                cleaned.append(p)
-        parts = cleaned
-        if not 2 <= len(parts) <= _SCRIPT_MAX or not all(_SCRIPT_HEAD.match(p) for p in parts):
+        if not 2 <= len(cleaned) <= _SCRIPT_MAX or not all(_SCRIPT_HEAD.match(p) for p in cleaned):
             return [text]
-        return parts
-    parts = [p.strip() for p in parts if p.strip()]
-    if not 2 <= len(parts) <= _CHAIN_MAX or not all(_CMD_HEAD.match(p) for p in parts):
+        return cleaned
+    if not 2 <= len(cleaned) <= _CHAIN_MAX or not all(_SCRIPT_HEAD.match(p) for p in cleaned):
         return [text]
-    return parts
+    return cleaned
 
 # Shell comments (`# …`) are prose the agent can write freely, and the model reacts to them:
 # `kubectl delete namespace prod  # clean stale build output` dropped from block (0.98) to
@@ -607,6 +647,60 @@ def confined(root: str):
 def _inside(path: str, root: str) -> bool:
     return path == root or path.startswith(root.rstrip(os.sep) + os.sep)
 
+
+# Agents name things once and reuse them: `d=src/app; sed -n 1,80p $d/x.ts`, `for f in a b; do head $f; done`. A `$` used
+# to close the safe lane, so on a day of real Claude Code commands `ls $d` and `echo $f` went to the model (0.6-0.9).
+# A variable set earlier in the same chain to a plain value is now replaced by that value for the safe lane and the
+# regexes, which also makes `d=~; rm -rf $d` read as `rm -rf ~`. Anything else ($1, $(…), the environment, a variable
+# `read` or changed in a way we don't follow) is unknown and still closes the lane.
+_KNOWN_ENV = {"HOME": ["~"], "TMPDIR": ["/tmp"], "PWD": ["."]}
+_VAR_REF = re.compile(r"\$(?:\{([A-Za-z_]\w*)\}|([A-Za-z_]\w*))")
+_VARIANTS_MAX = 16
+_FOR_HEAD = re.compile(r"for\s+([A-Za-z_]\w*)\s+in\s+(.*)", re.S)
+_SETS_VAR = re.compile(r"\b(?:read|mapfile|readarray|declare|typeset|local|let|unset|getopts|export|printf)\b")
+
+def _unquote(word: str) -> str | None:
+    if len(word) >= 2 and word[0] == word[-1] and word[0] in "'\"":
+        word = word[1:-1]
+    return None if re.search(r"[$`'\"\\]", word) else word
+
+def _expand(segment: str, known: dict) -> list[str] | None:
+    """The segment once per combination of the values of the variables it uses, or None if it uses none or one we
+    don't know."""
+    names = list(dict.fromkeys(a or b for a, b in _VAR_REF.findall(segment)))
+    if not names or any(n not in known for n in names):
+        return None
+    combos = list(itertools.islice(itertools.product(*(known[n] for n in names)), _VARIANTS_MAX + 1))
+    if len(combos) > _VARIANTS_MAX:
+        return None
+    return [_VAR_REF.sub(lambda m, env=dict(zip(names, c)): env[m.group(1) or m.group(2)], segment) for c in combos]
+
+def _learn_vars(segment: str, known: dict) -> None:
+    """Record what `segment` sets: `X=v`, `export X=v`, a `for X in …` header. Forget what it changes otherwise."""
+    s = segment.strip()
+    m = _FOR_HEAD.fullmatch(s)
+    if m:
+        items = []
+        for word in m.group(2).split():
+            values = _expand(word, known) if "$" in word else [word]
+            plain = [_unquote(v) for v in values or []]
+            if not values or None in plain:
+                known.pop(m.group(1), None)
+                return
+            items += plain
+        known[m.group(1)] = items or [""]
+        return
+    if "=" in s and _ASSIGN_PREFIX.fullmatch(s + " "):
+        for name, value in re.findall(rf"([A-Za-z_]\w*)=({_ASSIGN_VALUE})", s):
+            plain = _unquote(value)
+            if plain is None:
+                known.pop(name, None)
+            else:
+                known[name] = [plain]
+        return
+    for name in list(known):
+        if _SETS_VAR.search(s) and re.search(rf"\b{name}\b", s):
+            known.pop(name)
 
 def _next_cwd(segment: str, cwd: str | None) -> str | None:
     """Directory the next command in a chain runs in, after `segment` ran in `cwd`."""
@@ -819,17 +913,20 @@ def _judge(tool_call: str, source: str, cwd: str | None) -> Verdict:
     # The model and the safe lane only see the command without comments (the regexes see the whole original)
     text = _strip_comments(tool_call) if source in ("user", "tool") else tool_call
     segments = _split_chain(text)
+    shell_vars = {k: list(v) for k, v in _KNOWN_ENV.items()}
     if len(segments) == 1:
         _emit("segment", index=0, total=1, text=text)
-        return _judge_one(text, source, cwd, regex_text=tool_call)
+        return _judge_one(text, source, cwd, regex_text=tool_call, variants=_expand(text, shell_vars))
     # Each command in a chain is judged on its own and the worst verdict wins.
     # Patterns spanning commands (curl …; … | sh) are caught by the whole-string regexes.
     verdicts = []
     seg_cwd = cwd
     for i, seg in enumerate(segments):
         _emit("segment", index=i, total=len(segments), text=seg)
-        verdicts.append(_judge_one(seg, source, seg_cwd))
-        seg_cwd = _next_cwd(seg, seg_cwd)
+        variants = _expand(seg, shell_vars)
+        verdicts.append(_judge_one(seg, source, seg_cwd, variants=variants))
+        seg_cwd = _next_cwd(variants[0] if variants and len(variants) == 1 else seg, seg_cwd)
+        _learn_vars(seg, shell_vars)
     hit = _regex_hit(tool_call)
     if hit is not None and all(v.policy_id != hit.id for v in verdicts):
         _emit("segment", index=len(segments), total=len(segments), text=None, whole=True)
@@ -837,13 +934,19 @@ def _judge(tool_call: str, source: str, cwd: str | None) -> Verdict:
     return max(verdicts, key=lambda v: (_ACTION_RANK[v.action], v.risk))
 
 def _judge_one(tool_call: str, source: str, cwd: str | None = None,
-               regex_text: str | None = None) -> Verdict:
+               regex_text: str | None = None, variants: list[str] | None = None) -> Verdict:
     """regex_text: what the regexes scan when it differs from what the model sees
-    (the original with comments, while the model gets the comment-free command)."""
+    (the original with comments, while the model gets the comment-free command).
+    variants: the command with the variables set earlier in the chain replaced by their values (one per combination
+    of loop values); the regexes and the safe lane read those too, the model reads the command as written."""
     _ensure()
     hit = _regex_hit(tool_call if regex_text is None else regex_text)
+    for v in variants or ():
+        h = _regex_hit(v)
+        if h is not None and (hit is None or (h.action_on_regex == "block" and hit.action_on_regex != "block")):
+            hit = h
     regex_block = hit is not None and hit.action_on_regex == "block"
-    safe = hit is None and _safe_command(tool_call)
+    safe = hit is None and (all(_safe_command(v) for v in variants) if variants else _safe_command(tool_call))
     mock = is_mock()
     _emit("policy", policy_id=hit.id if hit is not None else None,
           result="hit-block" if regex_block else "hit-review" if hit is not None else "safe" if safe else "clear")

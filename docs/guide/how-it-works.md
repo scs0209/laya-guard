@@ -47,6 +47,16 @@ tools agents chain (`cut`, `sort`, `uniq`, `tr`, `diff`, `stat`, `find` without
 `uniq in out`, `sed -i`). The program reads its arguments after the shell has removed the
 quotes, so the command must also pass with them taken out: `find . -ex'ec' …` is `-exec`.
 
+A variable set earlier in the same command to a plain value is read as that value
+(`d=src; ls $d` is `ls src`, `for f in a b; do sed -n 1p $f; done` is checked for `a` and
+`b`), by the lane and by the regexes, so `d=~; rm -rf $d` is blocked as `rm -rf ~`. A
+variable we can't follow (`$1`, `$(…)`, the environment, one that is `read` later) still
+closes the lane. Assignments run nothing (`X=1 pytest`, `export A=b`), unless the name
+changes what runs: `PATH`, `LD_PRELOAD`, `GIT_*`, `*_OPTIONS`, `BASH_ENV` and the like go to
+the model. A heredoc whose body the shell doesn't expand (`git commit -F - <<'EOF'`) is data
+for its command. Reading the repository and its host is in the list (`git fetch`,
+`git rev-parse`, `gh pr view`/`checks`, `gh api` without a method or body).
+
 Windows commands get the same lane: a backslash between two path parts is read as a
 path separator (`cd C:\work\api`, `type src\app.py`, `pytest tests\unit`), cmd's
 `%VAR%` counts like `$VAR`, and the list has the cmd.exe and PowerShell equivalents

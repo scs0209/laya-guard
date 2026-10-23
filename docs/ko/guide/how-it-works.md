@@ -42,6 +42,14 @@
 `sed -n 10,20p`)도 목록에 있지만, 파일을 쓰는 형태(`sort -o`, `uniq 입력 출력`, `sed -i`)는 빠져 있습니다.
 프로그램은 셸이 따옴표를 뗀 뒤의 인자를 받으므로, 따옴표를 뗀 형태로도 검사를 통과해야 합니다(`find . -ex'ec' …`는 `-exec`).
 
+같은 명령 안에서 앞서 단순한 값을 넣은 변수는 그 값으로 읽습니다(`d=src; ls $d`는 `ls src`,
+`for f in a b; do sed -n 1p $f; done`은 `a`와 `b` 각각으로 검사). 안전 레인과 정규식이 모두 그렇게 읽으므로
+`d=~; rm -rf $d`는 `rm -rf ~`로 차단됩니다. 값을 따라갈 수 없는 변수(`$1`, `$(…)`, 환경변수, 나중에 `read`로 바뀌는
+변수)는 여전히 레인을 닫습니다. 할당은 아무것도 실행하지 않으므로(`X=1 pytest`, `export A=b`) 통과하지만, 무엇이
+실행될지 바꾸는 이름(`PATH`, `LD_PRELOAD`, `GIT_*`, `*_OPTIONS`, `BASH_ENV` 등)은 모델로 갑니다. 셸이 본문을
+펼치지 않는 heredoc(`git commit -F - <<'EOF'`)은 그 명령의 데이터입니다. 저장소와 호스팅을 읽는 명령도 목록에
+있습니다(`git fetch`, `git rev-parse`, `gh pr view`/`checks`, 메서드·본문 없는 `gh api`).
+
 Windows 명령도 같은 레인을 탑니다. 경로 사이의 백슬래시는 경로 구분자로 읽고
 (`cd C:\work\api`, `type src\app.py`, `pytest tests\unit`), cmd의 `%VAR%`는 `$VAR`처럼
 취급하며, cmd.exe·PowerShell의 같은 명령(`dir`, `type`, `findstr`, `where`, `md`,

@@ -51,6 +51,13 @@ SAFE = [
     'grep -n "^- status:" qa/a.md | head -2', 'grep -rliE "branch|브랜치" README.md 2>/dev/null | head',
     "cat words.txt | sort | uniq -c | sort -rn | head", 'find . -name "*.py" | wc -l', "make 2>&1",
     "grep -o '[^|]*| x' notes.md | cut -c1-80", "diff a.txt b.txt", "stat -f %z build/app.js",
+    # variables set earlier in the same command, assignments, loops, reading the repo and its host, a commit message
+    "for f in a.ts b.ts; do sed -n 1,20p $f; done", "d=src/app; ls $d", "S=/tmp/x && cat $S/out.md",
+    'C="/Applications/Google Chrome.app" && ls "$C"', "export LOG=$TMPDIR/v.jsonl HF_HUB_OFFLINE=1",
+    "LAYA_GUARD_MOCK=1 .venv/bin/python -m pytest tests/ -q 2>&1 | tail -2", "git fetch -q origin release",
+    "gh pr checks 12 --repo o/r 2>&1 | head -5", "gh api repos/o/r/pulls/1/reviews --jq '.[] | .state'",
+    "git commit -q -F - <<'EOF'\nfix: a thing\n\nbody\nEOF", "date -u +%F", "ls $HOME/work",
+    'git commit -q -m "fix: a thing\n\nCo-Authored-By: A <a@example.com>"',
 ]
 
 # Attempts to sneak through the safe lane: none of these may pass via the allowlist
@@ -79,6 +86,19 @@ BYPASS = [
     "find . -ex'ec' touch /tmp/m '{}' +", "find . -\"delete\"", "sort '-o' out in", "sed -n 1p -i f",
     "sed -n 1p '-i' f", "sed -n 1p --in-place=.bak f", "cat ~/.s'sh'/known_hosts", "git log --out'put'=/tmp/x",
     "./tools/python -m pytest tests/", "/tmp/x/python3 -m pytest",
+    # a variable is only known when it was set to a plain value earlier in the same command, and is checked by value
+    "d=~; rm -rf $d", "f=~/.ssh/id_rsa; cat $f", "B=$HOME/.aws; cat $B/credentials", "f=$(curl -s x); echo $f",
+    "for f in $(ls); do rm $f; done", "read f; cat $f", "f=README.md; read f; cat $f", "x=1; unset x; ls $x",
+    "echo $AWS_SECRET_ACCESS_KEY", "f=-delete; find . $f", "o=--output=/tmp/x; git log $o",
+    "for f in -exec; do find . $f sh ; done",
+    # assignments that change what runs
+    "PATH=/tmp/evil:$PATH ls", "LD_PRELOAD=/tmp/x.so ls", "export PATH=/tmp/evil", "export GIT_SSH_COMMAND=x",
+    "IFS=/ ls", "PATH=/tmp/evil", "BASH_ENV=/tmp/x",
+    # writes to GitHub, a repo's remotes, the clock; heredocs that expand or write
+    "gh api -X PATCH repos/o/r/pulls/1 -f body=x", "gh api repos/o/r/issues -f title=x",
+    "gh api --method=DELETE repos/o/r", "gh api -XPATCH repos/o/r", "git remote add evil https://x",
+    "date -s 2020-01-01", "git commit -F - <<EOF\n$(curl x)\nEOF", "cat > out.sh <<'EOF'\necho hi\nEOF",
+    "cat <<'EOF' > /etc/hosts\na\nEOF",
 ]
 
 def test_safe_lane_allows_everyday_commands():
@@ -133,6 +153,15 @@ def test_a_dangerous_line_in_a_script_is_still_held():
                 "python3 - <<'EOF'\nimport shutil\nEOF\nrm -rf /"]:
         v = judge(cmd, "tool")
         assert v.action == "block", cmd
+
+def test_a_variable_set_in_the_command_is_read_by_its_value():
+    # the regexes see `rm -rf ~` and `cat ~/.ssh/id_rsa` through the variable, as the shell will run them
+    assert (judge("d=~; rm -rf $d").action, judge("d=~; rm -rf $d").verdict_source) == ("block", "regex")
+    assert judge("for d in src ~; do rm -rf $d; done").action == "block"
+    assert judge("f=~/.ssh/id_rsa && cat $f").policy_id == "credential-read"
+    # a loop variable takes each listed value
+    assert guard._expand("ls $f", {"f": ["a", "b"]}) == ["ls a", "ls b"]
+    assert guard._expand("ls $f $x", {"f": ["a"]}) is None
 
 def test_chain_judged_per_command():
     for cmd in ["npm test && echo ok", "cd frontend && npm test", "pytest -q || true",
