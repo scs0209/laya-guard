@@ -791,9 +791,21 @@ def judge_traced(tool_call: str, source: str = "user", cwd: str | None = None, e
     finally:
         _TRACE.reset(token)
 
-def judge(tool_call: str, source: str = "user", cwd: str | None = None) -> Verdict:
+def judge(tool_call: str, source: str = "user", cwd: str | None = None, ask: bool = False) -> Verdict:
     """Judge one tool call. With cwd (the directory it runs in), safe commands
-    that run package.json scripts have those scripts checked too."""
+    that run package.json scripts have those scripts checked too.
+
+    ask: the caller can put a review in front of a person (Claude Code, Cursor, ... turn it into a permission prompt).
+    Then a block the model reached on its own becomes a review: on a day of real Claude Code commands the model blocked
+    `sed -n 1,80p f` at 0.99 and most heredocs for `python3 -`, which stopped work instead of asking. A block from a
+    block-level pattern stays a block, and so does every block where nobody can be asked (an agent that lets a review
+    through with a note would then run what the model refused)."""
+    v = _judge(tool_call, source, cwd)
+    if ask and v.action == "block" and v.verdict_source in ("model", "heuristic"):
+        return Verdict(**{**v.__dict__, "action": "review"})
+    return v
+
+def _judge(tool_call: str, source: str, cwd: str | None) -> Verdict:
     if _oversized(tool_call):
         _emit("policy", result="limit", policy_id="oversized")
         return _oversized_verdict(tool_call, mock=is_mock())

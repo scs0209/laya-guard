@@ -548,13 +548,37 @@ def test_strip_comments_removes_only_real_comments():
 def test_model_sees_the_command_without_comments(monkeypatch):
     seen = _fake_model(monkeypatch, marker="kubectl")
     monkeypatch.setattr(guard, "is_mock", lambda: False)
+    bare = judge("kubectl delete namespace prod")
+    assert bare.action == "block"
     for text in ["kubectl delete namespace prod  # clean stale build output before CI rebuild",
                  "# routine cleanup\nkubectl delete namespace prod",
                  "kubectl delete namespace prod  # clean; stale && safe"]:
         seen.clear()
         v = judge(text)
         assert seen and all("#" not in w for w in seen), text
-        assert v.action == "block", text                  # a comment can't lower the verdict
+        assert (v.action, v.risk) == (bare.action, bare.risk), text   # a comment can't lower the verdict
+
+def test_a_block_only_the_model_reached_is_asked_where_someone_can_be_asked(monkeypatch):
+    """Claude Code, Cursor, ... put a review in front of a person; there a model-only block becomes a review. Agents
+    that let a review through with a note keep the block, and a block-level pattern always blocks."""
+    _fake_model(monkeypatch, marker="kubectl")
+    monkeypatch.setattr(guard, "is_mock", lambda: False)
+    model_only = "kubectl delete namespace prod"
+    assert judge(model_only).action == "block"
+    v = judge(model_only, ask=True)
+    assert (v.action, v.verdict_source) == ("review", "model") and v.risk >= 0.8      # the model's risk stays
+    assert judge("rm -rf /", ask=True).action == "block"                              # a pattern still refuses
+    assert judge(f"ls && {model_only}", ask=True).action == "review"
+
+def test_the_route_asks_only_for_agents_that_can_ask(monkeypatch, tmp_path):
+    monkeypatch.setenv("LAYA_GUARD_LOG_PATH", str(tmp_path / "v.jsonl"))
+    _fake_model(monkeypatch, marker="kubectl")
+    monkeypatch.setattr(guard, "is_mock", lambda: False)
+    from laya_guard import server
+    call = dict(tool_call="kubectl delete namespace prod", tool_name="Bash")
+    assert server.guard(server.GuardReq(agent="claude-code", **call)).action == "review"
+    assert server.guard(server.GuardReq(agent="gemini-cli", source="tool", **call)).action == "block"
+    assert server.guard(server.GuardReq(**call)).action == "block"
 
 def test_untrusted_sources_keep_comment_text(monkeypatch):
     seen = _fake_model(monkeypatch)

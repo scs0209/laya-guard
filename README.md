@@ -161,20 +161,25 @@ incident, with sources and whether that agent would actually have been stopped: 
 agent tool_call
   → your agent's hook (installed by `laya-guard install`)
   → POST /guard (localhost:8787)
-  → chains (`a && b`, `a; b`, `a || b`) split, each command judged, the worst verdict wins
+  → chains (`a && b`, `a; b`, a script's lines) split, each command judged, the worst verdict wins
   → policy.yaml: 12 regex policies
       · block-level match   → instant block, model not consulted
       · review-level match  → the model judges, floor is review
-      · safe command        → instant allow (ls, git status, npm test…)
+      · safe command        → instant allow (ls, git status, `grep x f | head`…)
       · anything else       → the model judges freely
   → Laya → allow / review / block
+      (where the agent asks you about a review, a block only the model reached becomes a review)
 ```
 
 * **Rules first.** Twelve regex policies in [policy.yaml](src/laya_guard/policy.yaml) catch known patterns without
   calling the model. Edit them or add your own, no code changes needed.
-* **A safe-command lane.** A single plain command with no shell metacharacters, risky flags or sensitive paths is
-  allowed instantly, Windows paths and cmd/PowerShell equivalents included. For `npm test` and the like, the
-  package.json script it would really run is regex-checked first.
+* **A safe-command lane.** A plain command with no shell metacharacters, risky flags or sensitive paths is allowed
+  instantly, and so is a pipeline of them with output thrown away (`grep -n x f 2>/dev/null | head`), Windows paths
+  and cmd/PowerShell equivalents included. For `npm test` and the like, the package.json script it would really run is
+  regex-checked first.
+* **The model asks, rules refuse.** In Claude Code, Cursor, Qwen Code and Copilot CLI a block only the model reached
+  becomes a permission prompt; a block-level pattern or protected path still blocks. Agents that let a review through
+  with a note keep the model's block.
 * **Stricter for untrusted sources.** A call derived from tool output, an email or a web page gets lower thresholds,
   which is what stops indirect injections.
 * **Private by default.** The verdict log keeps the action, risk, policy, latency and a hash, never the command text.

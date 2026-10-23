@@ -23,6 +23,11 @@ app = FastAPI(title="laya-guard")
 _WRITE_TOKEN = secrets.token_urlsafe(32)
 
 
+# The agents whose adapter turns a review into a permission prompt (README, "review becomes"). For them a block only the
+# model reached is asked about instead; the others let a review through with a note, so it stays a block there.
+ASK_AGENTS = frozenset({"claude-code", "cursor", "qwen-code", "copilot-cli"})
+
+
 def _judge_and_log(text: str, source: str, cwd: str | None = None, tool_name: str | None = None,
                    paths: list[str] | None = None, agent: str | None = None, accesses: list | None = None,
                    command: str | None = None):
@@ -32,7 +37,8 @@ def _judge_and_log(text: str, source: str, cwd: str | None = None, tool_name: st
     v = fileaccess.judge_file_call(tool_name, paths, cwd, accesses)
     if v is None:
         shell = command or (text if tool_name == "Bash" else None)
-        v = fileaccess.stricter(judge(text, source=source, cwd=cwd), fileaccess.judge_shell(shell, cwd))
+        v = fileaccess.stricter(judge(text, source=source, cwd=cwd, ask=agent in ASK_AGENTS),
+                                fileaccess.judge_shell(shell, cwd))
     log_verdict(
         action=v.action, risk=v.risk, policy_id=v.policy_id, reason=v.reason,
         mock=v.mock, source=source,
