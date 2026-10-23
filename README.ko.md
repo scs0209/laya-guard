@@ -66,6 +66,14 @@ pip install --no-deps laya-guardrail pyyaml
 laya-guard check --offline "cat ~/.ssh/id_rsa"     # [BLOCK] ... policy=credential-read
 ```
 
+**훅을 설치하기 전에** 최근 하루치 Claude Code·Codex 세션에서 무엇이 걸렸을지 확인할 수 있습니다(이 컴퓨터에서만
+읽고, 기록하거나 보내지 않음; [감사](docs/ko/guide/audit.md)):
+
+```bash
+pip install laya-guardrail
+laya-guard audit                    # 일주일은 --since 7d, 스크린샷용은 --redact
+```
+
 **내 에이전트에 붙이기:**
 
 ```bash
@@ -187,6 +195,7 @@ AgentDojo이며, 자체 측정이고 심판 레벨입니다. 놓친 사례와 �
 
 | 가이드 | 내용 |
 |---|---|
+| [감사](docs/ko/guide/audit.md) | `laya-guard audit`: Claude Code와 Codex가 이미 실행한 셸 명령을 그 대화 기록으로 판정 |
 | [에이전트](docs/ko/guide/agents.md) | 에이전트별 설치, 각각 무엇을 쓰는지, HTTP로 아무 에이전트 루프 가드, 명령 묶음 감사 |
 | [파일](docs/ko/guide/file-protection.md) | 보호 경로, 파일 활동 기록, macOS OS 모니터, `laya-guard footprint` |
 | [OS 샌드박스](docs/ko/guide/sandbox.md) | `laya-guard sandbox <에이전트>`: Claude Code·Codex·Copilot·Gemini·Qwen 자체 샌드박스에 보호 경로 적용, 나머지는 `laya-guard run` |

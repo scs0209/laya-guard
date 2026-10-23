@@ -305,6 +305,25 @@ def cmd_install(args):
         return 1
     return 0
 
+def cmd_audit(args):
+    """Judge the shell commands Claude Code and Codex already ran, from their own transcripts."""
+    from . import audit
+    try:
+        since = audit.parse_since(args.since)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    agents = audit.AGENTS if args.agent == "all" else (args.agent,)
+    progress = None if args.json or not sys.stderr.isatty() else audit.progress_to_stderr
+    report = audit.run(agents, since, progress=progress)
+    if progress:
+        print("\r" + " " * 40 + "\r", end="", file=sys.stderr)
+    if args.json:
+        print(json.dumps(audit.to_json(report, redact=args.redact), indent=2, ensure_ascii=False))
+    else:
+        print(audit.render(report, limit=args.limit, redact=args.redact))
+    return 0
+
 def cmd_sandbox(args):
     """Turn an agent's own OS sandbox on, denying the protected paths (shows the change first)."""
     from pathlib import Path
@@ -576,6 +595,15 @@ def main(argv=None):
     u.add_argument("-y", "--yes", action="store_true", help="apply without asking")
     u.add_argument("--force", action="store_true", help="also remove a hand-written laya-guard hook entry")
     u.set_defaults(fn=cmd_uninstall)
+    au = sub.add_parser("audit", help="judge the shell commands Claude Code and Codex already ran, from their own "
+                                      "transcripts (nothing is logged or sent)")
+    # A day by default: a heavy day of 1,961 Claude Code commands took 11 minutes with the model (docs/guide/audit.md).
+    au.add_argument("--since", default="24h", help="how far back: 24h, 7d, 30d or all (default: 24h)")
+    au.add_argument("--agent", choices=("all", "claude-code", "codex"), default="all")
+    au.add_argument("--limit", type=int, default=20, help="how many findings to list (default: 20)")
+    au.add_argument("--redact", action="store_true", help="leave the command text out (for a screenshot)")
+    au.add_argument("--json", action="store_true")
+    au.set_defaults(fn=cmd_audit)
     sb = sub.add_parser("sandbox", help="turn an agent's own OS sandbox on, denying the protected paths (shows a diff first)")
     sb.add_argument("agent", nargs="?", help="claude-code, codex, copilot-cli, gemini-cli, qwen-code or cursor")
     _scope_args(sb, None)

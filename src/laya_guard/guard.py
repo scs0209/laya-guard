@@ -794,6 +794,10 @@ def judge_traced(tool_call: str, source: str = "user", cwd: str | None = None, e
     finally:
         _TRACE.reset(token)
 
+# The agents whose adapter turns a review into a permission prompt (README, "review becomes"). For them a block only the
+# model reached is asked about instead; the others let a review through with a note, so it stays a block there.
+ASK_AGENTS = frozenset({"claude-code", "cursor", "qwen-code", "copilot-cli"})
+
 def judge(tool_call: str, source: str = "user", cwd: str | None = None, ask: bool = False) -> Verdict:
     """Judge one tool call. With cwd (the directory it runs in), safe commands
     that run package.json scripts have those scripts checked too.

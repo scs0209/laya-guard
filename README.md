@@ -67,6 +67,14 @@ pip install --no-deps laya-guardrail pyyaml
 laya-guard check --offline "cat ~/.ssh/id_rsa"     # [BLOCK] ... policy=credential-read
 ```
 
+**See what it would have held** in your own last day of Claude Code and Codex sessions, before installing any hook
+(read locally, nothing logged or sent; [Audit](docs/guide/audit.md)):
+
+```bash
+pip install laya-guardrail
+laya-guard audit                    # add --since 7d for a week, --redact for a screenshot
+```
+
 **Use it with your agent:**
 
 ```bash
@@ -190,6 +198,7 @@ Deep dive: [Under the hood](docs/guide/how-it-works.md).
 
 | Guide | What's in it |
 |---|---|
+| [Audit](docs/guide/audit.md) | `laya-guard audit`: judge the shell commands Claude Code and Codex already ran, from their own transcripts |
 | [Agents](docs/guide/agents.md) | Per-agent install, what each one writes, guarding any agent loop over HTTP, batch audits |
 | [Files](docs/guide/file-protection.md) | Protected paths, the file activity log, the macOS OS monitor, `laya-guard footprint` |
 | [OS sandbox](docs/guide/sandbox.md) | `laya-guard sandbox <agent>`: the protected paths in Claude Code's, Codex's, Copilot's, Gemini's and Qwen's own sandbox; `laya-guard run` for the rest |
