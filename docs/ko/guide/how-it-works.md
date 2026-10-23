@@ -48,7 +48,7 @@
 변수)는 여전히 레인을 닫습니다. 할당은 아무것도 실행하지 않으므로(`X=1 pytest`, `export A=b`) 통과하지만, 무엇이
 실행될지 바꾸는 이름(`PATH`, `LD_PRELOAD`, `GIT_*`, `*_OPTIONS`, `BASH_ENV` 등)은 모델로 갑니다. 셸이 본문을
 펼치지 않는 heredoc(`git commit -F - <<'EOF'`)은 그 명령의 데이터입니다. 저장소와 호스팅을 읽는 명령도 목록에
-있습니다(`git fetch`, `git rev-parse`, `gh pr view`/`checks`, 메서드·본문 없는 `gh api`).
+있습니다(`--prune`·refspec 없는 `git fetch`, `git rev-parse`, `gh pr view`/`checks`, 메서드·본문 없는 `gh api`).
 
 Windows 명령도 같은 레인을 탑니다. 경로 사이의 백슬래시는 경로 구분자로 읽고
 (`cd C:\work\api`, `type src\app.py`, `pytest tests\unit`), cmd의 `%VAR%`는 `$VAR`처럼

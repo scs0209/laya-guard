@@ -54,8 +54,9 @@ variable we can't follow (`$1`, `$(…)`, the environment, one that is `read` la
 closes the lane. Assignments run nothing (`X=1 pytest`, `export A=b`), unless the name
 changes what runs: `PATH`, `LD_PRELOAD`, `GIT_*`, `*_OPTIONS`, `BASH_ENV` and the like go to
 the model. A heredoc whose body the shell doesn't expand (`git commit -F - <<'EOF'`) is data
-for its command. Reading the repository and its host is in the list (`git fetch`,
-`git rev-parse`, `gh pr view`/`checks`, `gh api` without a method or body).
+for its command. Reading the repository and its host is in the list (`git fetch` without
+`--prune` or a refspec, `git rev-parse`, `gh pr view`/`checks`, `gh api` without a method or
+body).
 
 Windows commands get the same lane: a backslash between two path parts is read as a
 path separator (`cd C:\work\api`, `type src\app.py`, `pytest tests\unit`), cmd's

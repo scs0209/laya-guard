@@ -951,7 +951,9 @@ def _judge_one(tool_call: str, source: str, cwd: str | None = None,
     _emit("policy", policy_id=hit.id if hit is not None else None,
           result="hit-block" if regex_block else "hit-review" if hit is not None else "safe" if safe else "clear")
     if safe and cwd is not None:
-        finding = _check_scripts(" ".join(tool_call.split()), cwd)
+        # with variables, the scripts are the ones the values name (`s=test; npm run $s` runs scripts.test)
+        findings = [f for f in (_check_scripts(" ".join(c.split()), cwd) for c in variants or [tool_call]) if f]
+        finding = max(findings, key=lambda f: f.rank()) if findings else None
         if finding is not None:
             _emit("package-script", key=finding.key, policy_id=finding.hit.id if finding.hit is not None else None,
                   unresolved=finding.unresolved, blocked=finding.rank() == 2)
@@ -964,7 +966,7 @@ def _judge_one(tool_call: str, source: str, cwd: str | None = None,
                 reason=_script_reason(finding, _is_korean(tool_call)), mock=mock,
                 verdict_source="regex" if finding.hit is not None else "allowlist")
     if safe and cwd is not None:
-        runner = _runner_script(" ".join(tool_call.split()))
+        runner = _runner_script(" ".join((variants or [tool_call])[0].split()))
         if runner is not None:
             found = _package_scripts(cwd)
             present = bool(found and any(found[1].get(k) for k in (f"pre{runner[0]}", runner[0], f"post{runner[0]}")))

@@ -55,9 +55,11 @@ All notable changes to this project are documented here. Versions follow
     it goes to the model.
   - `do`/`done`/`then`/`fi` are syntax on one line too; `X="a b"` no longer stops a chain from being split.
   - A heredoc whose body the shell doesn't expand (`git commit -F - <<'EOF'`) is data for its command.
-  - New entries: `git fetch`/`rev-parse`/`check-ignore`/`ls-files`/`ls-remote`/`merge-base`/`blame`/`describe`,
-    `git remote -v`, `gh pr view`/`checks`/`list`/`diff`, `gh issue`/`run`/`release` `view`/`list`, `gh api` with no
-    method or body, `jq`, `seq`, `printf`, `date` (not `-s`), `break`, `continue`.
+  - New entries: `git rev-parse`/`check-ignore`/`ls-files`/`ls-remote`/`merge-base`/`blame`/`describe`, `git fetch`
+    of a remote and branch names only (no `--prune`, no refspec like `main:main`, no `--force`), `git remote -v`,
+    `gh pr view`/`checks`/`list`/`diff`, `gh issue`/`run`/`release` `view`/`list`, `gh api` with no method or body,
+    `jq`, `seq`, `printf` (not `-v`, which sets a variable), `date` (not `-s`), `break`, `continue`. With a variable,
+    `npm run $s` has the package.json script its value names checked (`s=test` checks `scripts.test`).
   On the same 1,840 real commands judged as the Claude Code hook judges them, reviews went from 53.2% to 44.6% (161
   reviews became allows, 2 became regex blocks, 3 allows became reviews when a chain that used to go whole to the
   model was split). Adding context to the model's input was tried and dropped: it allowed 58 of 200 reviewed real

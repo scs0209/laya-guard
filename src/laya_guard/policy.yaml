@@ -40,12 +40,15 @@ safe_commands:
   - 'git branch( (-a|-r|-v|-vv|--list|--show-current|\w[\w./-]*))*'
   - 'git stash( (list|show|push)( \S+)*)?'
   - 'git checkout -b \S+'
-  # Reading the repository and its host: nothing here changes a ref, a file or anything on GitHub.
-  - 'git (fetch|rev-parse|check-ignore|ls-files|ls-remote|merge-base|blame|shortlog|describe)( \S+)*'
+  # Reading the repository and its host: nothing here changes a branch, a file or anything on GitHub. A fetch only
+  # updates the remote-tracking refs: no --prune (it deletes them), no refspec (`main:main` moves a local branch).
+  - 'git (rev-parse|check-ignore|ls-files|ls-remote|merge-base|blame|shortlog|describe)( \S+)*'
+  - 'git fetch( (-q|--quiet|-v|--verbose|--tags|--all|--no-tags))*( [A-Za-z0-9][\w.-]*( [A-Za-z0-9][\w./-]*)*)?'
   - 'git remote( -v| show \S+| get-url \S+)?'
   - 'gh (pr (view|checks|list|diff|status)|issue (view|list)|run (view|list)|repo view|release (view|list))( \S+)*'
   - 'gh api (?!(.* )?(-[XfF]|--method|--field|--raw-field|--input))\S+( \S+)*'     # a GET: no method, no body
-  - '(jq|seq|printf)( \S+)+'
+  - '(jq|seq)( \S+)+'
+  - 'printf (?!-v)\S+( \S+)*'                     # not `printf -v NAME`, which sets a variable (PATH) like an assignment
   - '(npm|pnpm|yarn|bun) (test|build|lint|run (build|test|lint|typecheck|format|check))( \S+)*'
   # Only a python on PATH or in the project's venv: `./tools/python` could be any program named python.
   - '(pytest|((\.?venv|env)/bin/)?python3?(\.[0-9]+)? -m pytest)( \S+)*'

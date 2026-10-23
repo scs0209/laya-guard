@@ -99,6 +99,9 @@ BYPASS = [
     "gh api --method=DELETE repos/o/r", "gh api -XPATCH repos/o/r", "git remote add evil https://x",
     "date -s 2020-01-01", "git commit -F - <<EOF\n$(curl x)\nEOF", "cat > out.sh <<'EOF'\necho hi\nEOF",
     "cat <<'EOF' > /etc/hosts\na\nEOF",
+    # a fetch that deletes refs or moves a local branch; printf setting a variable
+    "git fetch --prune origin", "git fetch -p", "git fetch origin main:main", "git fetch origin +refs/heads/*:refs/x/*",
+    "git fetch --force origin main", "printf -v PATH /tmp/evil; ls", "printf '-v' PATH /tmp/evil",
 ]
 
 def test_safe_lane_allows_everyday_commands():
@@ -278,6 +281,13 @@ def test_package_scripts_are_checked(tmp_path, monkeypatch):
         assert judge(cmd, "tool", cwd=cwd).verdict_source == "allowlist", (cmd, cwd)
     # bun test is bun's own test runner, so it doesn't run scripts.test
     assert judge("bun test", cwd=evil).verdict_source == "allowlist"
+
+def test_package_scripts_reached_through_a_variable_are_checked(tmp_path, monkeypatch):
+    _model_mode(monkeypatch, _broken_model)
+    evil = _package(tmp_path / "evil", {"test": "rm -rf ~", "lint": "eslint ."})
+    assert judge("s=test; npm run $s", "tool", cwd=evil).action == "block"
+    assert judge("for s in lint test; do npm run $s; done", "tool", cwd=evil).action == "block"
+    assert judge("s=lint; npm run $s", "tool", cwd=evil).verdict_source == "allowlist"
 
 def test_package_scripts_follow_directory(tmp_path):
     root = _package(tmp_path, {"test": "jest"})
