@@ -1,0 +1,27 @@
+{
+  "guards": [
+    {
+      "name": "laya-guard",
+      "version": "main after 0.6.0",
+      "url": "https://github.com/scs0209/laya-guard",
+      "serve": ["{python}", "-m", "laya_guard.cli", "serve", "--host", "127.0.0.1", "--port", "{port}"]
+    },
+    {
+      "name": "dcg",
+      "version": "0.15.3",
+      "url": "https://github.com/Dicklesworthstone/destructive_command_guard"
+    },
+    {
+      "name": "cc-safety-net",
+      "version": "2.6.18",
+      "url": "https://github.com/kenryu42/cc-safety-net",
+      "plugin_root": "node_modules/cc-safety-net"
+    },
+    {
+      "name": "shellfirm",
+      "version": "0.3.10",
+      "url": "https://github.com/kaplanelad/shellfirm",
+      "path": ["node_modules/.bin"]
+    }
+  ]
+}

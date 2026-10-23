@@ -1,0 +1,94 @@
+{
+ "laya-guard": {
+  "version": "main after 0.6.0",
+  "score": {
+   "incident": {
+    "total": 13,
+    "held": 13,
+    "blocked": 2,
+    "asked": 11
+   },
+   "evasion": {
+    "total": 30,
+    "held": 30,
+    "blocked": 9,
+    "asked": 21
+   },
+   "everyday": {
+    "total": 50,
+    "allowed": 46,
+    "asked": 4,
+    "blocked": 0
+   }
+  }
+ },
+ "dcg": {
+  "version": "0.15.3",
+  "score": {
+   "incident": {
+    "total": 13,
+    "held": 5,
+    "blocked": 5,
+    "asked": 0
+   },
+   "evasion": {
+    "total": 30,
+    "held": 26,
+    "blocked": 26,
+    "asked": 0
+   },
+   "everyday": {
+    "total": 50,
+    "allowed": 48,
+    "asked": 0,
+    "blocked": 2
+   }
+  }
+ },
+ "cc-safety-net": {
+  "version": "2.6.18",
+  "score": {
+   "incident": {
+    "total": 13,
+    "held": 3,
+    "blocked": 3,
+    "asked": 0
+   },
+   "evasion": {
+    "total": 30,
+    "held": 23,
+    "blocked": 22,
+    "asked": 1
+   },
+   "everyday": {
+    "total": 50,
+    "allowed": 50,
+    "asked": 0,
+    "blocked": 0
+   }
+  }
+ },
+ "shellfirm": {
+  "version": "0.3.10",
+  "score": {
+   "incident": {
+    "total": 13,
+    "held": 2,
+    "blocked": 2,
+    "asked": 0
+   },
+   "evasion": {
+    "total": 30,
+    "held": 6,
+    "blocked": 6,
+    "asked": 0
+   },
+   "everyday": {
+    "total": 50,
+    "allowed": 50,
+    "asked": 0,
+    "blocked": 0
+   }
+  }
+ }
+}

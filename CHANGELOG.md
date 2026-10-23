@@ -14,12 +14,20 @@ All notable changes to this project are documented here. Versions follow
   dashboard can change agent settings and must stay on localhost. Commands are judged in memory and not logged; 4,000
   characters and 20 requests a minute per visitor. A free account can only host a Gradio Space on ZeroGPU, so it
   runs there with the model on CPU and never asks for a GPU. `judge_traced()` takes `ask=` like `judge()`.
+- **An incident benchmark against other command guards** ([bench/](bench/README.md)). The seven replayed incidents,
+  30 shell evasions of the same harms (`r''m`, a target in a variable, `${IFS}`, base64 into `sh`, force-push
+  forms…) and 50 everyday agent commands go to laya-guard, dcg 0.15.3, cc-safety-net 2.6.18 and shellfirm 0.3.10.
+  Each guard is installed by its own Claude Code installer into its own temporary HOME, gets the JSON Claude Code
+  sends a PreToolUse hook, and is read with Claude Code's rules (exit 2/deny/block, ask, otherwise run).
+  `bash bench/setup.sh && python bench/run.py`; raw answers in `bench/results/`. laya-guard held 13/13 incidents and
+  30/30 evasions, mostly by asking, and asked about 4 of 50 everyday commands; dcg held 5/13 and 26/30 and blocked 2
+  everyday ones. The page says plainly that the set was written by laya-guard's author.
 
 ### Fixed
 
 - **`git push -f origin main` and `git push origin +main` were allowed.** The force-push pattern
-  (`git push\s.*\s-f`) needed two spaces before `-f`, and a `+` refspec wasn't covered. Now `--force*`, `-f` (also
-  inside `-uf`) and `+ref` are `mass-delete` reviews.
+  (`git push\s.*\s-f`) needed two spaces before `-f`, and a `+` refspec wasn't covered. Found by the benchmark; now
+  `--force*`, `-f` (also inside `-uf`) and `+ref` are `mass-delete` reviews.
 
 ## [0.6.0] - 2026-10-23
 
