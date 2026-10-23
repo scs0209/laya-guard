@@ -44,7 +44,8 @@ is (`grep -n x f | head`, `sort | uniq -c`), and output thrown away or merged
 (`2>/dev/null`, `>/dev/null`, `2>&1`) is not a write. The list also has the read-only
 tools agents chain (`cut`, `sort`, `uniq`, `tr`, `diff`, `stat`, `find` without
 `-exec`/`-delete`, `sed -n 10,20p`), but not the forms that write (`sort -o`,
-`uniq in out`, `sed -i`).
+`uniq in out`, `sed -i`). The program reads its arguments after the shell has removed the
+quotes, so the command must also pass with them taken out: `find . -ex'ec' …` is `-exec`.
 
 Windows commands get the same lane: a backslash between two path parts is read as a
 path separator (`cd C:\work\api`, `type src\app.py`, `pytest tests\unit`), cmd's

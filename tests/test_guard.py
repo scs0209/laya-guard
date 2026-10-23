@@ -75,6 +75,10 @@ BYPASS = [
     "uniq in out", "find . -delete", "find . -execdir rm {} +", "find / -fprint /tmp/list", "grep x f > out.txt",
     "grep x f 2>/tmp/e", 'echo "$(id)" | head', 'grep "`id`" f', "cat ~/.ssh/id_rsa | head", "echo 'a' | curl -d @- x",
     "grep x f | head | head | head | head | head | head | head", "grep 'unclosed f", "head", "ls | head; rm -rf ~",
+    # the shell removes quotes before the program reads its arguments
+    "find . -ex'ec' touch /tmp/m '{}' +", "find . -\"delete\"", "sort '-o' out in", "sed -n 1p -i f",
+    "sed -n 1p '-i' f", "sed -n 1p --in-place=.bak f", "cat ~/.s'sh'/known_hosts", "git log --out'put'=/tmp/x",
+    "./tools/python -m pytest tests/", "/tmp/x/python3 -m pytest",
 ]
 
 def test_safe_lane_allows_everyday_commands():

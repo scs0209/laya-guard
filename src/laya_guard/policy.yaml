@@ -39,7 +39,8 @@ safe_commands:
   - 'git stash( (list|show|push)( \S+)*)?'
   - 'git checkout -b \S+'
   - '(npm|pnpm|yarn|bun) (test|build|lint|run (build|test|lint|typecheck|format|check))( \S+)*'
-  - '(pytest|(\S*/)?python3?(\.[0-9]+)? -m pytest)( \S+)*'
+  # Only a python on PATH or in the project's venv: `./tools/python` could be any program named python.
+  - '(pytest|((\.?venv|env)/bin/)?python3?(\.[0-9]+)? -m pytest)( \S+)*'
   # Shell syntax that runs nothing by itself: a variable set or unset, a loop header, a test.
   - '[A-Za-z_][A-Za-z0-9_]*=\S*'
   - 'unset( [A-Za-z_][A-Za-z0-9_]*)+'
@@ -56,7 +57,7 @@ safe_commands:
   - 'sort( (?!-\S*o)\S+)*'
   - 'uniq( -\S+)*'
   - '(diff|cmp)( \S+)+'
-  - 'sed -n [''"]?([0-9]+|\$)(,([0-9]+|\$))?p[''"]?( \S+)+'
+  - 'sed -n [''"]?([0-9]+|\$)(,([0-9]+|\$))?p[''"]?( [^\s-]\S*)+'
   - 'find( \S+)*'
   # The same everyday commands on Windows (cmd.exe and PowerShell). Backslash paths are read as paths (guard.py),
   # so `cd C:\work\api`, `type src\app.py` and `pytest tests\unit` match the lines above or these.

@@ -20,7 +20,10 @@ All notable changes to this project are documented here. Versions follow
     thrown away or merged (`2>/dev/null`, `2>&1`), and quoted text (`grep -o '[^|]*'`, `"a\|b"`) no longer close it.
     New read-only entries: `cut`, `sort` (not `-o`), `uniq` (flags only), `tr`, `nl`, `diff`, `stat`, `file`,
     `sed -n N,Mp`, `find` (with `-execdir`, `-ok`, `-delete`, `-fprint*` now risky flags), a bare `X=value`, `unset`,
-    a `for … in` header, `[ … ]`/`test`, and `.venv/bin/python -m pytest`.
+    a `for … in` header, `[ … ]`/`test`, and `.venv/bin/python -m pytest` (a `python` on PATH or in `venv`/`.venv`/`env`
+    only, not `./tools/python`). Because the shell removes quotes before the program reads its arguments, a command
+    must pass the risky-flag, sensitive-path and list checks with the quotes taken out too: `find . -ex'ec' …`,
+    `sort '-o' out in` and `sed -n 1p -i f` go to the model.
   - **A script is split into its commands.** Lines of a multi-line script are judged one by one like a one-line chain
     (a heredoc's body stays with its command, `then`/`do`/`fi` are syntax), and a command that only carries Korean
     text (`grep "검색어" src`) is now treated as a command, not Korean prose.

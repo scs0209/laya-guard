@@ -162,11 +162,14 @@ def _safe_single(raw: str) -> bool:
     # where they are escapes that vanish (`~/.s\sh` is `~/.ssh` there, `--out\put` is `--output`).
     for form in (windows, raw.replace("\\", "")):
         blank = _blank_quotes(form)
-        if (blank is None or _SHELL_META.search(blank) or _CMD_VAR.search(form) or _RISKY_FLAG.search(form)
-                or _SENSITIVE_PATH.search(form) or _RRN_SHAPE.search(form)):
+        # The program gets its arguments with the quotes removed: `-ex'ec'` is `-exec`, `'-o'` is `-o`.
+        bare = form.replace("'", "").replace('"', "")
+        if (blank is None or _SHELL_META.search(blank) or _CMD_VAR.search(form) or _RRN_SHAPE.search(form)
+                or any(rx.search(f) for rx in (_RISKY_FLAG, _SENSITIVE_PATH) for f in (form, bare))):
             return False
     cmd = " ".join(windows.split())
-    return any(rx.fullmatch(cmd) for rx in _safe)
+    bare = " ".join(windows.replace("'", "").replace('"', "").split())
+    return all(any(rx.fullmatch(c) for rx in _safe) for c in (cmd, bare))
 
 def _safe_command(text: str) -> bool:
     _ensure()

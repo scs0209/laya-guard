@@ -40,6 +40,7 @@
 `sort | uniq -c`)도 안전하며, 출력을 버리거나 합치는 것(`2>/dev/null`, `>/dev/null`, `2>&1`)은 쓰기로 보지 않습니다.
 에이전트가 자주 잇는 읽기 전용 도구(`cut`, `sort`, `uniq`, `tr`, `diff`, `stat`, `-exec`/`-delete` 없는 `find`,
 `sed -n 10,20p`)도 목록에 있지만, 파일을 쓰는 형태(`sort -o`, `uniq 입력 출력`, `sed -i`)는 빠져 있습니다.
+프로그램은 셸이 따옴표를 뗀 뒤의 인자를 받으므로, 따옴표를 뗀 형태로도 검사를 통과해야 합니다(`find . -ex'ec' …`는 `-exec`).
 
 Windows 명령도 같은 레인을 탑니다. 경로 사이의 백슬래시는 경로 구분자로 읽고
 (`cd C:\work\api`, `type src\app.py`, `pytest tests\unit`), cmd의 `%VAR%`는 `$VAR`처럼
