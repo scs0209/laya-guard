@@ -59,6 +59,9 @@
 
 ## 🚀 빠른 시작
 
+**브라우저에서 써 보기:** [huggingface.co/spaces/Ayaannnnnnn/laya-guard-trial](https://huggingface.co/spaces/Ayaannnnnnn/laya-guard-trial)에
+명령을 붙여 넣으면 훅이 뭐라고 답할지 모델과 함께 보여 줍니다([space/](space/README.md), 기록하지 않음).
+
 **10초 만에 써 보기** (모델·서버·훅 없이. 위 데모가 실행하는 바로 그것입니다):
 
 ```bash

@@ -5,6 +5,16 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- **A web trial page** ([space/](space/README.md)), for a Hugging Face Gradio Space: paste a command, pick the agent
+  whose hook you want (Claude Code, Cursor, Codex, Gemini CLI), and see the verdict, the policy, the risk, what decided
+  it and each step (how the command was split, which rule matched, whether the model ran). It is its own small app,
+  one page and `POST /api/judge` on `gr.Server` (the judging in `space/trial.py`), not `laya-guard serve`, whose
+  dashboard can change agent settings and must stay on localhost. Commands are judged in memory and not logged; 4,000
+  characters and 20 requests a minute per visitor. A free account can only host a Gradio Space on ZeroGPU, so it
+  runs there with the model on CPU and never asks for a GPU. `judge_traced()` takes `ask=` like `judge()`.
+
 ### Fixed
 
 - **`git push -f origin main` and `git push origin +main` were allowed.** The force-push pattern

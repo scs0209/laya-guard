@@ -60,6 +60,9 @@ Free and MIT-licensed. No API key, no per-call billing, and the verdict log neve
 
 ## 🚀 Quick start
 
+**Try it in the browser:** paste a command at [huggingface.co/spaces/Ayaannnnnnn/laya-guard-trial](https://huggingface.co/spaces/Ayaannnnnnn/laya-guard-trial)
+and see what the hook would answer, with the model ([space/](space/README.md); not logged).
+
 **Try it in 10 seconds** (no model, no server, no hook; this is what the demo above runs):
 
 ```bash

@@ -875,7 +875,8 @@ def policy_matches(text: str) -> list[Policy]:
     assert _policies is not None
     return [pol for pol in _policies if any(rx.search(text) for rx in pol.compiled)]
 
-def judge_traced(tool_call: str, source: str = "user", cwd: str | None = None, emit=None) -> Verdict:
+def judge_traced(tool_call: str, source: str = "user", cwd: str | None = None, emit=None,
+                 ask: bool = False) -> Verdict:
     """judge(), reporting each stage to emit(event) as it happens.
 
     Events (dicts with a "stage" key): "segment" (which command of a chain is being judged), "policy"
@@ -884,7 +885,7 @@ def judge_traced(tool_call: str, source: str = "user", cwd: str | None = None, e
     return value, exactly what judge() returns."""
     token = _TRACE.set(emit)
     try:
-        return judge(tool_call, source=source, cwd=cwd)
+        return judge(tool_call, source=source, cwd=cwd, ask=ask)
     finally:
         _TRACE.reset(token)
 
