@@ -13,7 +13,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
 from . import activity, agentbridge, aisim, alerts, dashboard, fileaccess, footprint, install, service, simulation
-from .guard import judge, is_mock
+from .guard import ASK_AGENTS, judge, is_mock
 from .log import load_entries, log_enabled, log_path, log_verdict
 
 app = FastAPI(title="laya-guard")
@@ -22,10 +22,6 @@ app = FastAPI(title="laya-guard")
 # and only the dashboard page carries it; nothing sends CORS headers, so another site can't read it.
 _WRITE_TOKEN = secrets.token_urlsafe(32)
 
-
-# The agents whose adapter turns a review into a permission prompt (README, "review becomes"). For them a block only the
-# model reached is asked about instead; the others let a review through with a note, so it stays a block there.
-ASK_AGENTS = frozenset({"claude-code", "cursor", "qwen-code", "copilot-cli"})
 
 
 def _judge_and_log(text: str, source: str, cwd: str | None = None, tool_name: str | None = None,

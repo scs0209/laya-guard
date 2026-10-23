@@ -5,6 +5,16 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- **`laya-guard audit`: what the hook would have held, from the commands your agents already ran.** It reads Claude
+  Code's (`~/.claude/projects`) and Codex's (`~/.codex/sessions`, or `CODEX_HOME`) transcripts, judges every shell
+  command the way that agent's hook would (Claude Code as `user` with `ask`, Codex as `tool` without, both held to the
+  protected paths), and lists the reviews and blocks, worst first, the same command grouped. `--since 24h` (default),
+  `7d`, `all`; `--agent`; `--redact` shows reasons instead of commands; `--json`. Nothing is logged or sent: the
+  verdict log and the dashboard never see these judgments. It is how the overblocking below was found.
+  [Guide](docs/guide/audit.md).
+
 ### Changed
 
 - **Far fewer false blocks on the commands agents really write.** Replaying a day of real Claude Code commands, about
