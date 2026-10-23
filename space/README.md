@@ -11,6 +11,20 @@ startup_duration_timeout: 30m
 pinned: false
 license: mit
 short_description: See what laya-guard says about an agent's shell command
+models:
+  - convaiinnovations/laya
+tags:
+  - security
+  - guardrails
+  - ai-agents
+  - coding-agents
+  - claude-code
+  - shell
+  - prompt-injection
+thumbnail: https://huggingface.co/spaces/Ayaannnnnnn/laya-guard-trial/resolve/main/thumbnail.png
+# the files laya-guard's judge loads, fetched at build time so a woken Space doesn't download them
+preload_from_hub:
+  - convaiinnovations/laya multilingual/model.safetensors,multilingual/rl_agent_config.json,multilingual/encoder/config.json,multilingual/tokenizer/tokenizer.json,multilingual/tokenizer/tokenizer_config.json
 ---
 
 # laya-guard web trial
@@ -24,7 +38,10 @@ This Space runs only the judge: the page in `index.html`, `POST /api/judge` and 
 dashboard can change an agent's settings and must stay on localhost.
 
 - Commands are judged in memory and not logged or stored. Nothing is run.
-- Up to 4,000 characters per command and 20 requests a minute per visitor.
+- There is no project folder, so unlike the hook it doesn't check the package.json scripts that `npm test` and the
+  like would run.
+- Up to 4,000 characters per command, 20 requests a minute per visitor and 300 a minute in all (a visitor can forge
+  the forwarded address, not the total).
 - Pick the agent whose hook you want to see: Claude Code and Cursor ask you about a review; Codex and Gemini CLI let it
   run with a warning, so a model-only block stays a block for them.
 - The model runs on CPU. The Space is on ZeroGPU (the free tier for Gradio Spaces) only because that is where a free

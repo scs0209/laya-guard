@@ -5,6 +5,7 @@ asks for a GPU: ZeroGPU only needs one @spaces.GPU function to exist, and visito
 """
 import spaces  # noqa: F401  # first: on ZeroGPU it patches torch.cuda before torch is imported
 
+import json
 from pathlib import Path
 
 from fastapi import Request
@@ -39,14 +40,20 @@ def health() -> dict:
 
 @app.post("/api/judge")
 async def api_judge(request: Request) -> JSONResponse:
+    # The limits come before any work on the body, and the body is read only up to MAX_BODY bytes
+    if not limits.allow(trial.client_of(request.headers, request.client.host if request.client else None)):
+        return JSONResponse({"detail": "too many requests; try again in a minute"}, status_code=429)
+    raw = bytearray()
+    async for chunk in request.stream():
+        raw += chunk
+        if len(raw) > trial.MAX_BODY:
+            return JSONResponse({"detail": "request too large"}, status_code=413)
     try:
-        body = await request.json()
+        body = json.loads(raw)
     except ValueError:
         return JSONResponse({"detail": "send JSON"}, status_code=400)
     if not isinstance(body, dict):
         return JSONResponse({"detail": "send a JSON object"}, status_code=400)
-    if not limits.allow(trial.client_of(request.headers, request.client.host if request.client else None)):
-        return JSONResponse({"detail": "too many requests; try again in a minute"}, status_code=429)
     try:                                # off the event loop: the model takes ~0.1-0.3 s
         return JSONResponse(await run_in_threadpool(trial.judge_command, body.get("command"),
                                                     body.get("agent", "claude-code")))
