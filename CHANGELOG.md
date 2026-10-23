@@ -41,6 +41,32 @@ All notable changes to this project are documented here. Versions follow
   58 to 0, commands decided without the model from 10 to 60. Reviews are still about half, because the model scores
   many ordinary commands high; that is the model, and it is not fixed here. Unchanged: shell set 69/71 (tool and
   user), Korean 30/30, incident replays 13/13.
+- **Fewer reviews of ordinary commands: variables, assignments, loops and read-only git/gh reach the safe lane.**
+  `laya-guard audit` on a day of real Claude Code commands found 1,020 of 1,022 reviews came from the model alone,
+  and a large share were commands the lane closed on for syntax: `sed -n 300,360p $f`, `ls $d`, a one-line
+  `for …; do …; done` whose `do` and `done` were judged as commands, `X=1 pytest`, `export A=b`, `git fetch`,
+  `gh pr checks`, a commit message in a quoted heredoc.
+  - A variable set earlier in the same command to a plain value is read as that value, by the lane and by the
+    regexes (`for f in a b; do head $f; done` is checked for `a` and `b`). This also closes a gap: `d=~; rm -rf $d` is
+    now blocked as `rm -rf ~`, and `f=~/.ssh/id_rsa; cat $f` is a `credential-read` review. A variable we can't follow
+    (`$1`, `$(…)`, the environment, one `read` later) still closes the lane.
+  - Assignments and `export` run nothing, unless the name changes what runs (`PATH`, `LD_PRELOAD`, `DYLD_*`, `GIT_*`,
+    `*_OPTIONS`, `*_COMMAND`, `BASH_ENV`, `IFS`, `PAGER`…). The old bare `X=value` entry let `PATH=/tmp/evil` in; now
+    it goes to the model.
+  - `do`/`done`/`then`/`fi` are syntax on one line too; `X="a b"` no longer stops a chain from being split.
+  - A heredoc whose body the shell doesn't expand (`git commit -F - <<'EOF'`) is data for its command.
+  - New entries: `git rev-parse`/`check-ignore`/`ls-files`/`ls-remote`/`merge-base`/`blame`/`describe`, `git fetch`
+    of a remote and branch names only (no `--prune`, no refspec like `main:main`, no `--force`), `git remote -v`,
+    `gh pr view`/`checks`/`list`/`diff`, `gh issue`/`run`/`release` `view`/`list`, `gh api` with no method or body,
+    `jq`, `seq`, `printf` (not `-v` or a `%n` format, which set a variable), `date` (not `-s`), `break`, `continue`. With a variable,
+    `npm run $s` has the package.json script its value names checked (`s=test` checks `scripts.test`).
+  On the same 1,840 real commands judged as the Claude Code hook judges them, reviews went from 53.2% to 44.6% (161
+  reviews became allows, 2 became regex blocks, 3 allows became reviews when a chain that used to go whole to the
+  model was split). Adding context to the model's input was tried and dropped: it allowed 58 of 200 reviewed real
+  commands but held 9 instead of 11 of the incident commands and let `cd ~/.ssh && cat id_rsa` through. What is left is
+  mostly code the agent runs (`python3 - <<EOF`, `npx …`), outward actions (`git push`, PR merges, `gh api -X PATCH`)
+  and the model's scores on English shell. Unchanged: shell set 69/71 (tool and user, real model), Korean 30/30,
+  incident replays 13/13.
 
 ## [0.5.2] - 2026-10-19
 
