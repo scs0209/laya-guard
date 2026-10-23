@@ -5,6 +5,15 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-23
+
+Replaying a day of real Claude Code commands showed the guard getting in the way: about a quarter blocked and half
+reviewed, almost all by the model alone on ordinary commands. This release adds the tool that found it,
+`laya-guard audit`, so you can run the same check on your own sessions before installing anything, and cuts the
+noise it found: no model-only blocks for agents that can ask instead, and a safe lane that reads pipelines, quotes,
+scripts, variables and read-only git/gh the way agents write them. Along the way it closes gaps the old lane had,
+such as `d=~; rm -rf $d` and `PATH=/tmp/evil`.
+
 ### Added
 
 - **`laya-guard audit`: what the hook would have held, from the commands your agents already ran.** It reads Claude
@@ -600,7 +609,8 @@ a verdict.
   Claude Code PreToolUse hook, local redacted telemetry, Korean 30-case eval,
   AgentDojo judge-level eval, E2E rollout harness.
 
-[Unreleased]: https://github.com/scs0209/laya-guard/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/scs0209/laya-guard/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/scs0209/laya-guard/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/scs0209/laya-guard/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/scs0209/laya-guard/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/scs0209/laya-guard/compare/v0.4.1...v0.5.0
