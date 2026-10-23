@@ -158,6 +158,14 @@ def test_a_dangerous_line_in_a_script_is_still_held():
         v = judge(cmd, "tool")
         assert v.action == "block", cmd
 
+def test_every_form_of_force_push_is_held():
+    # `git push -f origin main` and `+main` used to be allowed: the old pattern needed two spaces before -f
+    for cmd in ["git push -f origin main", "git push origin +main", "git push --force", "git push -uf origin x",
+                "git push --force-with-lease origin x"]:
+        assert judge(cmd).policy_id == "mass-delete", cmd
+    for cmd in ["git push origin main", "git push -u origin feat/x", "git push origin feat/fix-flake"]:
+        assert judge(cmd).policy_id != "mass-delete", cmd
+
 def test_a_variable_set_in_the_command_is_read_by_its_value():
     # the regexes see `rm -rf ~` and `cat ~/.ssh/id_rsa` through the variable, as the shell will run them
     assert (judge("d=~; rm -rf $d").action, judge("d=~; rm -rf $d").verdict_source) == ("block", "regex")

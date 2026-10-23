@@ -236,7 +236,9 @@ policies:
       - 'DELETE\s+FROM.*WHERE\s+1=1'
       - 's3 rm.*--recursive'
       - 'kubectl delete.*--all'
-      - 'git push\s.*(--force|\s-f\b)'
+      # a force push: --force(-with-lease), -f (also inside -uf), or a `+` refspec. The old pattern
+      # (`git push\s.*\s-f`) needed two spaces before -f and missed `git push -f origin main`.
+      - '\bgit\s+push\b(?:\s+\S+)*?\s+(?:--force\S*|-[A-Za-z]*f[A-Za-z]*\b|\+\S+)'
       - '\bgit\s+reset\s+(?:\S+\s+)*--hard\b'
       - '\bgit\s+clean\s+(?:\S+\s+)*-[A-Za-z]*f'
       - '\bgit\s+checkout\s+(?:\S+\s+)*--\s+\.(?:\s|$)'

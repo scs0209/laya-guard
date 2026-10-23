@@ -5,6 +5,12 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+### Fixed
+
+- **`git push -f origin main` and `git push origin +main` were allowed.** The force-push pattern
+  (`git push\s.*\s-f`) needed two spaces before `-f`, and a `+` refspec wasn't covered. Now `--force*`, `-f` (also
+  inside `-uf`) and `+ref` are `mass-delete` reviews.
+
 ## [0.6.0] - 2026-10-23
 
 Replaying a day of real Claude Code commands showed the guard getting in the way: about a quarter blocked and half
