@@ -11,8 +11,11 @@ defaults:
 # Safe command lane: skip the model and allow. The code (guard.py) enforces these conditions:
 #   · no risk policy regex below matches (if one does, the policy wins)
 #   · no shell metacharacters: ; & | ` $ < > ( ) { } \ newline (pipes/redirects/substitution), or cmd's %VAR%
-#     (a backslash between two path parts is a Windows path separator, not a metacharacter)
-#   · no flags that run programs or write files: -exec, -toolexec, --config, --output, --upload-pack, --receive-pack
+#     (a backslash between two path parts is a Windows path separator, not a metacharacter; what sits inside single
+#     quotes is text, and inside double quotes only $ ` \ still count)
+#   · a pipeline counts when every stage is a safe command (`grep x f | head`), and output thrown away or merged
+#     (2>/dev/null, >/dev/null, 2>&1) is not a redirect to a file
+#   · no flags that run programs or write files: -exec, -execdir, -delete, -fprint, -toolexec, --config, --output, ...
 #   · no sensitive paths: .ssh, .aws, .gnupg, .kube, .netrc, .npmrc, .pypirc, .env, id_rsa, etc.
 #   · after whitespace normalization, a "full" match against one pattern (case-sensitive)
 # Chains joined with ; && || & are checked against this list per command (included since parts like cd and true are common).
@@ -36,12 +39,25 @@ safe_commands:
   - 'git stash( (list|show|push)( \S+)*)?'
   - 'git checkout -b \S+'
   - '(npm|pnpm|yarn|bun) (test|build|lint|run (build|test|lint|typecheck|format|check))( \S+)*'
-  - '(pytest|python3? -m pytest)( \S+)*'
+  - '(pytest|(\S*/)?python3?(\.[0-9]+)? -m pytest)( \S+)*'
+  # Shell syntax that runs nothing by itself: a variable set or unset, a loop header, a test.
+  - '[A-Za-z_][A-Za-z0-9_]*=\S*'
+  - 'unset( [A-Za-z_][A-Za-z0-9_]*)+'
+  - 'for [A-Za-z_][A-Za-z0-9_]* in( \S+)*'
+  - '(\[|test)( \S+)+'
   - 'go (build|test|vet|fmt)( \S+)*'
   - 'cargo (build|test|check|fmt|clippy)( \S+)*'
   - 'make( (build|test|lint|check|all))?'
   - 'docker (ps|images)( \S+)*'
   - '(node|npm|pnpm|yarn|bun|python3?|pip3?|go|cargo|rustc|git|docker|java|ruby) (--version|-v|-V|version)'
+  # Read-only tools agents put in a pipeline (`| sort | uniq -c`, `| cut -c1-80`). Nothing here writes a file:
+  # `sort -o FILE` and `uniq IN OUT` do, so those forms are left out; sed only prints line ranges.
+  - '(cut|tr|nl|column|fold|rev|tac|basename|dirname|realpath|readlink|stat|file)( \S+)*'
+  - 'sort( (?!-\S*o)\S+)*'
+  - 'uniq( -\S+)*'
+  - '(diff|cmp)( \S+)+'
+  - 'sed -n [''"]?([0-9]+|\$)(,([0-9]+|\$))?p[''"]?( \S+)+'
+  - 'find( \S+)*'
   # The same everyday commands on Windows (cmd.exe and PowerShell). Backslash paths are read as paths (guard.py),
   # so `cd C:\work\api`, `type src\app.py` and `pytest tests\unit` match the lines above or these.
   - 'cd /d \S+'
