@@ -5,6 +5,33 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+### Changed
+
+- **Far fewer false blocks on the commands agents really write.** Replaying a day of real Claude Code commands, about
+  a quarter were blocked, nearly all by the model alone and nearly all ordinary: `sed -n 1,80p f` at 0.99,
+  `ls src | head` at 0.82, `grep -n "a\|b" f | cut -c1-80`, most heredocs for `python3 -`. A threshold couldn't fix it
+  (the scores were 0.8-1.0), so three things changed:
+  - **The model asks where an agent can ask.** For Claude Code, Cursor, Qwen Code and Copilot CLI, whose adapters turn
+    a review into a permission prompt, a block only the model (or its heuristic stand-in) reached becomes a review.
+    Block-level patterns and protected paths still block. For the agents that let a review through with a note, the
+    model's block stands, since a review there would run the command. `judge(..., ask=True)`; the server sets it from
+    the adapter's `agent`.
+  - **The safe-command lane takes what agents add.** A pipeline whose every stage is safe (`grep x f | head`), output
+    thrown away or merged (`2>/dev/null`, `2>&1`), and quoted text (`grep -o '[^|]*'`, `"a\|b"`) no longer close it.
+    New read-only entries: `cut`, `sort` (not `-o`), `uniq` (flags only), `tr`, `nl`, `diff`, `stat`, `file`,
+    `sed -n N,Mp`, `find` (with `-execdir`, `-ok`, `-delete`, `-fprint*` now risky flags), a bare `X=value`, `unset`,
+    a `for … in` header, `[ … ]`/`test`, and `.venv/bin/python -m pytest` (a `python` on PATH or in `venv`/`.venv`/`env`
+    only, not `./tools/python`). Because the shell removes quotes before the program reads its arguments, a command
+    must pass the risky-flag, sensitive-path and list checks with the quotes taken out too: `find . -ex'ec' …`,
+    `sort '-o' out in` and `sed -n 1p -i f` go to the model.
+  - **A script is split into its commands.** Lines of a multi-line script are judged one by one like a one-line chain
+    (a heredoc's body stays with its command, `then`/`do`/`fi` are syntax), and a command that only carries Korean
+    text (`grep "검색어" src`) is now treated as a command, not Korean prose.
+  On a sample of 200 of those real commands, judged as the Claude Code hook now judges them: blocks went from about
+  58 to 0, commands decided without the model from 10 to 60. Reviews are still about half, because the model scores
+  many ordinary commands high; that is the model, and it is not fixed here. Unchanged: shell set 69/71 (tool and
+  user), Korean 30/30, incident replays 13/13.
+
 ## [0.5.2] - 2026-10-19
 
 Protected paths reach the agents' own OS sandboxes, so a script that reads `~/.ssh` is refused by the kernel, not just

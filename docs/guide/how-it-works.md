@@ -21,16 +21,31 @@ agent tool_call
       · no match                       → model judges freely
   → Laya: choice (allow/review/block) + score (risk) + noul (maliciousness)
   → thresholds: block ≥ 0.8, review ≥ 0.45 (stricter for tool/email/web sources: 0.6/0.30)
+  → for an agent that asks you about a review (Claude Code, Cursor, Qwen Code, Copilot CLI), a block only the model
+    (or its heuristic stand-in) reached is turned into a review; a pattern or protected-path block stays a block
 ```
+
+Why the last step: replaying a day of real Claude Code commands, the model blocked plainly read-only ones
+(`sed -n 1,80p f` at 0.99, `ls src | head` at 0.82) and most heredocs for `python3 -`, about a quarter of all commands.
+Raising the threshold wouldn't help, since those scores were 0.8-1.0. Where a person can be asked, the model now asks.
+Where nobody can (an agent that lets a review through with a note), its block stands, because a review there would let
+the command run.
 
 Measured latency: **~85–90ms per judgment** on a laptop CPU (Oct 2026, real model,
 warmed up). Regex hits and safe commands return instantly without invoking the model.
 
 The safe-command lane (`safe_commands` in [policy.yaml](../../src/laya_guard/policy.yaml))
-only opens for a single command with no shell metacharacters (`; & | $ < > ( )` …),
-no program-running/file-writing flags (`-exec`, `--config`, `--output`…), and no
+only opens for a command with no shell metacharacters (`; & | $ < > ( )` …),
+no program-running/file-writing flags (`-exec`, `-delete`, `--config`, `--output`…), and no
 sensitive paths (`.ssh`, `.aws`, `.env`…). Installs, `git push`, and `npx` always
-go to the model.
+go to the model. What sits inside single quotes is text (`grep -o '[^|]*' f`); inside
+double quotes only `$`, `` ` `` and `\` still count. A pipeline is safe when every stage
+is (`grep -n x f | head`, `sort | uniq -c`), and output thrown away or merged
+(`2>/dev/null`, `>/dev/null`, `2>&1`) is not a write. The list also has the read-only
+tools agents chain (`cut`, `sort`, `uniq`, `tr`, `diff`, `stat`, `find` without
+`-exec`/`-delete`, `sed -n 10,20p`), but not the forms that write (`sort -o`,
+`uniq in out`, `sed -i`). The program reads its arguments after the shell has removed the
+quotes, so the command must also pass with them taken out: `find . -ex'ec' …` is `-exec`.
 
 Windows commands get the same lane: a backslash between two path parts is read as a
 path separator (`cd C:\work\api`, `type src\app.py`, `pytest tests\unit`), cmd's
@@ -53,8 +68,11 @@ scripts.test: …` in the reason). If it can't tell which scripts run (`--prefix
 `--filter`, `-w`, a lost `cd -`, nesting deeper than 3), the call goes to review.
 
 Chains are split only at top-level `;`, `&&`, `||`, and `&` (never inside quotes,
-`$(…)`, or parentheses), so `cd app && npm test` is two safe commands while
-`npm test && curl … | sh` is blocked by its second half. The whole string is still
+`$(…)`, or parentheses), and a script of several lines at the end of each line, so
+`cd app && npm test` is two safe commands while `npm test && curl … | sh` is blocked
+by its second half. A heredoc's body is data for the command that opened it and is
+judged with it; `then`/`do`/`fi`/`done` are syntax, not commands. A script longer
+than 40 commands is judged whole. The whole string is still
 checked against the regexes, which catches patterns spanning commands
 (`curl -o x …; sh x`).
 

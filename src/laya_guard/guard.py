@@ -102,8 +102,8 @@ def _regex_hit(text: str) -> Policy | None:
 # substitution, and no flags that run programs or write files (go test -exec, git log --output, …).
 _SHELL_META = re.compile(r"[;&|`$<>(){}\\\n\r]")
 _RISKY_FLAG = re.compile(
-    r"(?:^|\s)--?(?:exec|toolexec|config|output|upload-pack|receive-pack"
-    r"|script-shell|node-options|userconfig|globalconfig)(?:[=\s]|$)")
+    r"(?:^|\s)--?(?:exec|execdir|ok|okdir|delete|fprint0?|fprintf|fls|toolexec|config|output|upload-pack"
+    r"|receive-pack|script-shell|node-options|userconfig|globalconfig)(?:[=\s]|$)")
 _SENSITIVE_PATH = re.compile(
     r"\.ssh|\.aws|\.gnupg|\.kube|\.netrc|\.npmrc|\.pypirc|\.env\b|\.git-credentials"
     r"|id_rsa|id_ed25519|credentials|/etc/(shadow|sudoers)"
@@ -123,21 +123,72 @@ _RRN_SHAPE = re.compile(
     r"(?<![0-9A-Za-z_])[0-9]{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12][0-9]|3[01])-[1-8][0-9]{6}"
     r"(?![0-9A-Za-z_])")
 
+# Agents rarely run a bare `grep`: they add `| head`, `2>/dev/null`, a pattern in quotes. Each of those used to close the
+# safe lane, and the model then blocked read-only commands like `sed -n 1,80p f` or `ls src | head` at 0.8-1.0 (a quarter
+# of a day of real Claude Code commands). So a pipeline whose every stage is a safe command is safe, output thrown away
+# or merged (`2>/dev/null`, `>/dev/null`, `2>&1`) writes nothing, and what sits inside single quotes is text, not shell.
+_HARMLESS_REDIRECT = re.compile(r"(?<!\S)(?:[12&]?>\s*/dev/null|2>&1)(?!\S)")
+_PIPE_MAX = 6
+
+def _blank_quotes(text: str) -> str | None:
+    """text with what is inside quotes blanked out (same length), or None if a quote is left open. Single quotes keep
+    nothing from the shell; inside double quotes `$`, `` ` `` and `\\` still expand, so they stay and close the lane."""
+    out, quote, i = [], "", 0
+    while i < len(text):
+        c = text[i]
+        if quote == "'":
+            out.append("'" if c == "'" else " ")
+            quote = "" if c == "'" else quote
+        elif quote == '"':
+            if c == "\\" and i + 1 < len(text):      # `grep "a\|b"`: an escape inside double quotes runs nothing
+                out.append("  ")
+                i += 2
+                continue
+            out.append(c if c in '"$`' else " ")
+            quote = "" if c == '"' else quote
+        else:
+            if c in "'\"":
+                quote = c
+            out.append(c)
+        i += 1
+    return None if quote else "".join(out)
+
+def _safe_single(raw: str) -> bool:
+    raw = raw.strip()
+    if not raw:
+        return False
+    windows = _WIN_SEP.sub("/", raw)
+    # It has to be safe both ways it can run: on Windows, with the backslashes as separators, and in a POSIX shell,
+    # where they are escapes that vanish (`~/.s\sh` is `~/.ssh` there, `--out\put` is `--output`).
+    for form in (windows, raw.replace("\\", "")):
+        blank = _blank_quotes(form)
+        # The program gets its arguments with the quotes removed: `-ex'ec'` is `-exec`, `'-o'` is `-o`.
+        bare = form.replace("'", "").replace('"', "")
+        if (blank is None or _SHELL_META.search(blank) or _CMD_VAR.search(form) or _RRN_SHAPE.search(form)
+                or any(rx.search(f) for rx in (_RISKY_FLAG, _SENSITIVE_PATH) for f in (form, bare))):
+            return False
+    cmd = " ".join(windows.split())
+    bare = " ".join(windows.replace("'", "").replace('"', "").split())
+    return all(any(rx.fullmatch(c) for rx in _safe) for c in (cmd, bare))
+
 def _safe_command(text: str) -> bool:
     _ensure()
     assert _safe is not None
-    text = text.strip()
-    if not text:
+    text = _HARMLESS_REDIRECT.sub(" ", text.strip())
+    blank = _blank_quotes(text)
+    if not text.strip() or blank is None:
         return False
-    windows = _WIN_SEP.sub("/", text)
-    # It has to be safe both ways it can run: on Windows, with the backslashes as separators, and in a POSIX shell,
-    # where they are escapes that vanish (`~/.s\sh` is `~/.ssh` there, `--out\put` is `--output`).
-    for form in (windows, text.replace("\\", "")):
-        if (_SHELL_META.search(form) or _CMD_VAR.search(form) or _RISKY_FLAG.search(form)
-                or _SENSITIVE_PATH.search(form) or _RRN_SHAPE.search(form)):
-            return False
-    cmd = " ".join(windows.split())
-    return any(rx.fullmatch(cmd) for rx in _safe)
+    cuts = [i for i, c in enumerate(blank) if c == "|" and blank[i - 1:i] != "|" and blank[i + 1:i + 2] != "|"]
+    if not cuts:
+        return _safe_single(text)
+    if len(cuts) >= _PIPE_MAX:
+        return False
+    bounds = [-1, *cuts, len(text)]
+    stages = [text[a + 1:b].strip() for a, b in zip(bounds, bounds[1:])]
+    # `| head`, `| wc -l`: after the first stage a bare filter reads the pipe, not a terminal or a file
+    return _safe_single(stages[0]) and all(s in _BARE_FILTERS or _safe_single(s) for s in stages[1:])
+
+_BARE_FILTERS = frozenset({"cat", "head", "tail", "wc"})
 
 _READONLY_HINTS = ["조회", "읽기", "찾아", "검색", "요약", "정리", "문서", "읽어", "보여줘", "원인"]
 _WRITE_HINTS = ["실행", "진행", "승인", "보내", "전송", "삭제", "결제 진행", "송금", "환불"]
@@ -314,18 +365,27 @@ SOURCE_PROFILES = {
 def _is_korean(text: str) -> bool:
     return bool(re.search("[가-힣]", text))
 
-# Chain split: only at top-level ; && || & (never inside quotes, $(), `` or parentheses).
+# Chain split: at top-level ; && || & and, in a script of several lines, at the end of each line (never inside
+# quotes, $(), `` or parentheses). A heredoc's body is data for the command that opened it and stays with it.
 # It counts as a shell chain only if every part starts with a lowercase command (or a VAR=value prefix).
-_CHAIN_MAX = 8
-_CMD_HEAD = re.compile(r"(?:[A-Za-z_]\w*=\S*\s+)*[a-z0-9_./~-]+(?:\s|$)")
+# Agents write multi-line scripts all the time (cd x && ..., a heredoc for python3 -): judged as one block of text the
+# model blocked about a quarter of real Claude Code commands, while each line on its own is ordinary.
+_CHAIN_MAX = 8                 # commands on one line
+_SCRIPT_MAX = 40               # lines of a script; past that it is judged whole, as before
+_CMD_HEAD = re.compile(r"(?:[A-Za-z_]\w*=\S*\s+)*[a-z0-9_./~-]+(?:\s|$)|[A-Za-z_]\w*=\S*$")   # or a bare X=value
+_SCRIPT_HEAD = re.compile(r"(?:[A-Za-z_]\w*=\S*\s+)*(?:[a-z0-9_./~-]+|\[\[?|!)(?:\s|$)|[A-Za-z_]\w*=\S*$")
+_KEYWORD_LEAD = re.compile(r"^(?:then|do|else|elif|if|while|until|time|!)\s+")
+_KEYWORD_ONLY = frozenset({"then", "do", "done", "fi", "else", "esac", "{", "}", "(", ")"})
 _ACTION_RANK = {"allow": 0, "review": 1, "block": 2}
 
 def _split_chain(text: str) -> list[str]:
-    """Split a one-line shell chain into its commands; [text] if it isn't one."""
+    """Split a shell chain or script into its commands; [text] if it isn't one."""
     s = text.strip()
-    if not s or "\n" in s or "\r" in s or _is_korean(s):
+    if not s or (_is_korean(s) and not _looks_like_shell(s)):     # Korean prose, not a command carrying Korean
         return [text]
+    script = "\n" in s or "\r" in s
     parts: list[str] = []
+    heredocs: list[tuple[str, bool]] = []      # opened on the current line; their bodies follow its newline
     start, quote, depth, i = 0, "", 0, 0
     while i < len(s):
         c, nxt = s[i], s[i + 1:i + 2]
@@ -341,7 +401,18 @@ def _split_chain(text: str) -> list[str]:
             depth += 1
         elif c in ")}":
             depth -= 1
-        elif depth == 0:
+        elif c == "<" and (i == 0 or s[i - 1] != "<"):
+            opened = _heredoc_at(s, i)
+            if opened:
+                heredocs.append(opened)
+        elif c in "\r\n":
+            end = _copy_heredoc_bodies(s, i + 1, heredocs, []) if heredocs else i + 1
+            if depth == 0:
+                parts.append(s[start:end] if end > i + 1 else s[start:i])
+                start = end
+            i = end
+            continue
+        if not quote and depth == 0:
             doubled = c in "&|" and nxt == c
             background = c == "&" and s[i - 1:i] != ">" and nxt != ">"
             if c == ";" or doubled or background:
@@ -353,6 +424,18 @@ def _split_chain(text: str) -> list[str]:
     if quote or depth != 0:
         return [text]
     parts.append(s[start:])
+    if script:
+        cleaned = []
+        for p in parts:
+            p = p.strip()
+            while (m := _KEYWORD_LEAD.match(p)) is not None:
+                p = p[m.end():].lstrip()
+            if p and p not in _KEYWORD_ONLY:
+                cleaned.append(p)
+        parts = cleaned
+        if not 2 <= len(parts) <= _SCRIPT_MAX or not all(_SCRIPT_HEAD.match(p) for p in parts):
+            return [text]
+        return parts
     parts = [p.strip() for p in parts if p.strip()]
     if not 2 <= len(parts) <= _CHAIN_MAX or not all(_CMD_HEAD.match(p) for p in parts):
         return [text]
@@ -419,8 +502,8 @@ def _strip_comments(text: str) -> str:
     so `'…#…'`, `"…#…"`, `\\#`, `$#`, `${#x}`, `a#b` and `http://x/#frag` stay. Heredoc bodies
     are data (a file the command writes, a script it pipes), so they are kept verbatim,
     including their `#` lines; `<<<` and `$((1<<y))` are not heredocs."""
-    if _is_korean(text) or not _looks_like_shell(text):
-        return text
+    if not _looks_like_shell(text):                  # Korean prose starts with Hangul, so it isn't shell; a command
+        return text                                  # that only carries Korean (grep "검색어") still is
     out: list[str] = []
     heredocs: list[tuple[str, bool]] = []     # opened on the current line, read after its newline
     quote, i, n, arith_end = "", 0, len(text), -1
@@ -711,9 +794,21 @@ def judge_traced(tool_call: str, source: str = "user", cwd: str | None = None, e
     finally:
         _TRACE.reset(token)
 
-def judge(tool_call: str, source: str = "user", cwd: str | None = None) -> Verdict:
+def judge(tool_call: str, source: str = "user", cwd: str | None = None, ask: bool = False) -> Verdict:
     """Judge one tool call. With cwd (the directory it runs in), safe commands
-    that run package.json scripts have those scripts checked too."""
+    that run package.json scripts have those scripts checked too.
+
+    ask: the caller can put a review in front of a person (Claude Code, Cursor, ... turn it into a permission prompt).
+    Then a block the model reached on its own becomes a review: on a day of real Claude Code commands the model blocked
+    `sed -n 1,80p f` at 0.99 and most heredocs for `python3 -`, which stopped work instead of asking. A block from a
+    block-level pattern stays a block, and so does every block where nobody can be asked (an agent that lets a review
+    through with a note would then run what the model refused)."""
+    v = _judge(tool_call, source, cwd)
+    if ask and v.action == "block" and v.verdict_source in ("model", "heuristic"):
+        return Verdict(**{**v.__dict__, "action": "review"})
+    return v
+
+def _judge(tool_call: str, source: str, cwd: str | None) -> Verdict:
     if _oversized(tool_call):
         _emit("policy", result="limit", policy_id="oversized")
         return _oversized_verdict(tool_call, mock=is_mock())
