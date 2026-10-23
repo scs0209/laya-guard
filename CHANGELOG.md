@@ -5,6 +5,10 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-23
+
+A force-push hole closed, and a page where anyone can try the guard without installing it.
+
 ### Added
 
 - **A web trial page** ([space/](space/README.md)), for a Hugging Face Gradio Space: paste a command, pick the agent
@@ -19,7 +23,8 @@ All notable changes to this project are documented here. Versions follow
 
 - **`git push -f origin main` and `git push origin +main` were allowed.** The force-push pattern
   (`git push\s.*\s-f`) needed two spaces before `-f`, and a `+` refspec wasn't covered. Now `--force*`, `-f` (also
-  inside `-uf`) and `+ref` are `mass-delete` reviews.
+  inside `-uf`) and `+ref`, quoted or not, are `mass-delete` reviews; the arguments stop at a shell separator, so
+  `git push origin main && rm -rf build` isn't read as a force push.
 
 ## [0.6.0] - 2026-10-23
 
@@ -625,7 +630,8 @@ a verdict.
   Claude Code PreToolUse hook, local redacted telemetry, Korean 30-case eval,
   AgentDojo judge-level eval, E2E rollout harness.
 
-[Unreleased]: https://github.com/scs0209/laya-guard/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/scs0209/laya-guard/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/scs0209/laya-guard/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/scs0209/laya-guard/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/scs0209/laya-guard/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/scs0209/laya-guard/compare/v0.5.0...v0.5.1
