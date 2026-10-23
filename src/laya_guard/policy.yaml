@@ -48,7 +48,8 @@ safe_commands:
   - 'gh (pr (view|checks|list|diff|status)|issue (view|list)|run (view|list)|repo view|release (view|list))( \S+)*'
   - 'gh api (?!(.* )?(-[XfF]|--method|--field|--raw-field|--input))\S+( \S+)*'     # a GET: no method, no body
   - '(jq|seq)( \S+)+'
-  - 'printf (?!-v)\S+( \S+)*'                     # not `printf -v NAME`, which sets a variable (PATH) like an assignment
+  # not `printf -v NAME` or a `%n` format, which set a variable (PATH) like an assignment
+  - 'printf (?!-v)(?!.*%[^a-zA-Z%\s]*n)\S+( \S+)*'
   - '(npm|pnpm|yarn|bun) (test|build|lint|run (build|test|lint|typecheck|format|check))( \S+)*'
   # Only a python on PATH or in the project's venv: `./tools/python` could be any program named python.
   - '(pytest|((\.?venv|env)/bin/)?python3?(\.[0-9]+)? -m pytest)( \S+)*'

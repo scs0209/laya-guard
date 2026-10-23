@@ -58,7 +58,7 @@ All notable changes to this project are documented here. Versions follow
   - New entries: `git rev-parse`/`check-ignore`/`ls-files`/`ls-remote`/`merge-base`/`blame`/`describe`, `git fetch`
     of a remote and branch names only (no `--prune`, no refspec like `main:main`, no `--force`), `git remote -v`,
     `gh pr view`/`checks`/`list`/`diff`, `gh issue`/`run`/`release` `view`/`list`, `gh api` with no method or body,
-    `jq`, `seq`, `printf` (not `-v`, which sets a variable), `date` (not `-s`), `break`, `continue`. With a variable,
+    `jq`, `seq`, `printf` (not `-v` or a `%n` format, which set a variable), `date` (not `-s`), `break`, `continue`. With a variable,
     `npm run $s` has the package.json script its value names checked (`s=test` checks `scripts.test`).
   On the same 1,840 real commands judged as the Claude Code hook judges them, reviews went from 53.2% to 44.6% (161
   reviews became allows, 2 became regex blocks, 3 allows became reviews when a chain that used to go whole to the

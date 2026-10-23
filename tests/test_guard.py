@@ -102,6 +102,7 @@ BYPASS = [
     # a fetch that deletes refs or moves a local branch; printf setting a variable
     "git fetch --prune origin", "git fetch -p", "git fetch origin main:main", "git fetch origin +refs/heads/*:refs/x/*",
     "git fetch --force origin main", "printf -v PATH /tmp/evil; ls", "printf '-v' PATH /tmp/evil",
+    "printf '%100c%n' x PATH; ls", "printf %n PATH", 'printf "%5c%n" x PATH', "printf '%-3n' PATH",
 ]
 
 def test_safe_lane_allows_everyday_commands():
