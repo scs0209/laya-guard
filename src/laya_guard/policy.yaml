@@ -236,7 +236,10 @@ policies:
       - 'DELETE\s+FROM.*WHERE\s+1=1'
       - 's3 rm.*--recursive'
       - 'kubectl delete.*--all'
-      - 'git push\s.*(--force|\s-f\b)'
+      # a force push: --force(-with-lease), -f (also inside -uf), or a `+` refspec, quoted or not. The old pattern
+      # (`git push\s.*\s-f`) needed two spaces before -f and missed `git push -f origin main`. Arguments stop at a
+      # shell separator, so `git push origin main && rm -rf build` isn't read as `-rf` on the push.
+      - '\bgit\s+push\b(?:\s+[^\s;&|]+)*?\s+[''"]?(?:--force[^\s;&|]*|-[A-Za-z]*f[A-Za-z]*\b|\+[^\s;&|]+)'
       - '\bgit\s+reset\s+(?:\S+\s+)*--hard\b'
       - '\bgit\s+clean\s+(?:\S+\s+)*-[A-Za-z]*f'
       - '\bgit\s+checkout\s+(?:\S+\s+)*--\s+\.(?:\s|$)'
