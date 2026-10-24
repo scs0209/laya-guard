@@ -5,6 +5,19 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- **An incident benchmark against other command guards** ([bench/](bench/README.md)). The seven replayed incidents,
+  30 shell evasions of the same harms (`r''m`, a target in a variable, `${IFS}`, base64 into `sh`, force-push
+  forms…) and 50 everyday agent commands go to laya-guard, dcg 0.15.3, cc-safety-net 2.6.18 and shellfirm 0.3.10.
+  Each guard is installed by its own Claude Code installer into its own temporary HOME, gets the JSON Claude Code
+  sends a PreToolUse hook, and is read with Claude Code's rules (exit 2/deny/block, ask, otherwise run).
+  `bash bench/setup.sh && python bench/run.py`; raw answers in `bench/results/`. laya-guard held 13/13 incidents and
+  30/30 evasions, mostly by asking, and asked about 4 of 50 everyday commands; dcg held 5/13 and 26/30 and blocked 2
+  everyday ones, and 9/13 and 28/30 with three of its opt-in packs on, and 50/50 everyday when the two held commands
+  are allowed for the project (separate rows). Five credential-reading cases and two native Windows commands sent as
+  Bash are counted apart in a by-kind table. The page says plainly that the set was written by laya-guard's author.
+
 ## [0.6.1] - 2026-10-23
 
 A force-push hole closed, and a page where anyone can try the guard without installing it.

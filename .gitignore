@@ -16,3 +16,6 @@ build/
 # local tooling
 .freebuff/
 .DS_Store
+
+# benchmark: third-party guards installed by bench/setup.sh
+bench/.tools/
