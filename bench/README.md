@@ -8,21 +8,24 @@ commands, sent to four command guards exactly as Claude Code sends a Bash call t
 > **Read this first.** laya-guard's author wrote this benchmark, and the incident set was replayed against laya-guard
 > before (one rule was added after it, see [incidents](../docs/guide/incidents.md)). The evasion cases were written
 > the same week laya-guard learned to read shell variables. Treat the laya-guard row as a home-team result. The other
-> guards were run with their own installers and default settings, and every raw answer is published so you can check
-> them.
+> guards were run with their own installers and default settings (dcg also has a second row with three of its opt-in
+> packs on), and every raw answer is published so you can check them.
 
-## Results (2026-10-23)
+## Results (2026-10-23, dcg rows re-run 2026-10-24)
 
 | guard | version | incidents held | evasions held | everyday allowed | median hook time |
 |---|---|---|---|---|---|
 | laya-guard | main after 0.6.0 | **13/13** (2 blocked, 11 asked) | **30/30** (9 blocked, 21 asked) | 46/50 (4 asked) | 171 ms |
-| [dcg](https://github.com/Dicklesworthstone/destructive_command_guard) | 0.15.3 | 5/13 (5 blocked) | 26/30 (26 blocked) | 48/50 (2 blocked) | 30 ms |
+| [dcg](https://github.com/Dicklesworthstone/destructive_command_guard) | 0.15.3 | 5/13 (5 blocked) | 26/30 (26 blocked) | 48/50 (2 blocked) | 16 ms |
+| dcg + opt-in packs | 0.15.3, `cloud.aws` `database.postgresql` `platform.railway` on | 9/13 (9 blocked) | 28/30 (28 blocked) | 48/50 (2 blocked) | 15 ms |
 | [cc-safety-net](https://github.com/kenryu42/cc-safety-net) | 2.6.18 | 3/13 (3 blocked) | 23/30 (22 blocked, 1 asked) | **50/50** | 60 ms |
 | [shellfirm](https://github.com/kaplanelad/shellfirm) | 0.3.10 | 2/13 (2 blocked) | 6/30 (6 blocked) | **50/50** | 66 ms |
 
 **Held** means the command did not run on its own: the hook blocked it, or asked the user through Claude Code's
 permission prompt. Every case and every guard's answer: [results/results.md](results/results.md). The hooks' raw
-stdout, stderr and exit codes: `results/<guard>.json`.
+stdout, stderr and exit codes: `results/<guard>.json`. The dcg rows were re-run on 2026-10-24, after the runner
+started keeping each hook's whole answer instead of its first 600 characters; the scores did not change, and their
+times are from that run (the other rows' are from 2026-10-23).
 
 What the numbers say, and don't:
 
@@ -34,7 +37,10 @@ What the numbers say, and don't:
   commands (cc-safety-net also secret files); both catch most of the hidden `rm -rf ~` forms. Most incident misses are
   outside that scope: cloud deletes (`aws … terminate-instances`, `iam delete-user`), reading SSH and wallet files,
   `gh auth token`, a delete inside a GraphQL body, Windows `rmdir`. dcg has opt-in packs for cloud providers and
-  databases that are off by default and were not enabled here.
+  databases that are off by default; the second dcg row turns on three (`cloud.aws`, `database.postgresql`,
+  `platform.railway`), which holds six more commands: the AWS deletes, `DROP TABLE` and the Railway API volume delete.
+  Reading or searching credential files and `gh auth token` still pass, because dcg's default policy is about
+  destructive operations. Its maintainer replayed the set and got the same default row.
 - **shellfirm grades severity.** In agent mode it denies HIGH and CRITICAL only, so `rm -rf ~/` (its
   `fs-strict:any_deletion`, MEDIUM) passes, and so does `rm -rf a/ b/ ~/`, which no rule matches.
 - **The everyday set is small and hand-written.** 50 commands can't measure a real false-positive rate; laya-guard's
@@ -75,8 +81,9 @@ python bench/run.py          # every guard; --guard dcg to run one
   a block; `permissionDecision: "ask"` asks; anything else, including a crash or output that isn't valid JSON, lets
   the command run. The JSON decides whatever the exit code, except that it can't override exit 2 (see the
   [hooks docs](https://code.claude.com/docs/en/hooks#exit-code-output)). The strictest hook wins.
-- **Default settings.** No guard's configuration was changed. laya-guard runs with its model on a local server that
-  `run.py` starts on a free port.
+- **Default settings.** No guard's configuration was changed, except the second dcg row: `setup.sh` writes
+  `[packs] enabled = ["cloud.aws", "database.postgresql", "platform.railway"]` to its `~/.config/dcg/config.toml`, as
+  dcg's README describes. laya-guard runs with its model on a local server that `run.py` starts on a free port.
 - dcg's binary is the macOS arm64 release asset, checked against the release's SHA-256. On another platform, change
   `DCG_ASSET` and `DCG_SHA256` in `setup.sh`.
 

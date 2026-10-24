@@ -172,6 +172,7 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     cases = load_cases(Path(args.cases))
     specs = json.loads((BENCH / "guards.json").read_text())["guards"]
+    order = [s["name"] for s in specs]
     if args.guard:
         specs = [s for s in specs if s["name"] in args.guard]
     out_dir = Path(args.out)
@@ -208,6 +209,7 @@ def main(argv=None) -> int:
             {"guard": spec["name"], "version": spec["version"],
              "hooks": [h["command"].replace(str(BENCH.parent) + "/", "") for h in hooks],      # no local paths
              "results": [results[c["id"]] for c in cases]}, indent=1, ensure_ascii=False) + "\n")
+    summary = {**{n: summary[n] for n in order if n in summary}, **summary}      # guards.json's order, however run
     summary_path.write_text(json.dumps(summary, indent=1) + "\n")
     report(cases, summary, out_dir)
     print(json.dumps(summary, indent=1))

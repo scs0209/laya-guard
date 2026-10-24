@@ -14,7 +14,8 @@ All notable changes to this project are documented here. Versions follow
   sends a PreToolUse hook, and is read with Claude Code's rules (exit 2/deny/block, ask, otherwise run).
   `bash bench/setup.sh && python bench/run.py`; raw answers in `bench/results/`. laya-guard held 13/13 incidents and
   30/30 evasions, mostly by asking, and asked about 4 of 50 everyday commands; dcg held 5/13 and 26/30 and blocked 2
-  everyday ones. The page says plainly that the set was written by laya-guard's author.
+  everyday ones, and 9/13 and 28/30 with three of its opt-in packs on (a separate row). The page says plainly that the
+  set was written by laya-guard's author.
 
 ## [0.6.1] - 2026-10-23
 

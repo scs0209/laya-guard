@@ -45,6 +45,29 @@
    }
   }
  },
+ "dcg-packs": {
+  "version": "0.15.3 + cloud.aws, database.postgresql, platform.railway",
+  "score": {
+   "incident": {
+    "total": 13,
+    "held": 9,
+    "blocked": 9,
+    "asked": 0
+   },
+   "evasion": {
+    "total": 30,
+    "held": 28,
+    "blocked": 28,
+    "asked": 0
+   },
+   "everyday": {
+    "total": 50,
+    "allowed": 48,
+    "asked": 0,
+    "blocked": 2
+   }
+  }
+ },
  "cc-safety-net": {
   "version": "2.6.18",
   "score": {

@@ -8,20 +8,23 @@
 > **먼저 읽어 주세요.** 이 벤치마크는 laya-guard 작성자가 만들었고, 사고 세트는 이전에 laya-guard로 재현해 본
 > 것입니다(그 뒤 규칙 하나를 추가했습니다, [사고 재현](../docs/ko/guide/incidents.md)). 셸 변형 사례는 laya-guard가
 > 셸 변수를 읽도록 바뀐 같은 주에 썼습니다. laya-guard 행은 홈 팀 결과로 봐 주세요. 다른 가드는 각자의 설치
-> 명령과 기본 설정으로 돌렸고, 모든 응답 원문을 공개해 확인할 수 있게 했습니다.
+> 명령과 기본 설정으로 돌렸고(dcg는 옵트인 팩 세 개를 켠 행이 하나 더 있습니다), 모든 응답 원문을 공개해
+> 확인할 수 있게 했습니다.
 
-## 결과 (2026-10-23)
+## 결과 (2026-10-23, dcg 행은 2026-10-24에 다시 실행)
 
 | 가드 | 버전 | 사고 명령 붙잡음 | 셸 변형 붙잡음 | 평범한 명령 허용 | 훅 응답 시간(중앙값) |
 |---|---|---|---|---|---|
 | laya-guard | 0.6.0 이후 main | **13/13** (차단 2, 확인 요청 11) | **30/30** (차단 9, 확인 요청 21) | 46/50 (확인 요청 4) | 171 ms |
-| [dcg](https://github.com/Dicklesworthstone/destructive_command_guard) | 0.15.3 | 5/13 (차단 5) | 26/30 (차단 26) | 48/50 (차단 2) | 30 ms |
+| [dcg](https://github.com/Dicklesworthstone/destructive_command_guard) | 0.15.3 | 5/13 (차단 5) | 26/30 (차단 26) | 48/50 (차단 2) | 16 ms |
+| dcg + 옵트인 팩 | 0.15.3, `cloud.aws` `database.postgresql` `platform.railway` 켬 | 9/13 (차단 9) | 28/30 (차단 28) | 48/50 (차단 2) | 15 ms |
 | [cc-safety-net](https://github.com/kenryu42/cc-safety-net) | 2.6.18 | 3/13 (차단 3) | 23/30 (차단 22, 확인 요청 1) | **50/50** | 60 ms |
 | [shellfirm](https://github.com/kaplanelad/shellfirm) | 0.3.10 | 2/13 (차단 2) | 6/30 (차단 6) | **50/50** | 66 ms |
 
 **붙잡음**은 명령이 그냥 실행되지 않았다는 뜻입니다. 훅이 차단했거나, Claude Code의 권한 확인 창으로 사용자에게
 물었습니다. 사례별 판정은 [results/results.md](results/results.md), 훅의 출력·오류·종료 코드 원문은
-`results/<가드>.json`에 있습니다.
+`results/<가드>.json`에 있습니다. dcg 행은 실행기가 훅 응답을 앞 600자만이 아니라 통째로 저장하도록 바뀐 뒤인
+2026-10-24에 다시 실행했습니다. 점수는 그대로이고, 이 두 행의 시간은 그 실행 값입니다(다른 행은 2026-10-23 값).
 
 숫자가 말하는 것과 말하지 않는 것:
 
@@ -33,7 +36,10 @@
   (cc-safety-net은 비밀 파일도), 둘 다 감춘 `rm -rf ~` 형태 대부분을 잡습니다. 사고 명령을 놓친 경우는 대부분 그
   범위 밖입니다. 클라우드 삭제(`aws … terminate-instances`, `iam delete-user`), SSH·지갑 파일 읽기,
   `gh auth token`, GraphQL 본문 안의 삭제, Windows `rmdir`이 그렇습니다. dcg에는 클라우드·데이터베이스용 팩이
-  있지만 기본으로 꺼져 있고, 여기서도 켜지 않았습니다.
+  있지만 기본으로 꺼져 있습니다. 두 번째 dcg 행은 그중 셋(`cloud.aws`, `database.postgresql`, `platform.railway`)을
+  켜서 명령 여섯 개를 더 붙잡습니다: AWS 삭제, `DROP TABLE`, Railway API 볼륨 삭제. 자격 증명 파일 읽기·검색과
+  `gh auth token`은 여전히 통과합니다. dcg의 기본 정책이 파괴적인 작업을 대상으로 하기 때문입니다. dcg 관리자가
+  같은 세트로 재현해 기본 행과 같은 결과를 얻었습니다.
 - **shellfirm은 심각도로 나눕니다.** 에이전트 모드에서는 HIGH와 CRITICAL만 거부해서, `rm -rf ~/`(MEDIUM인
   `fs-strict:any_deletion`)는 통과하고, 어떤 규칙에도 걸리지 않는 `rm -rf a/ b/ ~/`도 통과합니다.
 - **평범한 명령 세트는 작고 직접 쓴 것입니다.** 50개로는 실제 오탐률을 잴 수 없습니다. 실제 Claude Code 명령
@@ -73,8 +79,9 @@ python bench/run.py          # 모든 가드; 하나만은 --guard dcg
   차단, `permissionDecision: "ask"`는 확인 요청, 그 밖은(훅이 오류로 끝나거나 출력이 올바른 JSON이 아니어도)
   실행입니다. JSON은 종료 코드와 상관없이 결정을 내리지만, 종료 코드 2의 차단을 뒤집지는 못합니다
   ([훅 문서](https://code.claude.com/docs/en/hooks#exit-code-output)). 가장 엄격한 훅이 이깁니다.
-- **기본 설정.** 어떤 가드의 설정도 바꾸지 않았습니다. laya-guard는 `run.py`가 빈 포트에 띄운 로컬 서버에서 모델로
-  판정합니다.
+- **기본 설정.** 두 번째 dcg 행만 빼고 어떤 가드의 설정도 바꾸지 않았습니다. 그 행은 dcg README에 나온 대로
+  `setup.sh`가 `~/.config/dcg/config.toml`에 `[packs] enabled = ["cloud.aws", "database.postgresql",
+  "platform.railway"]`를 씁니다. laya-guard는 `run.py`가 빈 포트에 띄운 로컬 서버에서 모델로 판정합니다.
 - dcg 바이너리는 macOS arm64 릴리스 파일이고, 릴리스의 SHA-256으로 확인합니다. 다른 플랫폼에서는 `setup.sh`의
   `DCG_ASSET`, `DCG_SHA256`을 바꾸세요.
 
