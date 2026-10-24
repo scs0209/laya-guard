@@ -12,6 +12,11 @@
       "url": "https://github.com/Dicklesworthstone/destructive_command_guard"
     },
     {
+      "name": "dcg-packs",
+      "version": "0.15.3 + cloud.aws, database.postgresql, platform.railway",
+      "url": "https://github.com/Dicklesworthstone/destructive_command_guard"
+    },
+    {
       "name": "cc-safety-net",
       "version": "2.6.18",
       "url": "https://github.com/kenryu42/cc-safety-net",

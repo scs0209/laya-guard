@@ -28,15 +28,30 @@ setup_laya-guard() {
   in_home laya-guard env PYTHONPATH="$REPO/src" "$PY" -m laya_guard.cli install claude-code -y --no-verify >/dev/null
 }
 
-setup_dcg() {
-  fresh_home dcg
-  local d="$TOOLS/dcg"
+install_dcg() {
+  fresh_home "$1"
+  local d="$TOOLS/$1"
   curl -fsSL -o "$d/$DCG_ASSET" \
     "https://github.com/Dicklesworthstone/destructive_command_guard/releases/download/$DCG_VERSION/$DCG_ASSET"
   echo "$DCG_SHA256  $d/$DCG_ASSET" | shasum -a 256 -c -
   tar -xJf "$d/$DCG_ASSET" -C "$d"
   # its installer, `dcg install`, writes the Claude Code hook (the README's curl | bash script also does this)
-  in_home dcg "$d/dcg" install --quiet
+  in_home "$1" "$d/dcg" install --quiet
+}
+
+setup_dcg() {
+  install_dcg dcg                       # no config file: dcg's default packs
+}
+
+setup_dcg-packs() {
+  install_dcg dcg-packs
+  # the same install plus the opt-in packs for the cloud, database and platform cases, enabled the way its README
+  # says (`[packs] enabled` in ~/.config/dcg/config.toml). A separate row; the default dcg row stays as it is.
+  mkdir -p "$TOOLS/dcg-packs/home/.config/dcg"
+  cat > "$TOOLS/dcg-packs/home/.config/dcg/config.toml" <<'TOML'
+[packs]
+enabled = ["cloud.aws", "database.postgresql", "platform.railway"]
+TOML
 }
 
 setup_cc-safety-net() {
@@ -67,7 +82,7 @@ setup_shellfirm() {
 }
 
 guards=("$@")
-[ ${#guards[@]} -eq 0 ] && guards=(laya-guard dcg cc-safety-net shellfirm)
+[ ${#guards[@]} -eq 0 ] && guards=(laya-guard dcg dcg-packs cc-safety-net shellfirm)
 for g in "${guards[@]}"; do
   echo "== $g"
   mkdir -p "$TOOLS/$g"

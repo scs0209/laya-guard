@@ -45,11 +45,14 @@ def bash_hooks(home: Path) -> list[dict]:
 
 
 def decide(code: int, stdout: str) -> str:
-    """Claude Code's reading of one hook's result."""
+    """Claude Code's reading of one hook's result (code.claude.com/docs/en/hooks#exit-code-output).
+
+    Exit 2 blocks, and the JSON can't override that. On any other code, a JSON object that passes validation decides
+    by its fields alone, exit 1 included. Plain text, nothing or invalid JSON is a non-blocking error: the command
+    runs. A hook configured with `onFailure: "block"` is not modeled.
+    """
     if code == 2:
         return "block"
-    if code != 0:
-        return "allow"                  # a non-blocking error: Claude Code shows it and runs the command
     text = stdout.strip()
     if not text.startswith("{"):
         return "allow"
@@ -83,7 +86,7 @@ def run_case(case: dict, hooks: list[dict], env: dict, project: Path) -> dict:
         except subprocess.TimeoutExpired:
             code, out, err = -1, "", "timeout"
         verdict = decide(code, out)
-        details.append({"exit": code, "stdout": out.strip()[:600], "stderr": err.strip()[:600], "decision": verdict})
+        details.append({"exit": code, "stdout": out, "stderr": err, "decision": verdict})   # whole, so it can be replayed
         if RANK[verdict] > RANK[worst]:
             worst = verdict
     return {"id": case["id"], "decision": worst, "ms": round((time.perf_counter() - t0) * 1000), "hooks": details}

@@ -9,8 +9,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "bench"))
 import run  # noqa: E402
 
 
+def _pre_tool_use(decision):
+    return json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": decision}})
+
+
 @pytest.mark.parametrize("code, stdout, want", [
     (2, "", "block"),
+    (2, _pre_tool_use("allow"), "block"),                                                # the JSON can't override exit 2
     (0, json.dumps({"hookSpecificOutput": {"permissionDecision": "deny"}}), "block"),
     (0, json.dumps({"hookSpecificOutput": {"permissionDecision": "ask"}}), "ask"),
     (0, json.dumps({"hookSpecificOutput": {"permissionDecision": "allow"}}), "allow"),
@@ -18,7 +23,13 @@ import run  # noqa: E402
     (0, json.dumps({"continue": False}), "block"),
     (0, "", "allow"),
     (0, "not json", "allow"),
-    (1, json.dumps({"hookSpecificOutput": {"permissionDecision": "deny"}}), "allow"),   # a non-blocking error
+    (1, _pre_tool_use("deny"), "block"),                              # valid JSON decides, whatever the exit code
+    (1, _pre_tool_use("ask"), "ask"),
+    (1, _pre_tool_use("allow"), "allow"),
+    (1, "", "allow"),                                                  # a non-blocking error: the command runs
+    (1, "Error: something broke", "allow"),
+    (1, '{"hookSpecificOutput": {"permissionDecision": "deny"', "allow"),                # invalid JSON
+    (-1, "", "allow"),                                                 # a timeout
 ])
 def test_a_hook_answer_is_read_as_claude_code_reads_it(code, stdout, want):
     assert run.decide(code, stdout) == want
@@ -50,6 +61,17 @@ def test_the_strictest_hook_wins_and_gets_the_claude_code_input(tmp_path):
                                                                                           "rm -rf ~/")
     assert run.run_case(case, hooks + [{"command": "cat >/dev/null; exit 2"}], {"PATH": "/usr/bin:/bin"},
                         tmp_path)["decision"] == "block"
+
+
+def test_a_hooks_whole_answer_is_kept_so_it_can_be_replayed(tmp_path):
+    answer = tmp_path / "answer.json"
+    answer.write_text(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+                                                         "permissionDecisionReason": "x" * 2000}}))
+    hook = {"command": f"cat >/dev/null; cat {answer}; head -c 1500 /dev/zero | tr '\\0' e >&2"}
+    r = run.run_case({"id": "x", "command": "rm -rf ~/"}, [hook], {"PATH": "/usr/bin:/bin"}, tmp_path)
+    kept = r["hooks"][0]
+    assert r["decision"] == "block" and len(kept["stdout"]) > 2000 and len(kept["stderr"]) == 1500
+    assert json.loads(kept["stdout"]) and run.decide(0, kept["stdout"]) == "block"            # the saved text replays
 
 
 def test_the_case_set_is_well_formed():

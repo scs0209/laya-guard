@@ -72,8 +72,9 @@ python bench/run.py          # every guard; --guard dcg to run one
   each the JSON Claude Code sends (`hook_event_name`, `tool_name: "Bash"`, `tool_input.command`, `cwd` set to a
   small fixture project with a package.json).
 - **Same reading as Claude Code's.** Exit 2, `permissionDecision: "deny"`, `decision: "block"` or `continue: false` is
-  a block; `permissionDecision: "ask"` asks; anything else, including a crash, lets the command run. The strictest
-  hook wins.
+  a block; `permissionDecision: "ask"` asks; anything else, including a crash or output that isn't valid JSON, lets
+  the command run. The JSON decides whatever the exit code, except that it can't override exit 2 (see the
+  [hooks docs](https://code.claude.com/docs/en/hooks#exit-code-output)). The strictest hook wins.
 - **Default settings.** No guard's configuration was changed. laya-guard runs with its model on a local server that
   `run.py` starts on a free port.
 - dcg's binary is the macOS arm64 release asset, checked against the release's SHA-256. On another platform, change

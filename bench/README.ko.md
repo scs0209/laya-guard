@@ -70,8 +70,9 @@ python bench/run.py          # 모든 가드; 하나만은 --guard dcg
   보내는 JSON(`hook_event_name`, `tool_name: "Bash"`, `tool_input.command`, package.json이 있는 작은 픽스처
   프로젝트를 `cwd`로)을 넣습니다.
 - **Claude Code와 같은 해석.** 종료 코드 2, `permissionDecision: "deny"`, `decision: "block"`, `continue: false`는
-  차단, `permissionDecision: "ask"`는 확인 요청, 그 밖은(훅이 오류로 끝나도) 실행입니다. 가장 엄격한 훅이
-  이깁니다.
+  차단, `permissionDecision: "ask"`는 확인 요청, 그 밖은(훅이 오류로 끝나거나 출력이 올바른 JSON이 아니어도)
+  실행입니다. JSON은 종료 코드와 상관없이 결정을 내리지만, 종료 코드 2의 차단을 뒤집지는 못합니다
+  ([훅 문서](https://code.claude.com/docs/en/hooks#exit-code-output)). 가장 엄격한 훅이 이깁니다.
 - **기본 설정.** 어떤 가드의 설정도 바꾸지 않았습니다. laya-guard는 `run.py`가 빈 포트에 띄운 로컬 서버에서 모델로
   판정합니다.
 - dcg 바이너리는 macOS arm64 릴리스 파일이고, 릴리스의 SHA-256으로 확인합니다. 다른 플랫폼에서는 `setup.sh`의
