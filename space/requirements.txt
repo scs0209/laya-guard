@@ -1,3 +1,2 @@
 # torch, gradio, spaces and huggingface_hub are preinstalled on ZeroGPU; do not list them.
-# A git ref while the page needs an unreleased change, then laya-guardrail==<version>.
-laya-guardrail @ git+https://github.com/scs0209/laya-guard@main
+laya-guardrail==0.6.1

@@ -57,5 +57,5 @@ hf repos create <you>/laya-guard-trial --type space --space-sdk gradio --flavor 
 hf upload <you>/laya-guard-trial space --repo-type space --exclude "**/__pycache__/**"
 ```
 
-`GRADIO_SSR_MODE=false` is needed for `gr.Server` to serve the custom page at `/`. `requirements.txt` installs
-laya-guard from GitHub while the page needs an unreleased change, then `laya-guardrail==<version>`.
+`GRADIO_SSR_MODE=false` is needed for `gr.Server` to serve the custom page at `/`. `requirements.txt` pins the
+released `laya-guardrail`; when the page needs an unreleased change, point it at a git ref until the next release.
