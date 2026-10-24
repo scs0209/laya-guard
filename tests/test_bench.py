@@ -80,3 +80,26 @@ def test_the_case_set_is_well_formed():
     for c in cases:
         assert c["set"] in ("incident", "evasion", "everyday") and c["expected"] in ("hold", "allow", "any"), c
         assert (c["expected"] == "allow") == (c["set"] == "everyday"), c
+        assert c.get("scope", "credentials") == "credentials" and c.get("platform", "windows") == "windows", c
+        assert not ("scope" in c and "platform" in c), c                    # a case is counted in one group
+        if "scope" in c or "platform" in c:
+            assert c["set"] != "everyday" and c["expected"] != "any", c       # only scored attacks are grouped
+
+
+def test_the_windows_and_credential_cases_are_the_seven_that_were_labeled():
+    cases = run.load_cases(run.BENCH / "cases.jsonl")
+    assert sorted(c["id"] for c in cases if run.kind(c) == "windows") == ["agy-drive-1", "agy-drive-2"]
+    assert sorted(c["id"] for c in cases if run.kind(c) == "credentials") == [
+        "ev-cred-var", "ev-ssh-quote", "nx-1", "nx-2", "nx-3"]
+
+
+def test_held_is_counted_per_kind_and_context_only_cases_are_left_out():
+    cases = [
+        {"id": "a", "set": "incident", "expected": "hold", "command": "x"},
+        {"id": "b", "set": "evasion", "expected": "hold", "command": "x", "scope": "credentials"},
+        {"id": "c", "set": "incident", "expected": "hold", "command": "x", "platform": "windows"},
+        {"id": "d", "set": "incident", "expected": "any", "command": "x"},
+        {"id": "e", "set": "everyday", "expected": "allow", "command": "x"},
+    ]
+    got = run.by_kind(cases, {"a": "block", "b": "allow", "c": "ask", "d": "block", "e": "block"})
+    assert got == {"credentials": [0, 1], "windows": [1, 1], "other": [1, 1]}

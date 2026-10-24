@@ -17,6 +17,11 @@
       "url": "https://github.com/Dicklesworthstone/destructive_command_guard"
     },
     {
+      "name": "dcg-tuned",
+      "version": "0.15.3 + the three packs, and `rm -rf dist` and `rm -rf node_modules/.cache` allowed in the project",
+      "url": "https://github.com/Dicklesworthstone/destructive_command_guard"
+    },
+    {
       "name": "cc-safety-net",
       "version": "2.6.18",
       "url": "https://github.com/kenryu42/cc-safety-net",

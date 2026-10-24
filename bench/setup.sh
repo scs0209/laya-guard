@@ -30,13 +30,27 @@ setup_laya-guard() {
 
 install_dcg() {
   fresh_home "$1"
-  local d="$TOOLS/$1"
-  curl -fsSL -o "$d/$DCG_ASSET" \
+  local d="$TOOLS/$1" f
+  mkdir -p "$d"
+  for f in "$TOOLS"/dcg*/"$DCG_ASSET"; do          # an earlier download of this release, if it still checks out
+    [ -f "$f" ] && echo "$DCG_SHA256  $f" | shasum -a 256 -c - >/dev/null 2>&1 && { [ "$f" = "$d/$DCG_ASSET" ] || cp "$f" "$d/"; } && break
+  done
+  [ -f "$d/$DCG_ASSET" ] || curl -fsSL -o "$d/$DCG_ASSET" \
     "https://github.com/Dicklesworthstone/destructive_command_guard/releases/download/$DCG_VERSION/$DCG_ASSET"
   echo "$DCG_SHA256  $d/$DCG_ASSET" | shasum -a 256 -c -
   tar -xJf "$d/$DCG_ASSET" -C "$d"
   # its installer, `dcg install`, writes the Claude Code hook (the README's curl | bash script also does this)
   in_home "$1" "$d/dcg" install --quiet
+}
+
+dcg_packs() {
+  # the opt-in packs for the cloud, database and platform cases, enabled the way dcg's README says
+  # (`[packs] enabled` in ~/.config/dcg/config.toml)
+  mkdir -p "$TOOLS/$1/home/.config/dcg"
+  cat > "$TOOLS/$1/home/.config/dcg/config.toml" <<'TOML'
+[packs]
+enabled = ["cloud.aws", "database.postgresql", "platform.railway"]
+TOML
 }
 
 setup_dcg() {
@@ -45,13 +59,20 @@ setup_dcg() {
 
 setup_dcg-packs() {
   install_dcg dcg-packs
-  # the same install plus the opt-in packs for the cloud, database and platform cases, enabled the way its README
-  # says (`[packs] enabled` in ~/.config/dcg/config.toml). A separate row; the default dcg row stays as it is.
-  mkdir -p "$TOOLS/dcg-packs/home/.config/dcg"
-  cat > "$TOOLS/dcg-packs/home/.config/dcg/config.toml" <<'TOML'
-[packs]
-enabled = ["cloud.aws", "database.postgresql", "platform.railway"]
-TOML
+  dcg_packs dcg-packs                   # a separate row; the default dcg row stays as it is
+}
+
+setup_dcg-tuned() {
+  install_dcg dcg-tuned
+  dcg_packs dcg-tuned
+  # What a person can do about the two everyday holds (`rm -rf dist`, `rm -rf node_modules/.cache`, both held by
+  # core.filesystem:rm-rf-general) after looking at those targets: allow exactly those commands, from this project's
+  # directory only, with dcg's `allowlist add-command`. run.py runs every case in this fixed path.
+  mkdir -p "$TOOLS/project"
+  for c in 'rm -rf dist' 'rm -rf node_modules/.cache'; do
+    in_home dcg-tuned "$TOOLS/dcg-tuned/dcg" allowlist add-command "$c" --user --path "$TOOLS/project" \
+      --reason "reviewed generated output" >/dev/null
+  done
 }
 
 setup_cc-safety-net() {
@@ -82,7 +103,7 @@ setup_shellfirm() {
 }
 
 guards=("$@")
-[ ${#guards[@]} -eq 0 ] && guards=(laya-guard dcg dcg-packs cc-safety-net shellfirm)
+[ ${#guards[@]} -eq 0 ] && guards=(laya-guard dcg dcg-packs dcg-tuned cc-safety-net shellfirm)
 for g in "${guards[@]}"; do
   echo "== $g"
   mkdir -p "$TOOLS/$g"

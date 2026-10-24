@@ -136,6 +136,31 @@ def score(cases: list[dict], results: dict) -> dict:
 
 
 MARK = {"allow": "·", "ask": "ask", "block": "**block**"}
+KINDS = (("credentials", "reading or locating credentials, a token"),
+         ("windows", "native Windows commands, sent as Bash"),
+         ("other", "everything else"))
+
+
+def kind(case: dict) -> str:
+    """The group a case is counted in for the by-kind table; the case's own `scope` / `platform` field decides."""
+    if case.get("platform") == "windows":
+        return "windows"
+    if case.get("scope") == "credentials":
+        return "credentials"
+    return "other"
+
+
+def scored_attacks(cases: list[dict]) -> list[dict]:
+    return [c for c in cases if c["set"] in ("incident", "evasion") and c["expected"] != "any"]
+
+
+def by_kind(cases: list[dict], decisions: dict) -> dict:
+    """How many scored incident and evasion cases a guard held, per kind. decisions: case id -> decision."""
+    out = {k: [0, 0] for k, _ in KINDS}
+    for c in scored_attacks(cases):
+        out[kind(c)][1] += 1
+        out[kind(c)][0] += decisions[c["id"]] != "allow"
+    return out
 
 
 def report(cases: list[dict], summary: dict, out_dir: Path) -> str:
@@ -151,13 +176,25 @@ def report(cases: list[dict], summary: dict, out_dir: Path) -> str:
                      f"| {s['incident']['held']}/{s['incident']['total']} ({s['incident']['blocked']} blocked) "
                      f"| {s['evasion']['held']}/{s['evasion']['total']} ({s['evasion']['blocked']} blocked) "
                      f"| {s['everyday']['allowed']}/{s['everyday']['total']} |")
+    counts = {k: sum(kind(c) == k for c in scored_attacks(cases)) for k, _ in KINDS}
+    lines += ["", "## Held, by kind of command", "",
+              "The incident and evasion cases that are scored, grouped by what the command does. A guard whose policy "
+              "is about destructive operations doesn't promise to hold the credentials group, and the Windows group "
+              "is native Windows commands sent as Bash calls: it shows how each guard reads that text, not Windows "
+              "coverage (`cmd /c \"rmdir /s /q D:\\\"` isn't even a complete Bash command).", "",
+              "| guard | " + " | ".join(f"{label} ({counts[k]})" for k, label in KINDS) + " |",
+              "|---|" + "---|" * len(KINDS)]
+    for n in names:
+        got = by_kind(cases, {i: r["decision"] for i, r in rows[n].items()})
+        lines.append(f"| {n} | " + " | ".join(f"{got[k][0]}/{got[k][1]}" for k, _ in KINDS) + " |")
     for title, keep in (("Incidents", "incident"), ("Evasions", "evasion"), ("Everyday", "everyday")):
         lines += ["", f"## {title}", "", "| case | expected | " + " | ".join(names) + " | command |",
                   "|---|---|" + "---|" * len(names) + "---|"]
         for c in (c for c in cases if c["set"] == keep):
             cmd = c["command"].replace("\n", "⏎").replace("|", "\\|")
             cmd = cmd if len(cmd) <= 70 else cmd[:69] + "…"
-            lines.append(f"| {c['id']} | {c['expected']} | "
+            tag = {"credentials": " (credentials)", "windows": " (Windows)"}.get(kind(c), "")
+            lines.append(f"| {c['id']}{tag} | {c['expected']} | "
                          + " | ".join(MARK[rows[n][c['id']]["decision"]] for n in names) + f" | `{cmd}` |")
     text = "\n".join(lines) + "\n"
     (out_dir / "results.md").write_text(text)
@@ -177,8 +214,9 @@ def main(argv=None) -> int:
         specs = [s for s in specs if s["name"] in args.guard]
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
-    project = Path(tempfile.mkdtemp(prefix="bench-project-"))
-    shutil.copytree(BENCH / "fixture", project, dirs_exist_ok=True)
+    project = TOOLS / "project"               # a fixed path, so a guard's config can name it (setup.sh's dcg-tuned does)
+    shutil.rmtree(project, ignore_errors=True)
+    shutil.copytree(BENCH / "fixture", project)
     summary_path = out_dir / "summary.json"
     summary = json.loads(summary_path.read_text()) if summary_path.exists() else {}
     for spec in specs:

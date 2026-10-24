@@ -68,6 +68,29 @@
    }
   }
  },
+ "dcg-tuned": {
+  "version": "0.15.3 + the three packs, and `rm -rf dist` and `rm -rf node_modules/.cache` allowed in the project",
+  "score": {
+   "incident": {
+    "total": 13,
+    "held": 9,
+    "blocked": 9,
+    "asked": 0
+   },
+   "evasion": {
+    "total": 30,
+    "held": 28,
+    "blocked": 28,
+    "asked": 0
+   },
+   "everyday": {
+    "total": 50,
+    "allowed": 50,
+    "asked": 0,
+    "blocked": 0
+   }
+  }
+ },
  "cc-safety-net": {
   "version": "2.6.18",
   "score": {
