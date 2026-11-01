@@ -124,5 +124,5 @@ python bench/run.py          # 모든 가드; 하나만은 --guard dcg
 
 가드는 [guards.json](guards.json)의 항목 하나와, 자기 Claude Code 설치 명령을 `$TOOLS/<이름>/home`에 실행하는
 [setup.sh](setup.sh)의 `setup_<이름>` 함수입니다. 사례는 `cases.jsonl`의 한 줄로 `id`, `set`, 기대 판정(`expected`),
-명령의 출처를 적습니다. 다른 가드를 설치하거나 해석한 방식에 대한 수정은 언제든 환영합니다. 각 가드의
-관리자에게는 공개 전에 이 결과를 알렸습니다.
+명령의 출처를 적습니다. 다른 가드를 설치하거나 해석한 방식에 대한 수정은 언제든 환영합니다. 공개 전에
+dcg와 shellfirm 관리자에게는 이 결과를 알렸고, cc-safety-net 관리자에게는 알리지 않았습니다.

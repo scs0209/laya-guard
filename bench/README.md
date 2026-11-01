@@ -127,4 +127,4 @@ python bench/run.py          # every guard; --guard dcg to run one
 A guard is an entry in [guards.json](guards.json) plus a `setup_<name>` function in [setup.sh](setup.sh) that runs
 its own Claude Code installer into `$TOOLS/<name>/home`. A case is a line in `cases.jsonl` with an `id`, a `set`, the
 `expected` answer and where the command comes from. Corrections to how another guard was installed or read are very
-welcome; its maintainers were told about these results before they were published.
+welcome. Before publishing, the dcg and shellfirm maintainers were sent these results; cc-safety-net's were not.
