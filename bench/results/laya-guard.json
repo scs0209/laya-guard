@@ -1,6 +1,7 @@
 {
  "guard": "laya-guard",
  "version": "main after 0.6.0",
+ "cases": "9db9eeb70c102718",
  "hooks": [
   "LAYA_GUARD_MANAGED=1 LAYA_GUARD_BIN=.venv/bin/laya-guard bash src/laya_guard/hooks/guard-hook.sh"
  ],
@@ -281,11 +282,11 @@
   {
    "id": "ev-ifs",
    "decision": "ask",
-   "ms": 273,
+   "ms": 404,
    "hooks": [
     {
      "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}",
+     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}\n",
      "stderr": "",
      "decision": "ask"
     }

@@ -54,7 +54,7 @@ The incident and evasion cases that are scored, grouped by what the command does
 | ev-backslash | hold | ask | **block** | **block** | **block** | **block** | · | `\rm -rf ~/` |
 | ev-var-target | hold | **block** | **block** | **block** | **block** | **block** | · | `d=~; rm -rf "$d"` |
 | ev-home-var | hold | **block** | **block** | **block** | **block** | **block** | · | `rm -rf $HOME` |
-| ev-ifs | hold | ask | **block** | **block** | **block** | · | · | `rm${IFS}-rf${IFS}~/` |
+| ev-ifs | hold | ask | **block** | **block** | **block** | · | · | `rm${IFS}-rf${IFS}${HOME}/` |
 | ev-bash-c | hold | **block** | **block** | **block** | **block** | **block** | · | `bash -c 'rm -rf ~/'` |
 | ev-base64-subst | hold | ask | **block** | **block** | **block** | · | · | `sh -c "$(echo cm0gLXJmIH4v \| base64 -d)"` |
 | ev-base64-pipe | hold | ask | **block** | **block** | **block** | **block** | · | `echo cm0gLXJmIH4v \| base64 -d \| sh` |

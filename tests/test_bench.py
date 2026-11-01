@@ -16,9 +16,11 @@ def _pre_tool_use(decision):
 @pytest.mark.parametrize("code, stdout, want", [
     (2, "", "block"),
     (2, _pre_tool_use("allow"), "block"),                                                # the JSON can't override exit 2
-    (0, json.dumps({"hookSpecificOutput": {"permissionDecision": "deny"}}), "block"),
-    (0, json.dumps({"hookSpecificOutput": {"permissionDecision": "ask"}}), "ask"),
-    (0, json.dumps({"hookSpecificOutput": {"permissionDecision": "allow"}}), "allow"),
+    (0, _pre_tool_use("deny"), "block"),
+    (0, _pre_tool_use("ask"), "ask"),
+    (0, _pre_tool_use("allow"), "allow"),
+    (0, json.dumps({"hookSpecificOutput": {"permissionDecision": "deny"}}), "allow"),     # no hookEventName: not valid
+    (0, json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse", "permissionDecision": "deny"}}), "allow"),
     (0, json.dumps({"decision": "block", "reason": "x"}), "block"),
     (0, json.dumps({"continue": False}), "block"),
     (0, "", "allow"),
@@ -49,9 +51,25 @@ def test_only_hooks_that_match_bash_are_run(tmp_path):
     assert [h["command"] for h in run.bash_hooks(tmp_path)] == ["a", "c"]
 
 
+@pytest.mark.parametrize("matcher, want", [
+    (None, True), ("", True), ("*", True),
+    ("Bash", True), ("Bash|PowerShell|Monitor", True), ("Bash, Edit", True), ("Edit,Bash", True),   # exact names
+    ("Edit", False), ("Edit, Write", False), ("BashOutput", False),
+    ("Ba.*", True), ("^Bash$", True), ("as", False), ("a.h", True),          # a regular expression, unanchored
+])
+def test_a_matcher_is_read_as_claude_code_reads_it(matcher, want):
+    assert run.matches_bash(matcher) is want
+
+
+def test_a_case_set_is_named_by_its_ids_and_commands():
+    cases = [{"id": "a", "command": "rm -rf ~/"}]
+    assert run.fingerprint(cases) == run.fingerprint([dict(cases[0], set="evasion")])
+    assert run.fingerprint(cases) != run.fingerprint([{"id": "a", "command": "rm -rf ${HOME}/"}])
+
+
 def test_the_strictest_hook_wins_and_gets_the_claude_code_input(tmp_path):
     seen = tmp_path / "seen.json"
-    ask = f"cat > {seen}; echo '{{\"hookSpecificOutput\": {{\"permissionDecision\": \"ask\"}}}}'"
+    ask = f"cat > {seen}; echo '{_pre_tool_use('ask')}'"
     hooks = [{"command": "cat >/dev/null; exit 0"}, {"command": ask}, {"command": "cat >/dev/null; exit 1"}]
     case = {"id": "x", "command": "rm -rf ~/"}
     r = run.run_case(case, hooks, {"PATH": "/usr/bin:/bin"}, tmp_path)

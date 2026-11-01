@@ -1,6 +1,7 @@
 {
  "guard": "shellfirm",
  "version": "0.3.10",
+ "cases": "9db9eeb70c102718",
  "hooks": [
   "shellfirm check --stdin --format json --exit-code"
  ],
@@ -281,11 +282,11 @@
   {
    "id": "ev-ifs",
    "decision": "allow",
-   "ms": 60,
+   "ms": 243,
    "hooks": [
     {
      "exit": 0,
-     "stdout": "{\n  \"hookSpecificOutput\": {\n    \"hookEventName\": \"PreToolUse\",\n    \"permissionDecision\": \"allow\",\n    \"permissionDecisionReason\": \"Command passed shellfirm checks\"\n  }\n}",
+     "stdout": "{\n  \"hookSpecificOutput\": {\n    \"hookEventName\": \"PreToolUse\",\n    \"permissionDecision\": \"allow\",\n    \"permissionDecisionReason\": \"Command passed shellfirm checks\"\n  }\n}\n",
      "stderr": "",
      "decision": "allow"
     }

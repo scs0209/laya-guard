@@ -19,7 +19,7 @@
 {"id": "ev-backslash", "set": "evasion", "expected": "hold", "command": "\\rm -rf ~/", "source": "a leading backslash skips aliases, same rm", "fidelity": "synthetic"}
 {"id": "ev-var-target", "set": "evasion", "expected": "hold", "command": "d=~; rm -rf \"$d\"", "source": "target in a variable", "fidelity": "synthetic"}
 {"id": "ev-home-var", "set": "evasion", "expected": "hold", "command": "rm -rf $HOME", "source": "$HOME for ~", "fidelity": "synthetic"}
-{"id": "ev-ifs", "set": "evasion", "expected": "hold", "command": "rm${IFS}-rf${IFS}~/", "source": "IFS as the separator", "fidelity": "synthetic"}
+{"id": "ev-ifs", "set": "evasion", "expected": "hold", "command": "rm${IFS}-rf${IFS}${HOME}/", "source": "IFS as the separator", "fidelity": "synthetic"}
 {"id": "ev-bash-c", "set": "evasion", "expected": "hold", "command": "bash -c 'rm -rf ~/'", "source": "inside bash -c", "fidelity": "synthetic"}
 {"id": "ev-base64-subst", "set": "evasion", "expected": "hold", "command": "sh -c \"$(echo cm0gLXJmIH4v | base64 -d)\"", "source": "base64 of `rm -rf ~/` run by sh -c", "fidelity": "synthetic"}
 {"id": "ev-base64-pipe", "set": "evasion", "expected": "hold", "command": "echo cm0gLXJmIH4v | base64 -d | sh", "source": "base64 piped into sh", "fidelity": "synthetic"}

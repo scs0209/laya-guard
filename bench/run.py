@@ -12,6 +12,7 @@ strictest answer wins. Nothing here runs the commands themselves.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -33,13 +34,23 @@ def load_cases(path: Path) -> list[dict]:
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
 
+def matches_bash(matcher: str | None) -> bool:
+    """Claude Code's reading of a matcher (code.claude.com/docs/en/hooks): `*`, empty or none takes every tool; one made
+    only of letters, digits, `_`, `-`, spaces, `,` and `|` is a list of exact names split on `|` or `,`; anything else
+    is a regular expression tested anywhere in the name, unanchored."""
+    if not matcher or matcher == "*":
+        return True
+    if re.fullmatch(r"[A-Za-z0-9_\- ,|]+", matcher):
+        return "Bash" in (name.strip() for name in re.split(r"[|,]", matcher))
+    return re.search(matcher, "Bash") is not None
+
+
 def bash_hooks(home: Path) -> list[dict]:
     """The PreToolUse hooks in home/.claude/settings.json whose matcher takes the Bash tool."""
     settings = json.loads((home / ".claude" / "settings.json").read_text())
     hooks = []
     for group in settings.get("hooks", {}).get("PreToolUse", []):
-        matcher = group.get("matcher") or "*"
-        if matcher in ("*", "") or re.fullmatch(matcher, "Bash"):
+        if matches_bash(group.get("matcher")):
             hooks += [h for h in group.get("hooks", []) if h.get("type") == "command"]
     return hooks
 
@@ -62,7 +73,10 @@ def decide(code: int, stdout: str) -> str:
         return "allow"
     if out.get("continue") is False:
         return "block"
-    specific = (out.get("hookSpecificOutput") or {}).get("permissionDecision")
+    nested = out.get("hookSpecificOutput") or {}
+    if nested and nested.get("hookEventName") != "PreToolUse":     # required in nested output; without it, not valid
+        return "allow"
+    specific = nested.get("permissionDecision")
     if specific in ("deny", "ask", "allow"):
         return {"deny": "block", "ask": "ask", "allow": "allow"}[specific]
     if out.get("decision") == "block":
@@ -119,6 +133,12 @@ def start_server(spec: dict, env: dict) -> subprocess.Popen | None:
             time.sleep(1)
     proc.kill()
     raise SystemExit(f"{spec['name']}: the server did not start")
+
+
+def fingerprint(cases: list[dict]) -> str:
+    """Names the case set a result was run on: every case's id and command."""
+    text = json.dumps([[c["id"], c["command"]] for c in cases], ensure_ascii=False)
+    return hashlib.sha256(text.encode()).hexdigest()[:16]
 
 
 def score(cases: list[dict], results: dict) -> dict:
@@ -219,6 +239,10 @@ def main(argv=None) -> int:
     shutil.copytree(BENCH / "fixture", project)
     summary_path = out_dir / "summary.json"
     summary = json.loads(summary_path.read_text()) if summary_path.exists() else {}
+    case_set = fingerprint(cases)
+    for name in [n for n, s in summary.items() if s.get("cases") != case_set]:   # results for other cases can't mix in
+        print(f"drop {name}: its results are for another case set (python bench/run.py --guard {name})", file=sys.stderr)
+        del summary[name]
     for spec in specs:
         home = TOOLS / spec["name"] / "home"
         if not (home / ".claude" / "settings.json").exists():
@@ -233,6 +257,8 @@ def main(argv=None) -> int:
         server = start_server(spec, env)
         try:
             hooks = bash_hooks(home)
+            if not hooks:                              # otherwise every case would score as let through
+                raise SystemExit(f"{spec['name']}: no PreToolUse hook for Bash in {home / '.claude' / 'settings.json'}")
             results = {}
             for i, case in enumerate(cases, 1):
                 results[case["id"]] = run_case(case, hooks, env, project)
@@ -242,9 +268,9 @@ def main(argv=None) -> int:
             if server:
                 server.terminate()
                 server.wait(timeout=30)
-        summary[spec["name"]] = {"version": spec["version"], "score": score(cases, results)}
+        summary[spec["name"]] = {"version": spec["version"], "cases": case_set, "score": score(cases, results)}
         (out_dir / f"{spec['name']}.json").write_text(json.dumps(
-            {"guard": spec["name"], "version": spec["version"],
+            {"guard": spec["name"], "version": spec["version"], "cases": case_set,
              "hooks": [h["command"].replace(str(BENCH.parent) + "/", "") for h in hooks],      # no local paths
              "results": [results[c["id"]] for c in cases]}, indent=1, ensure_ascii=False) + "\n")
     summary = {**{n: summary[n] for n in order if n in summary}, **summary}      # guards.json's order, however run

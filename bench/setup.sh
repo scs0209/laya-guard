@@ -35,6 +35,8 @@ install_dcg() {
   for f in "$TOOLS"/dcg*/"$DCG_ASSET"; do          # an earlier download of this release, if it still checks out
     [ -f "$f" ] && echo "$DCG_SHA256  $f" | shasum -a 256 -c - >/dev/null 2>&1 && { [ "$f" = "$d/$DCG_ASSET" ] || cp "$f" "$d/"; } && break
   done
+  # a download that doesn't check out (an earlier one cut short) is fetched again, not kept
+  [ -f "$d/$DCG_ASSET" ] && ! echo "$DCG_SHA256  $d/$DCG_ASSET" | shasum -a 256 -c - >/dev/null 2>&1 && rm -f "$d/$DCG_ASSET"
   [ -f "$d/$DCG_ASSET" ] || curl -fsSL -o "$d/$DCG_ASSET" \
     "https://github.com/Dicklesworthstone/destructive_command_guard/releases/download/$DCG_VERSION/$DCG_ASSET"
   echo "$DCG_SHA256  $d/$DCG_ASSET" | shasum -a 256 -c -

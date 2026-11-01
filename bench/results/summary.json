@@ -1,6 +1,7 @@
 {
  "laya-guard": {
   "version": "main after 0.6.0",
+  "cases": "9db9eeb70c102718",
   "score": {
    "incident": {
     "total": 13,
@@ -24,6 +25,7 @@
  },
  "dcg": {
   "version": "0.15.3",
+  "cases": "9db9eeb70c102718",
   "score": {
    "incident": {
     "total": 13,
@@ -47,6 +49,7 @@
  },
  "dcg-packs": {
   "version": "0.15.3 + cloud.aws, database.postgresql, platform.railway",
+  "cases": "9db9eeb70c102718",
   "score": {
    "incident": {
     "total": 13,
@@ -70,6 +73,7 @@
  },
  "dcg-tuned": {
   "version": "0.15.3 + the three packs, and `rm -rf dist` and `rm -rf node_modules/.cache` allowed in the project",
+  "cases": "9db9eeb70c102718",
   "score": {
    "incident": {
     "total": 13,
@@ -93,6 +97,7 @@
  },
  "cc-safety-net": {
   "version": "2.6.18",
+  "cases": "9db9eeb70c102718",
   "score": {
    "incident": {
     "total": 13,
@@ -116,6 +121,7 @@
  },
  "shellfirm": {
   "version": "0.3.10",
+  "cases": "9db9eeb70c102718",
   "score": {
    "incident": {
     "total": 13,

@@ -1,6 +1,7 @@
 {
  "guard": "cc-safety-net",
  "version": "2.6.18",
+ "cases": "9db9eeb70c102718",
  "hooks": [
   "node \"${CLAUDE_PLUGIN_ROOT}/dist/bin/cc-safety-net.js\" hook --coding-cli"
  ],
@@ -281,7 +282,7 @@
   {
    "id": "ev-ifs",
    "decision": "allow",
-   "ms": 64,
+   "ms": 68,
    "hooks": [
     {
      "exit": 0,
