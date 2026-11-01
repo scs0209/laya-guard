@@ -1,7 +1,7 @@
 {
  "guard": "dcg-tuned",
  "version": "0.15.3 + the three packs, and `rm -rf dist` and `rm -rf node_modules/.cache` allowed in the project",
- "cases": "9db9eeb70c102718",
+ "cases": "390cbab201ec9f3f",
  "hooks": [
   "bench/.tools/dcg-tuned/dcg"
  ],

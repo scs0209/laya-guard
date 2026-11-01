@@ -1,7 +1,7 @@
 {
  "guard": "shellfirm",
  "version": "0.3.10",
- "cases": "9db9eeb70c102718",
+ "cases": "390cbab201ec9f3f",
  "hooks": [
   "shellfirm check --stdin --format json --exit-code"
  ],

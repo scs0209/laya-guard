@@ -1,7 +1,7 @@
 {
  "guard": "laya-guard",
  "version": "main after 0.6.0",
- "cases": "9db9eeb70c102718",
+ "cases": "390cbab201ec9f3f",
  "hooks": [
   "LAYA_GUARD_MANAGED=1 LAYA_GUARD_BIN=.venv/bin/laya-guard bash src/laya_guard/hooks/guard-hook.sh"
  ],

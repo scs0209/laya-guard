@@ -73,7 +73,9 @@ def decide(code: int, stdout: str) -> str:
         return "allow"
     if out.get("continue") is False:
         return "block"
-    nested = out.get("hookSpecificOutput") or {}
+    nested = out.get("hookSpecificOutput", {})
+    if not isinstance(nested, dict):                                # not an object: not valid output, the command runs
+        return "allow"
     if nested and nested.get("hookEventName") != "PreToolUse":     # required in nested output; without it, not valid
         return "allow"
     specific = nested.get("permissionDecision")
@@ -136,8 +138,8 @@ def start_server(spec: dict, env: dict) -> subprocess.Popen | None:
 
 
 def fingerprint(cases: list[dict]) -> str:
-    """Names the case set a result was run on: every case's id and command."""
-    text = json.dumps([[c["id"], c["command"]] for c in cases], ensure_ascii=False)
+    """Names the case set a result was run on: every case's id, command, set and expected answer, all read by score."""
+    text = json.dumps([[c["id"], c["command"], c["set"], c["expected"]] for c in cases], ensure_ascii=False)
     return hashlib.sha256(text.encode()).hexdigest()[:16]
 
 

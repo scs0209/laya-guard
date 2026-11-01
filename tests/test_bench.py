@@ -19,8 +19,10 @@ def _pre_tool_use(decision):
     (0, _pre_tool_use("deny"), "block"),
     (0, _pre_tool_use("ask"), "ask"),
     (0, _pre_tool_use("allow"), "allow"),
-    (0, json.dumps({"hookSpecificOutput": {"permissionDecision": "deny"}}), "allow"),     # no hookEventName: not valid
+    (0, json.dumps({"hookSpecificOutput": {"permissionDecision": "deny"}}), "allow"),   # no hookEventName: not valid
     (0, json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse", "permissionDecision": "deny"}}), "allow"),
+    (0, json.dumps({"hookSpecificOutput": True}), "allow"),                              # not an object
+    (0, json.dumps({"hookSpecificOutput": [], "decision": "block"}), "allow"),
     (0, json.dumps({"decision": "block", "reason": "x"}), "block"),
     (0, json.dumps({"continue": False}), "block"),
     (0, "", "allow"),
@@ -61,10 +63,11 @@ def test_a_matcher_is_read_as_claude_code_reads_it(matcher, want):
     assert run.matches_bash(matcher) is want
 
 
-def test_a_case_set_is_named_by_its_ids_and_commands():
-    cases = [{"id": "a", "command": "rm -rf ~/"}]
-    assert run.fingerprint(cases) == run.fingerprint([dict(cases[0], set="evasion")])
-    assert run.fingerprint(cases) != run.fingerprint([{"id": "a", "command": "rm -rf ${HOME}/"}])
+def test_a_case_set_is_named_by_what_its_score_reads():
+    case = {"id": "a", "command": "rm -rf ~/", "set": "evasion", "expected": "hold"}
+    assert run.fingerprint([case]) == run.fingerprint([dict(case, source="note")])
+    for change in ({"command": "rm -rf ${HOME}/"}, {"set": "incident"}, {"expected": "any"}):
+        assert run.fingerprint([case]) != run.fingerprint([dict(case, **change)])
 
 
 def test_the_strictest_hook_wins_and_gets_the_claude_code_input(tmp_path):

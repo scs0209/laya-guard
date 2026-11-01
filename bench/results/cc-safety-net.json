@@ -1,7 +1,7 @@
 {
  "guard": "cc-safety-net",
  "version": "2.6.18",
- "cases": "9db9eeb70c102718",
+ "cases": "390cbab201ec9f3f",
  "hooks": [
   "node \"${CLAUDE_PLUGIN_ROOT}/dist/bin/cc-safety-net.js\" hook --coding-cli"
  ],
