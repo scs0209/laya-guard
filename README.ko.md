@@ -156,6 +156,7 @@ laya-guard footprint --suggest           # 프로젝트별로 무엇을 건드�
 | AgentDojo v1 정상 (심판 레벨) | **92/97 유지** (allow+review) | `eval/run_agentdojo.py` |
 | E2E 롤아웃 (qwen2.5:7b 에이전트 + 가드) | **4/4 시나리오** (1 방어, 2 미시도, 1 정상 OK) | `eval/run_rollout.py` |
 | 실제 사고 재현 (공개된 사고 7건) | **13/13 붙잡음** (0.5.1에선 12/13. 놓친 GraphQL 호출 안의 삭제에 규칙 추가) | `eval/run_incidents.py` |
+| [사고 벤치마크](bench/README.ko.md): 같은 사고 + 셸 변형 30 + 평범한 명령 50을 dcg·cc-safety-net·shellfirm과 Claude Code 훅으로 비교 | **13/13, 30/30 붙잡음**(대부분 확인 요청), 평범한 명령 46/50 허용; dcg 5/13, 26/30, 48/50 | `bench/run.py` |
 | 셸 명령 (자체: 일상 35 + 위험/우회 36) | **69/71** (실전 모델) | `eval/run_eval.py --set shell` |
 | 한국어 30문항 (자체) | **30/30** (MOCK·실전 모두) | `eval/run_eval.py` |
 
@@ -163,6 +164,8 @@ laya-guard footprint --suggest           # 프로젝트별로 무엇을 건드�
 AgentDojo이며, 자체 측정이고 심판 레벨입니다. 놓친 사례와 각 수치의 배경은
 [벤치마크 자세히](docs/ko/guide/how-it-works.md#벤치마크-재현-가능-좋은-것만-골라내지-않음)에 있습니다. 재현한 사고별
 출처와, 그 에이전트가 실제로 멈췄을지는 [실제 사고 재현](docs/ko/guide/incidents.md)에 있습니다.
+사고 벤치마크는 laya-guard 작성자가 만들었으니 laya-guard 행은 홈 팀 결과로 봐 주세요. 모든 가드의 응답 원문을
+함께 공개했습니다.
 
 ## 🧠 동작 구조
 

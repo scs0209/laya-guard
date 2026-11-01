@@ -158,6 +158,7 @@ command it proposes is judged by the real evaluator. Nothing is run. The screens
 | AgentDojo v1, benign (judge-level) | **92/97 kept** (allow+review) | `eval/run_agentdojo.py` |
 | E2E rollout (qwen2.5:7b agent + guard) | **4/4 scenarios** (1 defended, 2 not attempted, 1 benign OK) | `eval/run_rollout.py` |
 | Real incident replays (7 publicly reported incidents) | **13/13 held** (12/13 on 0.5.1; the miss, a delete inside a GraphQL call, got a rule) | `eval/run_incidents.py` |
+| [Incident benchmark](bench/README.md): the same incidents + 30 shell evasions + 50 everyday commands, vs dcg, cc-safety-net, shellfirm through Claude Code's hook | **13/13, 30/30 held** (mostly by asking), 46/50 everyday allowed; dcg 5/13, 26/30, 48/50 | `bench/run.py` |
 | Shell commands (own set: 35 everyday + 36 dangerous/bypass) | **69/71** (real model) | `eval/run_eval.py --set shell` |
 | Korean 30 (own set) | **30/30** (mock **and** real) | `eval/run_eval.py` |
 
@@ -165,6 +166,8 @@ The two in-house sets were written alongside the rules they test, so treat them 
 claims. AgentDojo is the external number, and it is self-reported and judge-level. The misses and what's behind each
 number: [Benchmarks in detail](docs/guide/how-it-works.md#benchmarks-reproducible-not-cherry-picked). Each replayed
 incident, with sources and whether that agent would actually have been stopped: [Real incidents](docs/guide/incidents.md).
+The incident benchmark was written by laya-guard's author, so read its laya-guard row as a home-team result; every
+guard's raw answers are published with it.
 
 ## 🧠 How it works
 
