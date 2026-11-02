@@ -35,6 +35,11 @@ All notable changes to this project are documented here. Versions follow
   and Python or Perl removing the home directory (`shutil.rmtree`, `rmtree`, `remove_tree`). These can move to block
   once they're seen not to catch ordinary work.
 
+- The guide says where the rules stop and the model takes over
+  ([What the rules catch](docs/guide/how-it-works.md#what-the-rules-catch-and-what-they-leave-to-the-model)): a
+  rewrite the shell does from the text alone is the rules' job; anything that needs a command to run or the machine to
+  be read first is left to the model and the OS sandbox; a false block outranks a missed rewrite.
+
 ### Fixed
 
 - In a chain, a block a rule reached now outranks one only the model reached with a higher risk. The model's became a

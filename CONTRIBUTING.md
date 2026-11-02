@@ -75,6 +75,13 @@ PYTHONPATH=src .venv/bin/python eval/run_agentdojo.py     # needs: pip install a
 - **Block-level regexes must be high precision.** A regex hit on a
   `action_on_regex: block` policy skips the model, so a false positive there
   can't be corrected downstream. When in doubt, use a `review` policy.
+- **Bypasses have a line.** The rules read what the shell does from the text
+  alone (quoting, `eval` of a literal, a variable set on the same line,
+  literal base64 into `sh`…); anything that needs a command to run or the
+  machine to be read first is left to the model and the OS sandbox. A false
+  block outranks a missed rewrite. Where the line is and how to answer a
+  bypass report:
+  [What the rules catch](docs/guide/how-it-works.md#what-the-rules-catch-and-what-they-leave-to-the-model).
 - **Safe commands must stay boring.** Anything added to `safe_commands` skips
   the model. Add a matching bypass attempt to `BYPASS` in `tests/test_guard.py`.
 - **New eval cases** go in `eval/testset_shell.jsonl` (one JSON object per

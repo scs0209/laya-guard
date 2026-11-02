@@ -133,6 +133,30 @@ the same as one model call, so a 6-window input takes a few seconds.
 
 All patterns live in [policy.yaml](../../src/laya_guard/policy.yaml) — edit, add your own, no code changes needed.
 
+## What the rules catch, and what they leave to the model
+
+A shell can always hide a command one layer deeper, so the rules (the regexes) stop at what the text says for certain.
+
+**Read by the rules.** A rewrite the shell does from the text alone, with nothing to run or look up first: quoting
+and escapes, `/bin/…`, `${IFS}`, `eval` or `$'…'` of a literal, brace lists, `env` / `command` before the command, a
+variable set to a literal earlier on the same line (and `${x:-y}` / `${x:+y}` of it), `echo … | xargs`, literal base64
+decoded into a shell. An already-blocked command written one of these ways and not blocked is a bug.
+
+**Left to the model, on purpose.** Anything the text can't settle without running something or reading the machine:
+a value from the environment, a file, another command's output or the network; a script written to a file and then
+run; other encodings (`printf '\x72m'`, hex, gzip, rot13); code in other languages beyond the literal forms in the
+table above; aliases and functions defined on the line; indirect expansion (`${!x}`), arithmetic, loops that build a
+command. The model still judges these, and where the agent can ask, its block becomes a question. The
+[OS sandbox](sandbox.md) is the backstop for what no text check can see.
+
+**Block only what is certain, ask about the rest.** A block-level rule matches only when the target is certain (the
+whole home directory or root); a narrower target (a folder under the home directory, Python or Perl removing it) is a
+`review` rule. **A false block is always a bug**, and it outranks a missed rewrite: a block-level hit skips the model,
+so nothing downstream can correct it.
+
+When someone (or a review bot) reports a bypass: fix it if it is in the first group and the fix adds no false block;
+otherwise reply that it is left to the model on purpose, with a link to this section.
+
 ## Benchmarks (reproducible, not cherry-picked)
 
 | Suite | Result | Command |
