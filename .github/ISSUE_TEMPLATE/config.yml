@@ -8,7 +8,7 @@ contact_links:
     about: How to set it up, whether something fits the project, or an idea that isn't a concrete change yet.
   - name: Not sure a verdict is wrong?
     url: https://github.com/scs0209/laya-guard/discussions/98
-    about: Post the command and laya-guard's answer there first. A clear miss or overblock can use the forms above.
+    about: Post the command and laya-guard's answer there first, with tokens, passwords and internal names replaced (it's public). A clear miss or overblock can use the forms above.
   - name: Documentation
     url: https://github.com/scs0209/laya-guard#readme
     about: Setup, configuration, and known limitations.

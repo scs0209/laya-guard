@@ -24,6 +24,8 @@ Not sure the verdict is wrong, or have a question or an idea rather than a
 concrete change? Use [Discussions](https://github.com/scs0209/laya-guard/discussions);
 wrong-looking verdicts can go in
 [Commands laya-guard gets wrong](https://github.com/scs0209/laya-guard/discussions/98).
+Discussions and issues are public: replace tokens, passwords, internal hostnames
+and project names in a command before you post it.
 
 ## Picking up an issue
 
