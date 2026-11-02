@@ -1,6 +1,6 @@
 {
  "laya-guard": {
-  "version": "main after 0.6.1 (#85, #87)",
+  "version": "0.6.2 + fine-tuned model (laya-guard-multilingual)",
   "cases": "390cbab201ec9f3f",
   "score": {
    "incident": {
@@ -17,8 +17,8 @@
    },
    "everyday": {
     "total": 50,
-    "allowed": 46,
-    "asked": 4,
+    "allowed": 48,
+    "asked": 2,
     "blocked": 0
    }
   }

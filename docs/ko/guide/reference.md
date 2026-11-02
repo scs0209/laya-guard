@@ -6,7 +6,9 @@ HTTP API, 설정, 텔레메트리, 전체 한계 목록입니다.
 
 ## API
 
-- `GET /health` → `{"ok": true, "mock": false}`
+- `GET /health` → `{"ok": true, "mock": false, "model": {"ok": true, "error": null, "integrity": false, "model": "..."}}`.
+  `model.ok`는 첫 모델 호출 전에는 `null`, 호출이 실패하면 `false`입니다. 이때는 휴리스틱이 대신 판정하고, `integrity`가
+  true면(고정한 파일이 SHA-256 검사에 실패) 다시 시작할 때까지 모델이 판정할 호출은 확인 요청이 됩니다.
 - `POST /guard` `{tool_call, source?, cwd?, tool_name?, paths?, agent?, command?, accesses?}` → `{action, risk, policy_id, reason, mock, verdict_source}`
   (`source`: `user` | `tool` | `email` | `web`. 비사용자 출처는 임계값 강화.
   `cwd`: 명령이 실행될 절대 경로. 주면 package.json 스크립트 검사가 켜짐.
@@ -64,6 +66,7 @@ laya-guard check --offline --access write ~/.aws/credentials x         # [BLOCK]
 |---|---|---|
 | `LAYA_GUARD_MOCK=1` | 환경변수 | off — 휴리스틱만, 모델 없음 (CI/데모용) |
 | `LAYA_GUARD_DEVICE` | 환경변수 | `cpu` (결정적. `mps`는 빠르지만 재현성 포기) |
+| `LAYA_GUARD_MODEL` | 환경변수 | 없음: 고정한 추가 학습 모델([laya-guard-multilingual](https://huggingface.co/Ayaannnnnnn/laya-guard-multilingual)), `base`: 원래 Laya, Hub 이름이나 폴더: 그 체크포인트(고정 없음). `service install`이 이어받습니다. |
 | `LAYA_GUARD_URL` | 환경변수 (훅/어댑터) | `http://localhost:8787/guard` |
 | `LAYA_GUARD_FAIL` | 환경변수 (훅/어댑터) | `ask` — 서버 장애 시 판정 못 한 호출은 사람에게 확인(물을 수 없는 에이전트는 차단), `closed`면 차단, `open`이면 통과([서버 장애](reliability.md#서버-장애) 참고) |
 | `LAYA_GUARD_REVIEW` | 환경변수 (Claude Code 훅) | `ask` — `review`를 권한 프롬프트로 사람에게 묻기, `pass`면 묻지 않고 통과 |

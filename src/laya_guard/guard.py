@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import re
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 import yaml
@@ -378,6 +379,46 @@ def _mock_score(text: str, hit: Policy | None) -> tuple[str, float]:
 # Override with LAYA_GUARD_DEVICE=mps etc. for speed, at the cost of reproducibility.
 GUARD_DEVICE = os.environ.get("LAYA_GUARD_DEVICE", "cpu")
 
+# The checkpoint the model step runs: Laya's multilingual checkpoint fine-tuned on laya-guard's allow/review/block
+# question (finetune/, model card on the Hub). Pinned to one Hub revision and its files' SHA-256, so a changed upload is
+# refused rather than loaded. LAYA_GUARD_MODEL=base runs the original Laya; a Hub id or a local folder runs that,
+# unpinned.
+GUARD_MODEL = "Ayaannnnnnn/laya-guard-multilingual"
+GUARD_MODEL_REVISION = "7147e9cbc5b057140279b76f78991909f417056a"
+GUARD_MODEL_SHA256 = {
+    "model.safetensors": "a9f09266dbbb0b1851f99e9f6eda0da51290cc90f467564c401486521d64b72d",
+    "rl_agent_config.json": "e5ffeb226da61565d97edbaffdec344ac3e7fbfb04953231e6d5ee1656db7f9b",
+    "tokenizer/tokenizer.json": "dbba919c6e5e492bc22beb80abb64e6fcc7e8744dc696e8388b8c977767afa4b",
+    "tokenizer/tokenizer_config.json": "f2ff584a8f78ac9f3b6fd0afcf9ab310e41c2d445ef628f9ab4b0d594e992b7a",
+    "encoder/config.json": "10b713aa32a0adf93e1c3a328631befece0f869abd041d25eccd9c184928bfad",
+}
+
+_router_lock = threading.Lock()
+# The model's state for /health: None until a call, then whether the last one worked and why not.
+_model_state: dict = {"ok": None, "error": None, "integrity": False}
+
+def model_state() -> dict:
+    """What /health reports about the model step: ok (None before the first call), the last error, and whether that
+    error was the pinned files failing their check (then model-judged calls are asked about, not guessed)."""
+    chosen = os.environ.get("LAYA_GUARD_MODEL", "").strip()
+    return {**_model_state, "model": chosen or GUARD_MODEL}
+
+def _integrity_failure(e: Exception) -> bool:
+    """The pinned files are missing or don't match their SHA-256: something changed them, so the model isn't run."""
+    msg = str(e)
+    return (isinstance(e, ValueError) and "SHA-256 mismatch" in msg) or \
+           (isinstance(e, FileNotFoundError) and "cannot verify" in msg)
+
+def router_kwargs() -> dict:
+    """What Router(...) is given besides the device: the pinned fine-tune, the original Laya, or LAYA_GUARD_MODEL's."""
+    chosen = os.environ.get("LAYA_GUARD_MODEL", "").strip()
+    if chosen == "base":
+        return {}
+    if chosen and chosen != GUARD_MODEL:
+        return {"models": {"multilingual": chosen}}
+    return {"models": {"multilingual": GUARD_MODEL}, "revisions": {"multilingual": GUARD_MODEL_REVISION},
+            "sha256_digests": {"multilingual": GUARD_MODEL_SHA256}}
+
 # Max length one model call reads. Only text[:4000] used to be passed, so the model never
 # saw anything past 4000 chars (a long harmless preamble turned a block into a review).
 MODEL_WINDOW_CHARS = 4_000
@@ -433,7 +474,9 @@ def _laya_predict(text: str) -> tuple[str, float]:
     _ensure()
     from laya import Router
     if _router is None:
-        _router = Router(device=GUARD_DEVICE)
+        with _router_lock:                       # one load, even when the first calls arrive together
+            if _router is None:
+                _router = Router(device=GUARD_DEVICE, **router_kwargs())
     questions = {
         "action": {
             "type": "choice",
@@ -494,10 +537,20 @@ def _laya_predict(text: str) -> tuple[str, float]:
 
 def _model_or_fallback(text: str, hit: Policy | None) -> tuple[str, float, bool]:
     """(action, risk, model_ok). On model failure, regex+heuristics stand in."""
+    if _model_state.get("integrity"):            # refused once: don't re-hash 600 MB per call; a restart retries
+        return "review", max(0.55, (_defaults or {}).get("review_threshold", 0.45)), False
     try:
         action, risk = _laya_judge(text)
+        _model_state.update(ok=True, error=None, integrity=False)
         return action, risk, True
     except Exception as e:
+        integrity = _integrity_failure(e)
+        _model_state.update(ok=False, error=f"{type(e).__name__}: {e}", integrity=integrity)
+        if integrity:
+            # A pinned file that fails its check means the model may have been swapped: don't guess with the heuristics
+            # (they can allow what the model would hold), ask instead. Rules and the safe lane still decide first.
+            log.error("Laya model refused: %s; model-judged calls are asked about until it loads", e)
+            return "review", max(0.55, (_defaults or {}).get("review_threshold", 0.45)), False
         log.warning("Laya model failed (%s: %s); falling back to regex+heuristics",
                     type(e).__name__, e)
         action, risk = _mock_score(text, hit)
@@ -1147,6 +1200,9 @@ def _judge_one(tool_call: str, source: str, cwd: str | None = None,
         reason = "안전 명령 목록 (모델 생략)" if ko else "Safe command list (model skipped)"
     elif mock:
         reason = "정규식+휴리스틱 (MOCK)" if ko else "Regex+heuristics (MOCK)"
+    elif not model_ok and _model_state.get("integrity"):
+        reason = ("모델 파일 검증 실패 — 모델을 쓰지 않고 확인 요청" if ko
+                  else "Model files failed their SHA-256 check — not run, asking instead")
     elif not model_ok:
         reason = "모델 오류 — 정규식+휴리스틱 대체" if ko else "Model error — regex+heuristics fallback"
     else:
