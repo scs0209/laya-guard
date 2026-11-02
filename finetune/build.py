@@ -4,7 +4,7 @@ train/train.jsonl and train/val.jsonl in laya-train's {state, questions, expecte
 laya-guard asks at inference (guard._laya_predict). Labels: the drafted labels for commands only the model would
 judge, the rule's answer for commands the safe lane allows, and the synthetic risky examples. The repo's evaluation
 sets (bench/, eval/, tests/data/) are never in here; val is a held-out slice of this data, stratified by label."""
-import glob, json, random, sys, collections, inspect, re
+import argparse, glob, json, random, sys, collections, inspect, re
 from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
@@ -13,6 +13,13 @@ from laya_guard import guard
 # the questions dict, copied out of _laya_predict's source so training and inference can't drift apart
 src = inspect.getsource(guard._laya_predict)
 QUESTIONS = eval(src[src.index("questions = {") + len("questions = "):src.index("\n    r = _router.predict")].strip())
+
+ap = argparse.ArgumentParser(description="train/train.jsonl and train/val.jsonl for laya-train")
+ap.add_argument("--no-safe-lane", action="store_true",
+                help="leave out commands the safe lane allows: the model never sees them in use")
+ap.add_argument("--oversample", type=int, default=1,
+                help="repeat review and block rows this many times in train (not val), when allow dominates")
+args = ap.parse_args()
 
 rows = [json.loads(l) for l in open(ROOT / "train/commands.jsonl")]
 labels = {}
@@ -23,7 +30,7 @@ data = []
 for i, r in enumerate(rows):
     if r["rule"] == "model" and i in labels:
         data.append((r["command"], labels[i], "real"))
-    elif r["rule"] == "allow:safe":
+    elif r["rule"] == "allow:safe" and not args.no_safe_lane:
         data.append((r["command"], "allow", "real-safe-lane"))
 # Written examples (synthetic.jsonl, augment.jsonl) must not copy or closely paraphrase an evaluation case.
 import difflib
@@ -37,7 +44,7 @@ def near_eval(cmd):
     c = " ".join(cmd.split()).lower()
     return any(c == e or difflib.SequenceMatcher(None, c, e).ratio() >= 0.85 for e in EVAL)
 too_close = []
-for name in ("synthetic", "augment"):              # optional: examples you wrote yourself
+for name in ("synthetic", "augment", "round3"):    # optional: examples you wrote yourself
     if not (ROOT / f"train/{name}.jsonl").exists():
         continue
     for l in open(ROOT / f"train/{name}.jsonl"):
@@ -53,7 +60,7 @@ for d in data: by[d[1]].append(d)
 train, val = [], []
 for lab, items in by.items():
     random.shuffle(items); k = max(1, round(len(items) * 0.15))
-    val += items[:k]; train += items[k:]
+    val += items[:k]; train += items[k:] * (args.oversample if lab != "allow" else 1)
 def write(path, items):
     with open(path, "w") as f:
         for cmd, lab, srcname in items:

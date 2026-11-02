@@ -25,8 +25,10 @@ python finetune/split.py
    that copy or closely resemble (similarity ≥ 0.85) an evaluation case are dropped.
 
 ```bash
-# 4. train/train.jsonl and train/val.jsonl, with the exact question laya-guard asks
-python finetune/build.py
+# 4. train/train.jsonl and train/val.jsonl, with the exact question laya-guard asks.
+#    --no-safe-lane: drop what the safe lane allows (the model never sees it in use);
+#    --oversample 2: repeat review and block rows in train when allow dominates
+python finetune/build.py --no-safe-lane --oversample 2
 
 # 5. Check the files without loading the model
 laya-train --data train/train.jsonl --eval train/val.jsonl --base multilingual --out train/ckpt --dry-run
