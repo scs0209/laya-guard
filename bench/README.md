@@ -26,7 +26,7 @@ commands, sent to four command guards exactly as Claude Code sends a Bash call t
 permission prompt. Every case and every guard's answer: [results/results.md](results/results.md). The hooks' raw
 stdout, stderr and exit codes: `results/<guard>.json`. The dcg rows were re-run on 2026-10-24, after the runner
 started keeping each hook's whole answer instead of its first 600 characters; the scores did not change, and their
-times are from that run (the other rows' are from 2026-10-23). The laya-guard row was re-run on 2026-11-02 on main
+times are from that run (the cc-safety-net and shellfirm rows' are from 2026-10-23). The laya-guard row was re-run on 2026-11-02 on main
 with #85 (the hook starts `python3` twice instead of six or seven times) and #87 (the rules also read a blocked
 command the way the shell runs it): 11 evasions went from asked to blocked, nothing else changed, and the median hook
 time went from 171 ms to 71 ms.
