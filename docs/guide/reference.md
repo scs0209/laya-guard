@@ -6,7 +6,9 @@ The HTTP API, configuration, telemetry, and the full list of limitations.
 
 ## API
 
-- `GET /health` → `{"ok": true, "mock": false}`
+- `GET /health` → `{"ok": true, "mock": false, "model": {"ok": true, "error": null, "integrity": false, "model": "..."}}`.
+  `model.ok` is `null` before the first model call and `false` after one failed: then the heuristics stand in, or, when
+  `integrity` is true (the pinned files failed their SHA-256 check), model-judged calls are asked about until a restart.
 - `POST /guard` `{tool_call, source?, cwd?, tool_name?, paths?, agent?, command?, accesses?}` → `{action, risk, policy_id, reason, mock, verdict_source}`
   (`source`: `user` | `tool` | `email` | `web`; non-user sources get stricter thresholds.
   `cwd`: absolute directory the command runs in; enables package.json script checks.
@@ -64,6 +66,7 @@ laya-guard check --offline --access write ~/.aws/credentials x         # [BLOCK]
 |---|---|---|
 | `LAYA_GUARD_MOCK=1` | env | off — heuristics only, no model (for CI/demo) |
 | `LAYA_GUARD_DEVICE` | env | `cpu` (deterministic; set `mps` for speed at the cost of reproducibility) |
+| `LAYA_GUARD_MODEL` | env | unset: the pinned fine-tune ([laya-guard-multilingual](https://huggingface.co/Ayaannnnnnn/laya-guard-multilingual)); `base`: the original Laya; a Hub id or a folder: that checkpoint, unpinned. `service install` keeps it. |
 | `LAYA_GUARD_URL` | env (hooks/adapters) | `http://localhost:8787/guard` |
 | `LAYA_GUARD_FAIL` | env (hooks/adapters) | `ask` — with the server down, an unjudged call goes to a human, or is blocked by agents that can't ask; `closed` blocks it; `open` lets it pass (see [Server down](reliability.md#server-down)) |
 | `LAYA_GUARD_REVIEW` | env (Claude Code hook) | `ask` — `review` becomes a permission prompt; `pass` lets it through without asking |

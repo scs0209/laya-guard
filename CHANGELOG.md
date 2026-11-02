@@ -19,6 +19,10 @@ All notable changes to this project are documented here. Versions follow
     gates: shell 69 → 70 of 71, Korean 30 → 29 of 30 (a request to summarize an issue is now asked about).
   - The criteria set before training asked for no end-to-end regression; two verdicts got worse (the two named above,
     both a question where there was none). It was adopted because nothing that should be held got through.
+  - If the pinned files fail their check, the model isn't run and the calls it would judge are asked about (not
+    guessed by the heuristics) until a restart; `/health` reports the model's state (`model.ok`, `error`,
+    `integrity`). The first model load is done once even when calls arrive together, and `service install` keeps
+    `LAYA_GUARD_MODEL`.
 
 ## [0.6.2] - 2026-11-02
 

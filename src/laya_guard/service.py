@@ -33,7 +33,7 @@ RESTART_DELAY = 30            # seconds between starts: a crash loop or a busy p
 DEFAULT_PORT = 8787
 # what the server reads from its environment; a login service doesn't inherit the shell's, so these are copied in
 ENV_KEYS = ("LAYA_GUARD_ALERT_CMD", "LAYA_GUARD_ALERT_COOLDOWN", "LAYA_GUARD_LOG", "LAYA_GUARD_LOG_PATH",
-            "LAYA_GUARD_DEVICE")
+            "LAYA_GUARD_DEVICE", "LAYA_GUARD_MODEL")
 
 
 class ServiceError(InstallError):

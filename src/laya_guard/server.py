@@ -13,7 +13,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
 from . import activity, agentbridge, aisim, alerts, dashboard, fileaccess, footprint, install, service, simulation
-from .guard import ASK_AGENTS, judge, is_mock
+from .guard import ASK_AGENTS, judge, is_mock, model_state
 from .log import load_entries, log_enabled, log_path, log_verdict
 
 app = FastAPI(title="laya-guard")
@@ -68,7 +68,9 @@ class GuardRes(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"ok": True, "mock": is_mock()}
+    # ok: the server answers. model: whether the model step works; ok false means verdicts it would give come from the
+    # heuristics, or, when the pinned files failed their check (integrity), are asked about.
+    return {"ok": True, "mock": is_mock(), "model": model_state()}
 
 @app.post("/guard", response_model=GuardRes)
 def guard(req: GuardReq):
