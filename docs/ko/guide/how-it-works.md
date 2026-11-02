@@ -50,6 +50,16 @@
 펼치지 않는 heredoc(`git commit -F - <<'EOF'`)은 그 명령의 데이터입니다. 저장소와 호스팅을 읽는 명령도 목록에
 있습니다(`--prune`·refspec 없는 `git fetch`, `git rev-parse`, `gh pr view`/`checks`, 메서드·본문 없는 `gh api`).
 
+정규식은 셸이 실제로 실행하는 형태로도 명령을 읽습니다. 그래서 차단되는 명령을 다르게 써도 판정이 약해지지 않습니다.
+`r''m -rf ~/`, `\rm -rf ~/`, `/bin/rm -rf ~/`, `rm${IFS}-rf${IFS}~/`, `eval "rm -rf ~/"`, `bash -c $'rm -rf ~/'`,
+`{rm,-rf,~/}`, `env FOO=bar rm -rf ~/`, `command rm -rf ~/`, `x=rm; $x -rf ~/`, `${x:+rm} -rf ~/`,
+`echo ~/ | xargs -n 1 rm -rf`, `echo / | xargs -I{} find {} -delete`, 그리고 `echo`나 `printf`로 만든 base64 문자열을
+`sh`로 넣는 것(`… | base64 -d | sh`, `sh -c "$(… | base64 -d)"`)은 모두 `rm -rf ~/`처럼 차단됩니다. 셸이 실행하지 않는
+것은 실행으로 읽지 않습니다. `… | base64 -d | bash -n`은 문법만 확인하고, `x=rm; unset x; $x -rf /`에는 `rm`이 없으며,
+`rm -rf '*'`는 이름이 `*`인 파일 하나입니다. 한 단어 안의 따옴표만 떼므로, 공백이 든 따옴표 문자열(`grep "rm -rf ~/" docs`)은 그대로
+텍스트입니다. 안전 레인과 모델은 여전히 쓰인 그대로의 명령을 읽습니다. 이어진 명령에서는 규칙이 내린 차단이 모델만 내린
+차단보다 우선합니다. 물어볼 수 있는 에이전트에서는 모델만 내린 차단이 질문으로 바뀌기 때문입니다.
+
 Windows 명령도 같은 레인을 탑니다. 경로 사이의 백슬래시는 경로 구분자로 읽고
 (`cd C:\work\api`, `type src\app.py`, `pytest tests\unit`), cmd의 `%VAR%`는 `$VAR`처럼
 취급하며, cmd.exe·PowerShell의 같은 명령(`dir`, `type`, `findstr`, `where`, `md`,
@@ -85,7 +95,7 @@ build`, `vite build`, `jest` 같은 평범한 스크립트를 차단하기 때�
 
 | id | 잡는 것 | 정규식 적중 시 |
 |---|---|---|
-| `destructive-fs` | `rm -rf /`, `rm -rf ~`/`$HOME` (플래그 순서 무관: `-fr`, `-r -f`, `--recursive --force`), `mkfs`, 디바이스 `dd`, 포크밤 | block |
+| `destructive-fs` | `rm -rf /`, `rm -rf ~`/`$HOME` (플래그 순서 무관: `-fr`, `-r -f`, `--recursive --force`, 셸이 어떻게 풀든: `r''m`, `\rm`, `/bin/rm`, `${IFS}`, `eval`, `$'…'`, `{rm,-rf,~/}`, `env`, `$x`, `xargs`, `sh`로 들어가는 base64), 필터 없는 `find ~ -delete`·`find / -delete`, `cd ~`·`pushd ~`·`cd /` 바로 뒤의 `rm -rf *`, Python·Perl로 `/` 지우기, `mkfs`, 디바이스 `dd`, 포크밤 | block |
 | `pipe-to-shell` | `curl … \| sh`, `wget … \| sudo bash`, `bash -c "$(curl …)"`, `bash <(curl …)` | block |
 | `exfiltration` | 터널, `nc`로 파이프, `curl -d @파일` 업로드 | review |
 | `prompt-injection` | 이전 지시 무시, 탈옥, 한영 | block |
@@ -94,11 +104,37 @@ build`, `vite build`, `jest` 같은 평범한 스크립트를 차단하기 때�
 | `remote-exec` | 수상한 패키지 인덱스, 원격 스크립트, 로컬 내용을 셸로 파이프, 인코딩된 PS | review |
 | `priv-escalation` | `sudo sh`, `chmod 777`, setuid, `/etc/`로 리다이렉트 | review |
 | `persistence` | cron, 서비스 등록, 셸rc 후킹, git `core.hooksPath`/`core.pager` | review |
-| `mass-delete` | `DROP TABLE`, `s3 rm --recursive`, `kubectl delete --all`, `git push --force`, `git reset --hard`, `git clean -f`, `git checkout -- .`, API 요청 본문 안의 삭제(`mutation { volumeDelete(...) }`, `{"method": "deleteDatabase"}`) | review |
+| `mass-delete` | `DROP TABLE`, `s3 rm --recursive`, `kubectl delete --all`, `git push --force`, `git reset --hard`, `git clean -f`, `git checkout -- .`, API 요청 본문 안의 삭제(`mutation { volumeDelete(...) }`, `{"method": "deleteDatabase"}`), 홈 바로 아래 폴더의 `rm -rf`(`~/Documents`, `~/.config`), Python·Perl로 홈 디렉터리 지우기(`shutil.rmtree`, `rmtree`, `remove_tree`) | review |
 | `auth-bypass` | 인증/TLS 무력화, 비밀번호 초기화, 한영 | block |
 | `credential-read` | 개인키·클라우드 자격 증명 읽기(`cat ~/.ssh/id_rsa`, `cat ~/.aws/credentials` 등) | review |
 
 패턴은 전부 [policy.yaml](../../../src/laya_guard/policy.yaml)에 있습니다. 코드 수정 없이 추가·수정 가능.
+
+## 규칙이 잡는 것과 모델에 맡기는 것
+
+셸은 명령을 얼마든지 한 겹 더 감출 수 있으므로, 규칙(정규식)은 텍스트만으로 확실히 알 수 있는 데까지만 봅니다.
+
+**규칙이 읽는 것.** 아무것도 실행하거나 찾아보지 않고 텍스트만으로 셸이 바꾸는 형태입니다. 따옴표와 이스케이프,
+`/bin/…`, `${IFS}`, 리터럴의 `eval`·`$'…'`, 중괄호 목록, 명령 앞의 `env`·`command`, 같은 줄 앞에서 리터럴 값을 넣은
+변수(그리고 그 변수의 `${x:-y}`·`${x:+y}`), `echo … | xargs`, 셸로 들어가는 리터럴 base64가 여기에 속합니다. 이미
+차단되는 명령을 이렇게 바꿔 썼는데 차단되지 않으면 버그입니다.
+
+**일부러 모델에 맡기는 것.** 무언가를 실행하거나 기계를 읽어 보지 않고는 텍스트만으로 정할 수 없는 것입니다. 환경변수,
+파일, 다른 명령의 출력, 네트워크에서 오는 값, 파일로 써 두고 실행하는 스크립트, 다른 인코딩(`printf '\x72m'`, hex, gzip,
+rot13), 위 표에 적힌 리터럴 형태를 넘어서는 다른 언어의 코드, 그 줄에서 정의한 alias와 함수, 간접 확장(`${!x}`), 산술,
+반복문으로 명령을 조립하는 경우가 여기에 속합니다. 모델은 여전히 이것들을 판정하고, 물어볼 수 있는 에이전트에서는
+모델의 차단이 질문이 됩니다. 텍스트 검사로는 볼 수 없는 것은 [OS 샌드박스](sandbox.md)가 마지막으로 막습니다.
+
+**확실한 것만 차단하고 나머지는 묻습니다.** 차단 규칙은 대상이 확실할 때(홈 디렉터리 전체나 루트)만 걸립니다. 그보다
+좁은 대상(홈 아래 폴더, Python·Perl로 홈 지우기)은 `review` 규칙입니다. **잘못된 차단은 항상 버그이고**, 놓친 우회보다
+먼저 고칩니다. 차단 규칙에 걸리면 모델을 건너뛰므로 뒤에서 바로잡을 방법이 없기 때문입니다.
+
+누군가(또는 리뷰 봇)가 우회 방법을 알려 오면, 첫 번째 묶음에 속하고 고쳐도 잘못된 차단이 생기지 않을 때 고칩니다.
+그 밖의 것은 이 섹션 링크와 함께 일부러 모델에 맡긴다고 답합니다.
+
+CI는 모든 PR에서 이 선을 검사합니다(`tests/test_rule_line.py`, 모델 없이). 어떤 규칙도 평소 명령을 차단하면 안 되고,
+`tests/data/rewrites_blocked.jsonl`의 우회 형태는 계속 차단돼야 하며, 규칙의 판정이 바뀌면 같은 PR에서
+`tests/data/rule_verdicts.json`을 갱신해야 합니다([CONTRIBUTING](../../../CONTRIBUTING.md)).
 
 ## 벤치마크 (재현 가능, 좋은 것만 골라내지 않음)
 

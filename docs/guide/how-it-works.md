@@ -58,6 +58,19 @@ for its command. Reading the repository and its host is in the list (`git fetch`
 `--prune` or a refspec, `git rev-parse`, `gh pr view`/`checks`, `gh api` without a method or
 body).
 
+The regexes also read the command the way the shell runs it, so writing a blocked command
+another way doesn't soften the answer: `r''m -rf ~/`, `\rm -rf ~/`, `/bin/rm -rf ~/`,
+`rm${IFS}-rf${IFS}~/`, `eval "rm -rf ~/"`, `bash -c $'rm -rf ~/'`, `{rm,-rf,~/}`,
+`env FOO=bar rm -rf ~/`, `command rm -rf ~/`, `x=rm; $x -rf ~/`, `${x:+rm} -rf ~/`,
+`echo ~/ | xargs -n 1 rm -rf`, `echo / | xargs -I{} find {} -delete` and a literal base64
+string from `echo` or `printf` decoded into `sh` (`… | base64 -d | sh`,
+`sh -c "$(… | base64 -d)"`) are all blocked as `rm -rf ~/` is. What the shell wouldn't run
+isn't read as run: `… | base64 -d | bash -n` only parses, `x=rm; unset x; $x -rf /` has no
+`rm`, `rm -rf '*'` names one file. Only quotes inside one word are taken out, so a quoted
+string with a space (`grep "rm -rf ~/" docs`) is still text. The safe lane and the model still
+read the command as written. In a chain, a block a rule reached outranks one only the model
+reached, which in the agents that ask would become a question.
+
 Windows commands get the same lane: a backslash between two path parts is read as a
 path separator (`cd C:\work\api`, `type src\app.py`, `pytest tests\unit`), cmd's
 `%VAR%` counts like `$VAR`, and the list has the cmd.exe and PowerShell equivalents
@@ -105,7 +118,7 @@ the same as one model call, so a 6-window input takes a few seconds.
 
 | id | What it catches | Regex hit ⇒ |
 |---|---|---|
-| `destructive-fs` | `rm -rf /` and `rm -rf ~`/`$HOME` in any flag order (`-fr`, `-r -f`, `--recursive --force`), `mkfs`, `dd` to devices, fork bombs | block |
+| `destructive-fs` | `rm -rf /` and `rm -rf ~`/`$HOME` in any flag order (`-fr`, `-r -f`, `--recursive --force`) and however the shell gets there (`r''m`, `\rm`, `/bin/rm`, `${IFS}`, `eval`, `$'…'`, `{rm,-rf,~/}`, `env`, `$x`, `xargs`, base64 into `sh`), `find ~ -delete` and `find / -delete` with no filter, `rm -rf *` right after `cd ~`, `pushd ~` or `cd /`, Python or Perl removing `/`, `mkfs`, `dd` to devices, fork bombs | block |
 | `pipe-to-shell` | `curl … \| sh`, `wget … \| sudo bash`, `bash -c "$(curl …)"`, `bash <(curl …)` | block |
 | `exfiltration` | tunnels, pipes into `nc`, `curl -d @file` uploads | review |
 | `prompt-injection` | ignore-previous-instructions, jailbreaks, KR+EN | block |
@@ -114,11 +127,39 @@ the same as one model call, so a 6-window input takes a few seconds.
 | `remote-exec` | sketchy package indexes, remote scripts, local pipes into a shell, encoded PS | review |
 | `priv-escalation` | `sudo sh`, `chmod 777`, setuid, redirects into `/etc/` | review |
 | `persistence` | cron, services, shell-rc hooks, git `core.hooksPath`/`core.pager` | review |
-| `mass-delete` | `DROP TABLE`, `s3 rm --recursive`, `kubectl delete --all`, `git push --force`, `git reset --hard`, `git clean -f`, `git checkout -- .`, a delete inside an API request body (`mutation { volumeDelete(...) }`, `{"method": "deleteDatabase"}`) | review |
+| `mass-delete` | `DROP TABLE`, `s3 rm --recursive`, `kubectl delete --all`, `git push --force`, `git reset --hard`, `git clean -f`, `git checkout -- .`, a delete inside an API request body (`mutation { volumeDelete(...) }`, `{"method": "deleteDatabase"}`), `rm -rf` of a folder right under the home directory (`~/Documents`, `~/.config`), Python or Perl removing the home directory (`shutil.rmtree`, `rmtree`, `remove_tree`) | review |
 | `auth-bypass` | auth/TLS disabling, password resets, KR+EN | block |
 | `credential-read` | reading private keys / cloud credentials (`cat ~/.ssh/id_rsa`, `cat ~/.aws/credentials`, …) | review |
 
 All patterns live in [policy.yaml](../../src/laya_guard/policy.yaml) — edit, add your own, no code changes needed.
+
+## What the rules catch, and what they leave to the model
+
+A shell can always hide a command one layer deeper, so the rules (the regexes) stop at what the text says for certain.
+
+**Read by the rules.** A rewrite the shell does from the text alone, with nothing to run or look up first: quoting
+and escapes, `/bin/…`, `${IFS}`, `eval` or `$'…'` of a literal, brace lists, `env` / `command` before the command, a
+variable set to a literal earlier on the same line (and `${x:-y}` / `${x:+y}` of it), `echo … | xargs`, literal base64
+decoded into a shell. An already-blocked command written one of these ways and not blocked is a bug.
+
+**Left to the model, on purpose.** Anything the text can't settle without running something or reading the machine:
+a value from the environment, a file, another command's output or the network; a script written to a file and then
+run; other encodings (`printf '\x72m'`, hex, gzip, rot13); code in other languages beyond the literal forms in the
+table above; aliases and functions defined on the line; indirect expansion (`${!x}`), arithmetic, loops that build a
+command. The model still judges these, and where the agent can ask, its block becomes a question. The
+[OS sandbox](sandbox.md) is the backstop for what no text check can see.
+
+**Block only what is certain, ask about the rest.** A block-level rule matches only when the target is certain (the
+whole home directory or root); a narrower target (a folder under the home directory, Python or Perl removing it) is a
+`review` rule. **A false block is always a bug**, and it outranks a missed rewrite: a block-level hit skips the model,
+so nothing downstream can correct it.
+
+When someone (or a review bot) reports a bypass: fix it if it is in the first group and the fix adds no false block;
+otherwise reply that it is left to the model on purpose, with a link to this section.
+
+CI holds this line on every PR (`tests/test_rule_line.py`, no model needed): no rule may block an ordinary command,
+the rewrites in `tests/data/rewrites_blocked.jsonl` stay blocked, and any change to what the rules answer is saved in
+`tests/data/rule_verdicts.json` in the same PR ([CONTRIBUTING](../../CONTRIBUTING.md)).
 
 ## Benchmarks (reproducible, not cherry-picked)
 

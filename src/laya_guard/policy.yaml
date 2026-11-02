@@ -87,6 +87,14 @@ policies:
     patterns:
       - '(?:^|[;&|(`\n]|\$\(|\b(?:then|do|else)\b|\b(?:sudo|doas|nohup|time|exec|command|env|xargs)\b(?:\s+-\S+)*|-exec(?:dir)?|\b(?:ba|z|da|k)?sh\s+-\w*c\s+["\''])\s*rm\s+(?:\S+\s+)*?(?:-[A-Za-z]*[rR][A-Za-z]*|--recursive)\s+(?:\S+\s+)*?["\'']?/(?=\s|$|[;&|)`"\''}\\*])'
       - '(?:^|[;&|(`\n]|\$\(|\b(?:then|do|else)\b|\b(?:sudo|doas|nohup|time|exec|command|env|xargs)\b(?:\s+-\S+)*|-exec(?:dir)?|\b(?:ba|z|da|k)?sh\s+-\w*c\s+["\''])\s*rm\s+(?:\S+\s+)*?(?:-[A-Za-z]*[rR][A-Za-z]*|--recursive)\s+(?:\S+\s+)*?["\'']?(?:~|\$HOME|\$\{HOME\})(?:/\*?)?["\'']?(?=\s|$|[;&|)`])'
+      # the whole home directory or root by other means (#86): `find ~ -delete` with no filter but depth options, and
+      # `rm -rf *` right after `cd ~` or `pushd ~` (a bare `cd`, `cd -P ~`, `cd $HOME`, `cd /`), each where a command
+      # starts (not inside text).
+      # A name filter, a subfolder or a quoted `'*'` (one file of that name) is left to the model.
+      - '(?:^|[;&|(`\n]|\$\(|\b(?:then|do|else)\b|\b(?:sudo|doas|nohup|time|exec|command|env)\b(?:\s+-\S+)*|\b(?:ba|z|da|k)?sh\s+-\w*c\s+["''])\s*find\s+["'']?(?:~|\$HOME|\$\{HOME\}|/)(?:/+\.?)*/?["'']?(?:\s+-(?:mindepth|maxdepth)\s+\d+|\s+-(?:depth|xdev|mount|d))*\s+-delete\b'
+      - '(?:^|[;&|(\n])\s*(?:cd(?:\s+-[LPe@]+)*(?:\s+["'']?(?:~|\$HOME|\$\{HOME\}|/)(?:/+\.?)*/?["'']?)?|pushd(?:\s+-n)?\s+["'']?(?:~|\$HOME|\$\{HOME\}|/)(?:/+\.?)*/?["'']?)\s*(?:&&|;|\n)\s*(?:(?:sudo|doas|nohup|time|exec)\b(?:\s+-\S+)*\s+)*rm\s+(?:\S+\s+)*?(?:-[A-Za-z]*[rR][A-Za-z]*|--recursive)\s+(?:\S+\s+)*?(?:\./)?\*(?=\s|$|[;&|)])'
+      # Python or Perl removing the root (the home directory only asks: see mass-delete)
+      - '\b(?:shutil\.)?(?:rmtree|remove_tree)\s*\(\s*(?:["'']/+["'']|(?:pathlib\.)?Path\(\s*["'']/+["'']\s*\))\s*[,)]'
       - 'mkfs(\.| )'
       - '\bdd\s+if=.*of=/dev/'
       - ': ?\{\s*:.*\}\s*;'
@@ -243,6 +251,10 @@ policies:
       - '\bgit\s+reset\s+(?:\S+\s+)*--hard\b'
       - '\bgit\s+clean\s+(?:\S+\s+)*-[A-Za-z]*f'
       - '\bgit\s+checkout\s+(?:\S+\s+)*--\s+\.(?:\s|$)'
+      # Narrower than the home directory, or not the shell, so asked rather than blocked (#86): `rm -rf` of a folder
+      # right under it (`~/Documents`, `~/.config`; deeper paths are ordinary work), and Python or Perl removing it.
+      - '(?:^|[;&|(`\n]|\$\(|\b(?:then|do|else)\b|\b(?:sudo|doas|nohup|time|exec|command|env|xargs)\b(?:\s+-\S+)*|-exec(?:dir)?|\b(?:ba|z|da|k)?sh\s+-\w*c\s+["''])\s*rm\s+(?:\S+\s+)*?(?:-[A-Za-z]*[rR][A-Za-z]*|--recursive)\s+(?:\S+\s+)*?["'']?(?:~|\$HOME|\$\{HOME\})/[^/\s;&|''"`]+/?["'']?(?=\s|$|[;&|)`])'
+      - '\b(?:shutil\.)?(?:rmtree|remove_tree)\s*\(\s*(?:os\.path\.expanduser\(\s*["'']~/?["'']\s*\)|(?:pathlib\.)?Path\.home\(\)|os\.environ\[\s*["'']HOME["'']\s*\]|os\.getenv\(\s*["'']HOME["'']\s*\)|\$ENV\{HOME\}|["''](?:~|\$HOME)/?["''])\s*[,)]'
       # A delete sent to an API inside the request body: the model scored PocketOS's Railway call
       # (curl ... graphql ... 'mutation { volumeDelete(volumeId: ...) }') as harmless (docs/guide/incidents.md).
       # The verb has to be a word of the name, not a substring: at its start or after `_` / `.` (deleteRepository,

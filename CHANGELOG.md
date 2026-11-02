@@ -18,6 +18,37 @@ All notable changes to this project are documented here. Versions follow
   are allowed for the project (separate rows). Five credential-reading cases and two native Windows commands sent as
   Bash are counted apart in a by-kind table. The page says plainly that the set was written by laya-guard's author.
 
+### Changed
+
+- **A blocked command written another way is blocked too** (#86). The regexes also read the command the way the shell
+  runs it: quotes inside a word (`r''m`), an escaped letter (`\rm`), `/bin/rm`, `${IFS}`, `eval "…"`, `$'…'`, brace
+  lists (`{rm,-rf,~/}`), `env FOO=bar` and `command` before the command, a variable used as the command (`x=rm; $x`,
+  `${x:+rm}`), `echo … | xargs [-n 1|-I{}] cmd`, and a literal base64 string from `echo` or `printf` decoded into `sh`
+  or `sh -c "$(…)"`. What the shell wouldn't run isn't read as run (`| bash -n`, a variable after `unset`, `'*'`).
+  These used to reach only the model, and a block the model reaches alone becomes a question in Claude Code, Cursor,
+  Qwen Code and Copilot CLI, so the less obvious form got the softer answer. The safe lane and the model still read
+  the command as written. In the benchmark, laya-guard now blocks 20 of the 30 evasions instead of 9, and the
+  everyday commands, incidents and eval gates are unchanged.
+- `destructive-fs` also blocks `find ~ -delete` / `find / -delete` with no filter but depth options, `rm -rf *`
+  right after `cd ~`, `pushd ~`, a bare `cd`, `cd $HOME` or `cd /`, and Python or Perl removing `/`.
+- `mass-delete` (asks) also covers `rm -rf` of a folder right under the home directory (`~/Documents`, `~/.config`)
+  and Python or Perl removing the home directory (`shutil.rmtree`, `rmtree`, `remove_tree`). These can move to block
+  once they're seen not to catch ordinary work.
+
+- The guide says where the rules stop and the model takes over
+  ([What the rules catch](docs/guide/how-it-works.md#what-the-rules-catch-and-what-they-leave-to-the-model)): a
+  rewrite the shell does from the text alone is the rules' job; anything that needs a command to run or the machine to
+  be read first is left to the model and the OS sandbox; a false block outranks a missed rewrite.
+- CI holds that line (`tests/test_rule_line.py`, no model): a rule blocking an ordinary command fails the PR, so does a
+  rewrite in `tests/data/rewrites_blocked.jsonl` that is no longer blocked, and so does any change to what the rules
+  answer for the 271 reference commands unless `tests/data/rule_verdicts.json` is updated with it
+  (`python scripts/rule_snapshot.py --update`).
+
+### Fixed
+
+- In a chain, a block a rule reached now outranks one only the model reached with a higher risk. The model's became a
+  question in the agents that ask, so `cd ~ && rm -rf *` was asked about although its rule blocks.
+
 ## [0.6.1] - 2026-10-23
 
 A force-push hole closed, and a page where anyone can try the guard without installing it.
