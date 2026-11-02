@@ -5,6 +5,11 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-11-02
+
+A blocked command stays blocked however the shell is told to run it, the Claude Code hook answers about twice as
+fast, and a benchmark against other command guards.
+
 ### Added
 
 - **An incident benchmark against other command guards** ([bench/](bench/README.md)). The seven replayed incidents,
@@ -680,7 +685,8 @@ a verdict.
   Claude Code PreToolUse hook, local redacted telemetry, Korean 30-case eval,
   AgentDojo judge-level eval, E2E rollout harness.
 
-[Unreleased]: https://github.com/scs0209/laya-guard/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/scs0209/laya-guard/compare/v0.6.2...HEAD
+[0.6.2]: https://github.com/scs0209/laya-guard/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/scs0209/laya-guard/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/scs0209/laya-guard/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/scs0209/laya-guard/compare/v0.5.1...v0.5.2
