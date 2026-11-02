@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="laya-token" content="{{TOKEN}}">
 <title>laya-guard</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+CiAgPHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTUiIGZpbGw9IiMxMzE0MWEiLz4KICA8cGF0aCBkPSJNNSAzMmM2LjQtMTIgMTUuNC0xOCAyNy0xOHMyMC42IDYgMjcgMThjLTYuNCAxMi0xNS40IDE4LTI3IDE4UzExLjQgNDQgNSAzMloiIGZpbGw9IiNjNmY1M2YiLz4KICA8Y2lyY2xlIGN4PSIzMiIgY3k9IjMyIiByPSIxMSIgZmlsbD0iIzBjMGQxMSIvPgogIDxjaXJjbGUgY3g9IjM2IiBjeT0iMjgiIHI9IjMuNiIgZmlsbD0iI2ZmZiIvPgo8L3N2Zz4=">
 <!--
 Design plan (kept here so the next change starts from it)
 - A small desktop-style app, not a long page: a sidebar with the four views, one primary action pinned at its
@@ -21,6 +22,8 @@ Design plan (kept here so the next change starts from it)
 - Type: one system sans, tabular figures. No web fonts and no external icons: this page may not load anything.
 - Agent marks: each tile carries the product's own logo (Claude Code, Cursor and Gemini from Simple Icons, CC0;
   Codex from Lobe Icons, MIT). The marks belong to their owners and are here only to say which product a tile is.
+- Mark: the laya-guard eye from assets/logo.svg, inline. The favicon is a data: URL (assets/favicon/favicon.svg)
+  because the CSP lets nothing else load.
 - Motion: the tape draws in once and new calls fade in. Both stop under reduced motion.
 -->
 <style nonce="{{NONCE}}">
@@ -58,7 +61,7 @@ button:focus-visible, input:focus-visible, .search:focus-within { outline: 2px s
 .app { display: grid; grid-template-columns: 244px minmax(0, 1fr); height: 100vh; }
 .side { display: flex; flex-direction: column; padding: 20px 14px 14px; background: var(--side); border-right: 1px solid var(--line); min-height: 0; }
 .brand { display: flex; align-items: center; gap: 12px; padding: 2px 10px 22px; }
-.logo { width: 34px; height: 34px; border-radius: 10px; background: var(--card-hi); display: grid; place-items: center; color: var(--accent); }
+.logo { width: 34px; height: 34px; flex: none; display: block; }
 .wordmark { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; line-height: 1.2; }
 .state { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; }
 .state i { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); display: inline-block; }
@@ -297,7 +300,7 @@ pre.diff .add { color: var(--ok); } pre.diff .del { color: var(--bad); } pre.dif
 <div class="app" id="app" data-view="overview">
   <aside class="side">
     <div class="brand">
-      <span class="logo"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg></span>
+      <svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="brand-tile" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1c1d24"/><stop offset="1" stop-color="#0c0d11"/></linearGradient><linearGradient id="brand-eye" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#d9ff5c"/><stop offset="1" stop-color="#9be22d"/></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#brand-tile)"/><rect x=".5" y=".5" width="63" height="63" rx="14.5" fill="none" stroke="#fff" stroke-opacity=".08"/><path d="M8 32c5.8-10.6 13.8-16 24-16s18.2 5.4 24 16c-5.8 10.6-13.8 16-24 16S13.8 42.6 8 32Z" fill="url(#brand-eye)"/><circle cx="32" cy="32" r="9.5" fill="#0c0d11"/><circle cx="35.2" cy="28.6" r="2.7" fill="#fff"/></svg>
       <div>
         <div class="wordmark">laya-guard</div>
         <div class="state" id="state"></div>
