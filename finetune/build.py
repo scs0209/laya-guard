@@ -39,28 +39,44 @@ def read_labels(rows_by_id: dict) -> dict:
     return labels
 
 def split(data: list, val_share: float = 0.15, oversample: int = 1) -> tuple[list, list]:
-    """Stratified by label; a session's commands stay together, so a command's near-twin can't sit on the other side.
-    Every label keeps at least one row in train."""
+    """One partition of agent sessions for all labels: a session's rows all go to train or all to val, so validation
+    never shares a session with training. Sessions are picked for val until each label has about val_share of its rows
+    there, never taking a label's last training row. Each label must come from at least two sessions."""
     random.seed(0)
-    train, val = [], []
-    by_label = collections.defaultdict(list)
+    groups = collections.defaultdict(list)
     for d in data:
-        by_label[d["label"]].append(d)
-    for lab, items in sorted(by_label.items()):
-        if len(items) < 2:
-            raise SystemExit(f"only {len(items)} example labeled {lab!r}: add more before training")
-        groups = collections.defaultdict(list)
-        for d in items:
-            groups[d["group"]].append(d)
-        keys = sorted(groups); random.shuffle(keys)
-        target, taken = max(1, round(len(items) * val_share)), []
+        groups[d["group"]].append(d)
+    count = collections.Counter(d["label"] for d in data)
+    spans = collections.Counter(lab for g in groups.values() for lab in {d["label"] for d in g})
+    for lab in sorted(count):
+        if spans[lab] < 2:
+            raise SystemExit(f"rows labeled {lab!r} come from {spans[lab]} session(s): need at least two, so one can "
+                             "be held out while another stays in training")
+    target = {lab: max(1, round(n * val_share)) for lab, n in count.items()}
+    in_val, left = collections.Counter(), collections.Counter(count)
+    keys = sorted(groups); random.shuffle(keys)
+    val_keys = set()
+    # First pass: a session only if it doesn't push a label far past its target (sessions are big and mostly allow);
+    # second pass, only for a label still missing from val: any session that has it.
+    for capped in (True, False):
         for k in keys:
-            if len(taken) >= target or len(taken) + len(groups[k]) > len(items) - 1:
+            if k in val_keys:
                 continue
-            taken += groups[k]
-        in_val = {id(d) for d in taken}
-        rest = [d for k in keys for d in groups[k] if id(d) not in in_val]
-        val += taken; train += rest * (oversample if lab != "allow" else 1)
+            labs = collections.Counter(d["label"] for d in groups[k])
+            wanted = [l for l in labs if in_val[l] < target[l]] if capped else [l for l in labs if not in_val[l]]
+            over = capped and any(in_val[l] + n > max(1.5 * target[l], target[l] + 2) for l, n in labs.items())
+            if not wanted or over or any(left[l] - n < 1 for l, n in labs.items()):
+                continue
+            val_keys.add(k); in_val.update(labs); left.subtract(labs)
+    if missing := sorted(l for l in count if not in_val[l]):
+        raise SystemExit(f"no session could be held out for {missing} without leaving it out of training")
+    train, val = [], []
+    for k in keys:
+        for d in groups[k]:
+            if k in val_keys:
+                val.append(d)
+            else:
+                train += [d] * (oversample if d["label"] != "allow" else 1)
     return train, val
 
 def main():
@@ -70,6 +86,8 @@ def main():
     ap.add_argument("--oversample", type=int, default=1,
                     help="repeat review and block rows this many times in train (not val), when allow dominates")
     args = ap.parse_args()
+    if args.oversample < 1:
+        ap.error("--oversample must be 1 or more")
     common.private_dir()
     rows = [json.loads(l) for l in open(common.TRAIN / "commands.jsonl")]
     by_id = {r["id"]: r for r in rows}
@@ -85,7 +103,9 @@ def main():
         if path.exists():
             for line in open(path):
                 d = json.loads(line)
-                candidates.append({"command": d["command"], "label": d["label"], "source": name, "group": d["command"]})
+                # masked like the transcript commands: a written example can hold an email or a path too
+                candidates.append({"command": common.mask(d["command"]), "label": d["label"], "source": name,
+                                   "group": d["command"]})
     evals = common.eval_texts()
     seen, data, near, conflicts = {}, [], 0, 0
     for c in candidates:

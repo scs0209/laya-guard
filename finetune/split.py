@@ -12,12 +12,16 @@ sys.path.insert(0, str(common.ROOT / "src"))
 from laya_guard import guard
 
 def rule_answer(command: str, cwd: str | None) -> str:
-    """As scripts/rule_snapshot.py answers, but in the command's directory."""
-    v = guard.judge(command, ask=True, cwd=cwd if cwd and os.path.isdir(cwd) else None)
+    """As scripts/rule_snapshot.py answers, but in the command's directory. When that folder is gone, the package
+    scripts a command runs can't be checked, so a person labels it rather than the safe lane allowing it."""
+    gone = bool(cwd) and not os.path.isdir(cwd)
+    v = guard.judge(command, ask=True, cwd=None if gone else cwd)
     if v.verdict_source == "regex":
         return f"{v.action}:{v.policy_id}"
     if v.verdict_source == "allowlist":                      # a package script it runs can still be held
-        return "allow:safe" if v.action == "allow" else f"{v.action}:{v.policy_id}"
+        if v.action == "allow":
+            return "model" if gone else "allow:safe"
+        return f"{v.action}:{v.policy_id}"
     if v.policy_id not in ("general", "offline"):
         return f"review:{v.policy_id}"
     return "model"

@@ -31,7 +31,9 @@ SECRETS = [
     (re.compile(r"(?i)((?:x-)?(?:api|auth)[-_]?(?:key|token)\s*:\s*)[^\s'\"]+"), r"\1<SECRET>"),
     # --password x, --token=x, --api-key x
     (re.compile(r"(?i)(--(?:password|passwd|token|api[-_]?key|secret|client[-_]secret|auth[-_]token)(?:=|\s+))"
-                r"(?![<$])[^\s'\"]+"), r"\1<SECRET>"),
+                r"([\"'])(?![<$])(?:(?!\2).)+\2"), r"\1\2<SECRET>\2"),
+    (re.compile(r"(?i)(--(?:password|passwd|token|api[-_]?key|secret|client[-_]secret|auth[-_]token)(?:=|\s+))"
+                r"(?![<$\"'])[^\s'\"]+"), r"\1<SECRET>"),
     # NAME="a value with spaces", 'name': 'value'
     (re.compile(rf"(?i)([\"']?{_SECRET_NAME}[\"']?\s*[:=]\s*)([\"'])(?![<$])(?:(?!\2).){{4,}}\2"), r"\1\2<SECRET>\2"),
     # NAME=value (stops at a quote, a space or a backslash, so `\nNEXT=` in a printf isn't eaten)
@@ -50,9 +52,9 @@ def mask(cmd: str) -> str:
     return cmd
 
 def command_id(raw_command: str) -> str:
-    """A command's stable id, from the command as it ran (before masking, so a masking change doesn't move labels).
-    Only the hash is stored."""
-    return hashlib.sha256(" ".join(raw_command.split()).encode()).hexdigest()[:16]
+    """A command's stable id: a hash of the command exactly as it ran, spaces included (before masking, so a masking
+    change doesn't move labels; `printf 'a  b'` and `printf 'a b'` are different commands). Only the hash is stored."""
+    return hashlib.sha256(raw_command.strip().encode()).hexdigest()[:16]
 
 def _norm(text: str) -> str:
     return " ".join(text.split()).lower()
@@ -87,8 +89,9 @@ def private_dir() -> Path:
     return TRAIN
 
 def write_jsonl(files: dict[Path, list[dict]]) -> None:
-    """Write several JSONL files so they change together: each goes to a temporary file first (owner-only), and they
-    are renamed into place only once all are written, so an interruption never pairs a new file with an old one."""
+    """Write several JSONL files together: each goes to a temporary file first (owner-only) and they are renamed into
+    place only once all are written, so a failure while writing changes none of them. The renames themselves are one
+    per file: if the process dies between two of them, run the script again."""
     tmps = {}
     try:
         for path, rows in files.items():

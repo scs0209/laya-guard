@@ -18,10 +18,13 @@ sys.path.insert(0, str(common.ROOT / "src"))
 from laya_guard import audit
 
 def in_projects(cwd: str | None, root: str, excluded: tuple) -> bool:
+    """The folder is root or under it, both as written (`~/Projects/../client` is not) and with symlinks resolved (a
+    link under ~/Projects to a folder elsewhere is not), and no excluded word is in either."""
     if not cwd or not os.path.isabs(cwd):
         return False
-    path = os.path.normpath(cwd)                           # `~/Projects/../client` is not under ~/Projects
-    return (path == root or path.startswith(root + os.sep)) and not any(w in path.lower() for w in excluded)
+    paths = {os.path.normpath(cwd), os.path.realpath(cwd)}
+    inside = all(p == root or p.startswith(root + os.sep) for p in paths)
+    return inside and not any(w in p.lower() for p in paths for w in excluded)
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
@@ -29,7 +32,7 @@ def main():
     ap.add_argument("--exclude", default="", help="comma-separated words")
     ap.add_argument("--max-chars", type=int, default=1500, help="longer commands are left out")
     args = ap.parse_args()
-    root = os.path.normpath(str(Path(args.projects).expanduser().resolve()))
+    root = os.path.realpath(str(Path(args.projects).expanduser()))
     excluded = tuple(w.strip().lower() for w in args.exclude.split(",") if w.strip())
     common.private_dir()
 
@@ -52,7 +55,7 @@ def main():
         cid = common.command_id(raw)
         if cid in seen:
             dropped["duplicate"] += 1; continue
-        if common.near_eval(cmd, evals):
+        if common.near_eval(cmd, evals) or common.near_eval(raw, evals):     # masking can hide the resemblance
             dropped["like an eval case"] += 1; continue
         seen.add(cid)
         rows.append({"id": cid, "command": cmd, "project": os.path.relpath(os.path.normpath(c.cwd), root).split(os.sep)[0],
