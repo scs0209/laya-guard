@@ -1,2 +1,2 @@
 # torch, gradio, spaces and huggingface_hub are preinstalled on ZeroGPU; do not list them.
-laya-guardrail==0.6.1
+laya-guardrail==0.6.2
