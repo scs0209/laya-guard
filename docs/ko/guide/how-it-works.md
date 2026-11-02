@@ -51,9 +51,12 @@
 있습니다(`--prune`·refspec 없는 `git fetch`, `git rev-parse`, `gh pr view`/`checks`, 메서드·본문 없는 `gh api`).
 
 정규식은 셸이 실제로 실행하는 형태로도 명령을 읽습니다. 그래서 차단되는 명령을 다르게 써도 판정이 약해지지 않습니다.
-`r''m -rf ~/`, `\rm -rf ~/`, `/bin/rm -rf ~/`, `rm${IFS}-rf${IFS}~/`, `eval "rm -rf ~/"`, `x=rm; $x -rf ~/`,
-`echo ~/ | xargs rm -rf`, 그리고 `sh`로 들어가는 base64 문자열(`echo … | base64 -d | sh`, `sh -c "$(echo … | base64 -d)"`)은
-모두 `rm -rf ~/`처럼 차단됩니다. 한 단어 안의 따옴표만 떼므로, 공백이 든 따옴표 문자열(`grep "rm -rf ~/" docs`)은 그대로
+`r''m -rf ~/`, `\rm -rf ~/`, `/bin/rm -rf ~/`, `rm${IFS}-rf${IFS}~/`, `eval "rm -rf ~/"`, `bash -c $'rm -rf ~/'`,
+`{rm,-rf,~/}`, `env FOO=bar rm -rf ~/`, `command rm -rf ~/`, `x=rm; $x -rf ~/`, `${x:+rm} -rf ~/`,
+`echo ~/ | xargs -n 1 rm -rf`, `echo / | xargs -I{} find {} -delete`, 그리고 `echo`나 `printf`로 만든 base64 문자열을
+`sh`로 넣는 것(`… | base64 -d | sh`, `sh -c "$(… | base64 -d)"`)은 모두 `rm -rf ~/`처럼 차단됩니다. 셸이 실행하지 않는
+것은 실행으로 읽지 않습니다. `… | base64 -d | bash -n`은 문법만 확인하고, `x=rm; unset x; $x -rf /`에는 `rm`이 없으며,
+`rm -rf '*'`는 이름이 `*`인 파일 하나입니다. 한 단어 안의 따옴표만 떼므로, 공백이 든 따옴표 문자열(`grep "rm -rf ~/" docs`)은 그대로
 텍스트입니다. 안전 레인과 모델은 여전히 쓰인 그대로의 명령을 읽습니다. 이어진 명령에서는 규칙이 내린 차단이 모델만 내린
 차단보다 우선합니다. 물어볼 수 있는 에이전트에서는 모델만 내린 차단이 질문으로 바뀌기 때문입니다.
 
@@ -92,7 +95,7 @@ build`, `vite build`, `jest` 같은 평범한 스크립트를 차단하기 때�
 
 | id | 잡는 것 | 정규식 적중 시 |
 |---|---|---|
-| `destructive-fs` | `rm -rf /`, `rm -rf ~`/`$HOME` (플래그 순서 무관: `-fr`, `-r -f`, `--recursive --force`, 셸이 어떻게 풀든: `r''m`, `\rm`, `/bin/rm`, `${IFS}`, `eval`, `$x`, `xargs`, `sh`로 들어가는 base64), 필터 없는 `find ~ -delete`·`find / -delete`, `cd ~`·`cd /` 바로 뒤의 `rm -rf *`, `mkfs`, 디바이스 `dd`, 포크밤 | block |
+| `destructive-fs` | `rm -rf /`, `rm -rf ~`/`$HOME` (플래그 순서 무관: `-fr`, `-r -f`, `--recursive --force`, 셸이 어떻게 풀든: `r''m`, `\rm`, `/bin/rm`, `${IFS}`, `eval`, `$'…'`, `{rm,-rf,~/}`, `env`, `$x`, `xargs`, `sh`로 들어가는 base64), 필터 없는 `find ~ -delete`·`find / -delete`, `cd ~`·`pushd ~`·`cd /` 바로 뒤의 `rm -rf *`, Python·Perl로 `/` 지우기, `mkfs`, 디바이스 `dd`, 포크밤 | block |
 | `pipe-to-shell` | `curl … \| sh`, `wget … \| sudo bash`, `bash -c "$(curl …)"`, `bash <(curl …)` | block |
 | `exfiltration` | 터널, `nc`로 파이프, `curl -d @파일` 업로드 | review |
 | `prompt-injection` | 이전 지시 무시, 탈옥, 한영 | block |

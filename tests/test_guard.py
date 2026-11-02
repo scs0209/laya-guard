@@ -439,6 +439,34 @@ def test_a_shell_rewrite_follows_what_the_shell_would_really_run():
     for cmd in ["sudo find / -xdev -delete", "ls; find ~ -delete", "bash -c 'find ~ -delete'"]:
         assert judge(cmd).policy_id == "destructive-fs", cmd
 
+def test_more_shell_rewrites_are_read():
+    # the second review on #87: each of these runs `rm -rf /` or `~/`, or deletes the whole home directory
+    for cmd in ["printf 'cm0gLXJmIH4vCg==' | base64 -d | sh", "echo cm0gLXJmIH4vCg== | base64 -d | sh",  # with a newline
+                "echo / | xargs -I{} find {} -delete", "echo / | xargs -n 1 rm -rf", "x=1; ${x:+rm} -rf /",
+                "${unknown:-rm} -rf ~/", "{rm,-rf,~/}", "cd ~ && env rm -rf *", "cd ~ && command rm -rf *",
+                "env FOO=bar /bin/rm -rf /", "env -i rm -rf ~/", "find ~// -delete", "find ~/. -delete",
+                "cd -P ~ && rm -rf *", "pushd ~ && rm -rf *", "unset z; x=rm; $x$z -rf /", "bash -c $'rm -rf /'",
+                'cmd="rm -rf /"; eval $cmd', "python3 -c \"import shutil; shutil.rmtree('/')\"",
+                "perl -MFile::Path -e 'remove_tree(\"/\")'"]:
+        v = judge(cmd, ask=True)
+        assert (v.action, v.policy_id) == ("block", "destructive-fs"), cmd
+    for cmd in ["command -v rm", "env | grep PATH", "echo {a,b}", "x=; ${x:+rm} -rf /", "${EDITOR:-vi} README.md",
+                "find ~/.cache -delete", "echo / | xargs -I{} ls {}", "pushd src && rm -rf *", "cd ~/.config && rm -rf *",
+                "python3 -c \"import shutil; shutil.rmtree('build')\""]:
+        assert judge(cmd).policy_id != "destructive-fs", cmd
+
+def test_a_line_of_many_assignments_is_read_quickly():
+    import time
+    line = "; ".join(f"v{i}=x" for i in range(3000)) + "; ls"
+    t = time.perf_counter()
+    guard._shell_form(line)
+    assert time.perf_counter() - t < 1.0
+    assert len(guard._plain_vars(line)) == guard._VARS_MAX
+
+def test_the_simulator_lists_the_policies_the_judge_used():
+    # a rewrite the judge blocks is also listed as a match, not reported as unmatched
+    assert "destructive-fs" in [p.id for p in guard.policy_matches("r''m -rf ~/")]
+
 def test_the_whole_home_directory_deleted_other_ways_is_blocked():
     for cmd in ["find ~ -mindepth 1 -delete", "find $HOME -delete", "find / -xdev -delete", 'find "$HOME"/ -delete',
                 "cd ~ && rm -rf *", "cd && rm -rf ./*", "cd $HOME; rm -rf *", "cd / && sudo rm -rf *"]:

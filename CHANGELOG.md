@@ -21,14 +21,16 @@ All notable changes to this project are documented here. Versions follow
 ### Changed
 
 - **A blocked command written another way is blocked too** (#86). The regexes also read the command the way the shell
-  runs it: quotes inside a word (`r''m`), an escaped letter (`\rm`), `/bin/rm`, `${IFS}`, `eval "…"`, a variable used
-  as the command (`x=rm; $x`), `echo … | xargs cmd`, and a literal base64 string decoded into `sh` or `sh -c "$(…)"`.
+  runs it: quotes inside a word (`r''m`), an escaped letter (`\rm`), `/bin/rm`, `${IFS}`, `eval "…"`, `$'…'`, brace
+  lists (`{rm,-rf,~/}`), `env FOO=bar` and `command` before the command, a variable used as the command (`x=rm; $x`,
+  `${x:+rm}`), `echo … | xargs [-n 1|-I{}] cmd`, and a literal base64 string from `echo` or `printf` decoded into `sh`
+  or `sh -c "$(…)"`. What the shell wouldn't run isn't read as run (`| bash -n`, a variable after `unset`, `'*'`).
   These used to reach only the model, and a block the model reaches alone becomes a question in Claude Code, Cursor,
   Qwen Code and Copilot CLI, so the less obvious form got the softer answer. The safe lane and the model still read
   the command as written. In the benchmark, laya-guard now blocks 20 of the 30 evasions instead of 9, and the
   everyday commands, incidents and eval gates are unchanged.
-- `destructive-fs` also blocks `find ~ -delete` / `find / -delete` with no filter but depth options, and `rm -rf *`
-  right after `cd ~`, a bare `cd`, `cd $HOME` or `cd /`.
+- `destructive-fs` also blocks `find ~ -delete` / `find / -delete` with no filter but depth options, `rm -rf *`
+  right after `cd ~`, `pushd ~`, a bare `cd`, `cd $HOME` or `cd /`, and Python or Perl removing `/`.
 - `mass-delete` (asks) also covers `rm -rf` of a folder right under the home directory (`~/Documents`, `~/.config`)
   and Python or Perl removing the home directory (`shutil.rmtree`, `rmtree`, `remove_tree`). These can move to block
   once they're seen not to catch ordinary work.

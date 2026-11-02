@@ -111,22 +111,35 @@ def _regex_hit(text: str) -> Policy | None:
 # command as the shell runs it. Only the regexes: the safe lane and the model still see what was written.
 # Quotes inside one word (r''m, .s'sh', "r"m) are taken out, but not around a glob: `rm -rf '*'` names one file.
 _WORD_QUOTES = re.compile(r"""(['"])([^'"\s;&|<>()`$\\*?\[]*)\1""")
+_ANSI_C = re.compile(r"\$'([^'\\]*)'")                                  # $'rm -rf /' without escapes is 'rm -rf /'
 _WORD_ESCAPE = re.compile(r"\\(?=[A-Za-z0-9_./~-])")                     # \rm: an escaped letter is the letter
 _BIN_DIR = re.compile(r"(?<![\w./~$-])/(?:usr/)?(?:local/)?s?bin/(?=[\w.-])")   # /bin/rm, /usr/bin/env: the command
+# `env FOO=bar rm`, `env -i rm`, `command rm`, `command -p rm` run rm (`command -v rm` only names it)
+_WRAPPER = re.compile(r"(?<![^\s;&|(])(?:env(?:\s+(?:-\S+|[A-Za-z_]\w*=\S*))*|command(?:\s+-p)?)\s+(?=[\w./~\\'\"])")
 _IFS = re.compile(r"\$\{IFS\}|\$IFS\b")
 _EVAL = re.compile(r"""\beval\s+(?:(['"])(.*?)\1|(?=\S))""", re.S)
-_PLAIN_ASSIGN = re.compile(r"(?:^|[;&|(\s])([A-Za-z_]\w*)=([\w./~:+-]+)(?=\s*(?:;|&&|\|\||\n|$))")
-_XARGS = re.compile(r"\becho\s+([^|;&\n]+?)\s*\|\s*xargs\s+(?:-[A-Za-z0-9]+\s+)*([^|;&\n]+)")
-_B64 = r"""\becho\s+(?:-n\s+)?(['"]?)([A-Za-z0-9+/]{8,}={0,2})\1\s*\|\s*base64\s+(?:-d|--decode|-D)\b"""
+_BRACES = re.compile(r"(?<![^\s;&|(])\{([^{}\s$,]*(?:,[^{}\s$,]*)+)\}(?=\s|$|[;&|)])")   # {rm,-rf,~/}: one word each
+_ASSIGN_VAL = r"""(?:"[^"$`\\\n]*"|'[^'\n]*'|[\w./~:+-]+)"""
+_PLAIN_ASSIGN = re.compile(rf"(?:^|[;&|(\s])([A-Za-z_]\w*)=({_ASSIGN_VAL})(?=\s*(?:;|&&|\|\||\n|$))")
+_ANY_ASSIGN = re.compile(r"(?:^|[;&|(\s])([A-Za-z_]\w*)\+?=")
+_SETS_NAMES = re.compile(r"\b(unset|read|mapfile|readarray|getopts|let|declare|typeset|local|printf\s+-v)\b([^;&|\n]*)")
+_PARAM_OP = re.compile(r"\$\{([A-Za-z_]\w*)(:?[-+=])([^{}$`]*)\}")      # ${x:-word}, ${x:+word}, ${x=word}
+_VARS_MAX = 64
+_XARGS = re.compile(r"\becho\s+(?P<input>[^|;&\n]+?)\s*\|\s*xargs(?P<opts>(?:\s+(?:-[IdLnPsE]\s*\S+|--[\w-]+(?:=\S+)?"
+                    r"|-[A-Za-z0-9]+))*)\s+(?P<cmd>[^|;&\n]+)")
+_XARGS_REPLACE = re.compile(r"-I\s*(\S+)")
+_B64 = (r"""\b(?:echo(?:\s+-[neE]+)?|printf(?:\s+(?:'%s'|"%s"|%s))?)\s+(?P<q>['"]?)(?P<b64>[A-Za-z0-9+/]{8,}={0,2})"""
+        r"""(?P=q)\s*\|\s*base64\s+(?:-d|--decode|-D)\b""")
 _B64_SUBST = re.compile(rf"\$\(\s*{_B64}\s*\)")                                  # sh -c "$(echo … | base64 -d)"
-_B64_PIPE = re.compile(rf"{_B64}\s*\|\s*(?:ba|z|da|k)?sh\b((?:[ \t]+[^\s|;&]+)*)")  # echo … | base64 -d | sh [args]
+_B64_PIPE = re.compile(rf"{_B64}\s*\|\s*(?:ba|z|da|k)?sh\b(?P<args>(?:[ \t]+[^\s|;&]+)*)")  # echo … | base64 -d | sh
 
 def _decoded(m: re.Match) -> str:
     try:
-        text = base64.b64decode(m.group(2), validate=True).decode("utf-8")
+        text = base64.b64decode(m.group("b64"), validate=True).decode("utf-8")
     except (ValueError, UnicodeDecodeError):
         return m.group(0)
-    return text if text.isprintable() else m.group(0)
+    # a script has newlines and tabs; anything else unprintable is binary, not a command
+    return text if all(c.isprintable() or c in "\n\t\r" for c in text) else m.group(0)
 
 def _runs_stdin(args: str) -> bool:
     """Whether `sh ARGS` runs the script it reads on stdin. Not with -c (it runs its argument) or a script file, and not
@@ -147,40 +160,68 @@ def _runs_stdin(args: str) -> bool:
     return interactive or not noexec
 
 def _plain_vars(text: str) -> dict[str, tuple[int, str]]:
-    """{name: (where its assignment ends, value)} for each variable set once, to a plain value, and not changed or
-    unset anywhere else in text, so its value holds from there on."""
-    found: dict[str, tuple[int, str] | None] = {}
+    """{name: (where its value starts to hold, value)}: a variable set once to a plain value and not changed elsewhere,
+    from its assignment on, and a variable only ever `unset`, as empty from there on. One pass over text per kind, and
+    at most _VARS_MAX names, so a line of many assignments can't stretch the check past the hook timeout."""
+    assigned: dict[str, int] = {}
+    for m in _ANY_ASSIGN.finditer(text):
+        assigned[m.group(1)] = assigned.get(m.group(1), 0) + 1
+    changed, unset_at = set(), {}
+    for m in _SETS_NAMES.finditer(text):
+        for name in re.findall(r"[A-Za-z_]\w*", m.group(2)):
+            changed.add(name)
+            if m.group(1) == "unset":
+                unset_at.setdefault(name, m.end())
+    keep: dict[str, tuple[int, str]] = {}
     for m in _PLAIN_ASSIGN.finditer(text):
-        found[m.group(1)] = None if m.group(1) in found else (m.end(), m.group(2))
-    keep = {}
-    for name, at in found.items():
-        assigned = len(re.findall(rf"(?:^|[;&|(\s]){name}\+?=", text))
-        changed = re.search(rf"\b(?:unset|read|mapfile|readarray|getopts|let|declare|typeset|local|printf\s+-v)\b"
-                            rf"[^;&|\n]*\b{name}\b", text)
-        if at is not None and assigned == 1 and not changed:
-            keep[name] = at
+        name, value = m.group(1), m.group(2)
+        if assigned.get(name) == 1 and name not in changed and len(keep) < _VARS_MAX:
+            keep[name] = (m.end(), value[1:-1] if value[:1] in "'\"" else value)
+    for name, at in unset_at.items():
+        if name not in assigned and len(keep) < _VARS_MAX:
+            keep[name] = (at, "")
     return keep
+
+def _xargs_run(m: re.Match) -> str:
+    """`echo A | xargs [opts] cmd` as the command it runs: `cmd A`, or cmd with A in place of -I's placeholder."""
+    replace = _XARGS_REPLACE.search(m.group("opts"))
+    cmd, arg = m.group("cmd").strip(), m.group("input").strip()
+    return cmd.replace(replace.group(1), arg) if replace else f"{cmd} {arg}"
 
 def _shell_form(text: str) -> str:
     """text as the shell runs it, as far as the regexes need: a literal base64 string decoded where it is run, `eval`'s
-    text, `${IFS}` as a space, quotes inside a word and an escaped letter removed, `/bin/rm` as `rm`, a variable set to a
-    plain value earlier in the line replaced by it after that point, `echo A | xargs cmd` as `cmd A`. Twice, so each
-    step sees the others' output (`eval "r''m -rf ~/"`)."""
+    text, `${IFS}` as a space, `$'…'` as '…', quotes inside a word and an escaped letter removed, `{a,b}` as `a b`,
+    `/bin/rm` as `rm`, `env FOO=bar rm` and `command rm` as `rm`, a variable set to a plain value earlier in the line
+    replaced by it after that point (and `${x:-y}`, `${x:+y}` read with it), `echo A | xargs cmd` as `cmd A`. Twice, so
+    each step sees the others' output (`eval "r''m -rf ~/"`)."""
     for _ in range(2):
         text = _B64_SUBST.sub(_decoded, text)
-        text = _B64_PIPE.sub(lambda m: _decoded(m) if _runs_stdin(m.group(3)) else m.group(0), text)
+        text = _B64_PIPE.sub(lambda m: _decoded(m) if _runs_stdin(m.group("args")) else m.group(0), text)
         text = _EVAL.sub(lambda m: m.group(2) if m.group(1) else "", text)
         text = _IFS.sub(" ", text)
+        text = _ANSI_C.sub(r"'\1'", text)
         text = _WORD_QUOTES.sub(r"\2", text)
         text = _WORD_ESCAPE.sub("", text)
+        text = _BRACES.sub(lambda m: m.group(1).replace(",", " "), text)
         text = _BIN_DIR.sub("", text)
+        text = _WRAPPER.sub("", text)
         known = _plain_vars(text)
+        def param(m, known=known):
+            # ${x:+y} is y when x is set (and, with the colon, not empty); ${x:-y} and ${x=y} are x's value, else y. An
+            # x we don't follow (the environment) leaves ${x:+y} as written and reads ${x:-y} as its default.
+            at = known.get(m.group(1))
+            live = at is not None and m.start() >= at[0]
+            is_set = live and (at[1] != "" or ":" not in m.group(2))
+            if m.group(2).endswith("+"):
+                return m.group(3) if is_set else ("" if live else m.group(0))
+            return at[1] if is_set else m.group(3)
+        text = _PARAM_OP.sub(param, text)
         if known:
             def value(m, known=known):
                 at = known.get(m.group(1) or m.group(2))
                 return at[1] if at is not None and m.start() >= at[0] else m.group(0)
             text = _VAR_REF.sub(value, text)
-        text = _XARGS.sub(r"\2 \1", text)
+        text = _XARGS.sub(_xargs_run, text)
     return text
 
 # The safe lane only opens for a single command: no chaining, pipes, redirects or
@@ -957,7 +998,8 @@ def policy_matches(text: str) -> list[Policy]:
     block-level match, so this is how to tell which other policies would also have matched."""
     _ensure()
     assert _policies is not None
-    return [pol for pol in _policies if any(rx.search(text) for rx in pol.compiled)]
+    forms = [text] if _shell_form(text) == text else [text, _shell_form(text)]       # what _regex_hit reads, too
+    return [pol for pol in _policies if any(rx.search(f) for rx in pol.compiled for f in forms)]
 
 def judge_traced(tool_call: str, source: str = "user", cwd: str | None = None, emit=None,
                  ask: bool = False) -> Verdict:
