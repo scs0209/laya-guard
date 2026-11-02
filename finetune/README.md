@@ -21,7 +21,8 @@ python finetune/split.py
 3. Label the commands whose `rule` is `model` against [LABELING.md](LABELING.md), as `train/labels*.jsonl` lines
    `{"i": <line number in train/commands.jsonl, from 0>, "label": "allow"|"review"|"block", "why": "..."}`. A later
    file wins, so corrections can go in `train/labels_overrides.jsonl`. Real commands rarely deserve `block`; examples
-   you write yourself go in `train/synthetic.jsonl` or `train/augment.jsonl` as `{"command", "label"}` lines, and any
+   you write yourself go in `train/synthetic.jsonl`, `train/augment.jsonl` or `train/round3.jsonl` as
+   `{"command", "label"}` lines, and any
    that copy or closely resemble (similarity ≥ 0.85) an evaluation case are dropped.
 
 ```bash
