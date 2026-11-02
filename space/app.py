@@ -14,9 +14,9 @@ from gradio import Server
 from starlette.concurrency import run_in_threadpool
 
 import trial
-from laya_guard.guard import is_mock, warmup
+from laya_guard.guard import model_state, warmup
 
-warmup()                                # load the model at start-up, not on the first visitor
+WARM = warmup()                         # load the model at start-up, not on the first visitor
 PAGE = (Path(__file__).parent / "index.html").read_text(encoding="utf-8")
 limits = trial.RateLimit()
 
@@ -35,7 +35,8 @@ def page() -> HTMLResponse:
 
 @app.get("/api/health")
 def health() -> dict:
-    return {"model": not is_mock()}
+    # the model answered at start-up and its last call didn't fail (otherwise judgments are the fallback's)
+    return {"model": WARM and model_state()["ok"] is not False}
 
 
 @app.post("/api/judge")

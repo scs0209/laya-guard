@@ -12,6 +12,7 @@ pinned: false
 license: mit
 short_description: See what laya-guard says about an agent's shell command
 models:
+  - Ayaannnnnnn/laya-guard-multilingual
   - convaiinnovations/laya
 tags:
   - security
@@ -22,9 +23,10 @@ tags:
   - shell
   - prompt-injection
 thumbnail: https://huggingface.co/spaces/Ayaannnnnnn/laya-guard-trial/resolve/main/thumbnail.png
-# the files laya-guard's judge loads, fetched at build time so a woken Space doesn't download them
+# the files laya-guard's judge loads (the fine-tuned model, at the revision guard.py pins), fetched at build time so a
+# woken Space doesn't download them
 preload_from_hub:
-  - convaiinnovations/laya multilingual/model.safetensors,multilingual/rl_agent_config.json,multilingual/encoder/config.json,multilingual/tokenizer/tokenizer.json,multilingual/tokenizer/tokenizer_config.json
+  - Ayaannnnnnn/laya-guard-multilingual model.safetensors,rl_agent_config.json,encoder/config.json,tokenizer/tokenizer.json,tokenizer/tokenizer_config.json 7147e9cbc5b057140279b76f78991909f417056a
 ---
 
 # laya-guard web trial
