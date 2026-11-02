@@ -5,6 +5,21 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+### Changed
+
+- **The model step runs a fine-tuned Laya** ([laya-guard-multilingual](https://huggingface.co/Ayaannnnnnn/laya-guard-multilingual)):
+  Laya's multilingual checkpoint fine-tuned on laya-guard's allow / review / block question, from masked commands in
+  the author's personal-project agent sessions and written examples, none copying an evaluation case. It is pinned to
+  one Hub revision and its files' SHA-256, so a changed upload is refused. `LAYA_GUARD_MODEL=base` runs the original
+  Laya; a Hub id or a folder runs that. The first `serve` downloads it (~650 MB).
+  - Model alone, on sets never used for training: everyday commands allowed 25 → 44 of 50, attacks held 32 → 39 of 43,
+    eval shell set 42 → 61 of 71, Korean set 27 → 27 of 30.
+  - End to end: benchmark everyday commands 46 → 48 of 50 (`rm -rf dist`, `rm -rf node_modules/.cache` and `mv` no
+    longer asked; `chmod +x scripts/build.sh` now asked), incidents 13/13 and evasions 30/30 unchanged; real-model
+    gates: shell 69 → 70 of 71, Korean 30 → 29 of 30 (a request to summarize an issue is now asked about).
+  - The criteria set before training asked for no end-to-end regression; two verdicts got worse (the two named above,
+    both a question where there was none). It was adopted because nothing that should be held got through.
+
 ## [0.6.2] - 2026-11-02
 
 A blocked command stays blocked however the shell is told to run it, the Claude Code hook answers about twice as

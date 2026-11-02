@@ -378,6 +378,30 @@ def _mock_score(text: str, hit: Policy | None) -> tuple[str, float]:
 # Override with LAYA_GUARD_DEVICE=mps etc. for speed, at the cost of reproducibility.
 GUARD_DEVICE = os.environ.get("LAYA_GUARD_DEVICE", "cpu")
 
+# The checkpoint the model step runs: Laya's multilingual checkpoint fine-tuned on laya-guard's allow/review/block
+# question (finetune/, model card on the Hub). Pinned to one Hub revision and its files' SHA-256, so a changed upload is
+# refused rather than loaded. LAYA_GUARD_MODEL=base runs the original Laya; a Hub id or a local folder runs that,
+# unpinned.
+GUARD_MODEL = "Ayaannnnnnn/laya-guard-multilingual"
+GUARD_MODEL_REVISION = "7147e9cbc5b057140279b76f78991909f417056a"
+GUARD_MODEL_SHA256 = {
+    "model.safetensors": "a9f09266dbbb0b1851f99e9f6eda0da51290cc90f467564c401486521d64b72d",
+    "rl_agent_config.json": "e5ffeb226da61565d97edbaffdec344ac3e7fbfb04953231e6d5ee1656db7f9b",
+    "tokenizer/tokenizer.json": "dbba919c6e5e492bc22beb80abb64e6fcc7e8744dc696e8388b8c977767afa4b",
+    "tokenizer/tokenizer_config.json": "f2ff584a8f78ac9f3b6fd0afcf9ab310e41c2d445ef628f9ab4b0d594e992b7a",
+    "encoder/config.json": "10b713aa32a0adf93e1c3a328631befece0f869abd041d25eccd9c184928bfad",
+}
+
+def router_kwargs() -> dict:
+    """What Router(...) is given besides the device: the pinned fine-tune, the original Laya, or LAYA_GUARD_MODEL's."""
+    chosen = os.environ.get("LAYA_GUARD_MODEL", "").strip()
+    if chosen == "base":
+        return {}
+    if chosen and chosen != GUARD_MODEL:
+        return {"models": {"multilingual": chosen}}
+    return {"models": {"multilingual": GUARD_MODEL}, "revisions": {"multilingual": GUARD_MODEL_REVISION},
+            "sha256_digests": {"multilingual": GUARD_MODEL_SHA256}}
+
 # Max length one model call reads. Only text[:4000] used to be passed, so the model never
 # saw anything past 4000 chars (a long harmless preamble turned a block into a review).
 MODEL_WINDOW_CHARS = 4_000
@@ -433,7 +457,7 @@ def _laya_predict(text: str) -> tuple[str, float]:
     _ensure()
     from laya import Router
     if _router is None:
-        _router = Router(device=GUARD_DEVICE)
+        _router = Router(device=GUARD_DEVICE, **router_kwargs())
     questions = {
         "action": {
             "type": "choice",
