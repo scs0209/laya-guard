@@ -15,7 +15,7 @@
 
 | 가드 | 버전 | 사고 명령 붙잡음 | 셸 변형 붙잡음 | 평범한 명령 허용 | 훅 응답 시간(중앙값) |
 |---|---|---|---|---|---|
-| laya-guard | 0.6.1 이후 main (#85, #87) | **13/13** (차단 2, 확인 요청 11) | **30/30** (차단 20, 확인 요청 10) | 46/50 (확인 요청 4) | 71 ms |
+| laya-guard | 0.6.2 + 추가 학습한 모델 | **13/13** (차단 2, 확인 요청 11) | **30/30** (차단 20, 확인 요청 10) | 48/50 (확인 요청 2) | 71 ms |
 | [dcg](https://github.com/Dicklesworthstone/destructive_command_guard) | 0.15.3 | 5/13 (차단 5) | 26/30 (차단 26) | 48/50 (차단 2) | 16 ms |
 | dcg + 옵트인 팩 | 0.15.3, `cloud.aws` `database.postgresql` `platform.railway` 켬 | 9/13 (차단 9) | 28/30 (차단 28) | 48/50 (차단 2) | 15 ms |
 | dcg 튜닝 | 위와 같고, 프로젝트 안에서 `rm -rf dist`와 `rm -rf node_modules/.cache`를 허용 | 9/13 (차단 9) | 28/30 (차단 28) | **50/50** | 17 ms |
@@ -28,7 +28,10 @@
 2026-10-24에 다시 실행했습니다. 점수는 그대로이고, dcg 행의 시간은 그 실행 값입니다(cc-safety-net과 shellfirm 행은 2026-10-23 값).
 laya-guard 행은 2026-11-02에 #85(훅이 `python3`를 6~7번이 아니라 두 번만 띄움)와 #87(차단되는 명령을 셸이 실행하는
 형태로도 읽음)이 들어간 main에서 다시 실행했습니다. 셸 변형 11개가 확인 요청에서 차단으로 바뀌었고, 나머지는 그대로이며,
-훅 응답 시간 중앙값은 171 ms에서 71 ms가 됐습니다.
+훅 응답 시간 중앙값은 171 ms에서 71 ms가 됐습니다. 그 뒤 추가 학습한 모델
+([laya-guard-multilingual](https://huggingface.co/Ayaannnnnnn/laya-guard-multilingual), [finetune/](../finetune/))로 한 번 더
+실행했습니다. `rm -rf dist`, `rm -rf node_modules/.cache`, `mv`는 이제 허용되고, `chmod +x scripts/build.sh`는 이제 묻습니다.
+나머지는 그대로입니다.
 
 같은 사고·셸 변형 43개를 명령이 하는 일로 묶어 보면 다음과 같습니다. 다섯 개는 자격 증명을 읽거나 찾기만 하고,
 두 개는 이 벤치마크가 Bash로 보내는 네이티브 Windows 명령입니다(아래 참고):
@@ -44,7 +47,7 @@ laya-guard 행은 2026-11-02에 #85(훅이 `python3`를 6~7번이 아니라 두 
 숫자가 말하는 것과 말하지 않는 것:
 
 - **laya-guard가 가장 많이 붙잡고, 그중 절반가량이 확인 요청입니다.** 43건 중 21건이 차단이 아닌 권한 확인 창이고
-  (#87 이전에는 32건), 평범한 명령 4개(`npx tsc --noEmit`, `rm -rf dist`, `rm -rf node_modules/.cache`, `mv`)에도
+  (#87 이전에는 32건), 평범한 명령 2개(`npx tsc --noEmit`, `chmod +x scripts/build.sh`)에도
   묻습니다. 확인 요청은 사용자의 주의를 씁니다. 다른 가드는 바로 차단하거나 아무 말도 하지 않습니다. 남은 확인 요청은
   강제 푸시, `git reset --hard`, `git clean`, `DROP TABLE`, 클라우드·API 삭제, 자격 증명 읽기, `~/.bashrc`에 줄 추가,
   홈 바로 아래 폴더 삭제, Python·Perl로 홈 디렉터리 지우기, Windows 명령 두 개입니다. 일부러 묻는 규칙이거나 모델만 읽는 명령입니다. 또 laya-guard가 가장 느립니다. 로컬 서버에서 약 3억

@@ -2,7 +2,7 @@
   "guards": [
     {
       "name": "laya-guard",
-      "version": "main after 0.6.1 (#85, #87)",
+      "version": "0.6.2 + fine-tuned model (laya-guard-multilingual)",
       "url": "https://github.com/scs0209/laya-guard",
       "serve": ["{python}", "-m", "laya_guard.cli", "serve", "--host", "127.0.0.1", "--port", "{port}"]
     },

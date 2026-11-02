@@ -1,12 +1,11 @@
 # Fine-tuning the model on your own commands
 
-The rules (policy.yaml and the safe lane) decide what they can; the commands they can't settle go to Laya, which
-laya-guard uses as it ships, without fine-tuning. Its model card describes it as a base to fine-tune. These scripts
-build a training set from the shell commands your own agents ran, train on a free GPU, and compare the result with
-the base model on sets it never saw. Your data stays in `train/`, which git ignores.
-
-Nothing here changes what laya-guard runs. A first attempt (in the [CHANGELOG](../CHANGELOG.md)) raised validation
-accuracy from 0.61 to 0.90 while everyday commands and Korean got worse on the held-out sets, so it wasn't used.
+The rules (policy.yaml and the safe lane) decide what they can; the commands they can't settle go to the model. Out
+of the box that is [laya-guard-multilingual](https://huggingface.co/Ayaannnnnnn/laya-guard-multilingual), Laya fine-tuned
+with these scripts (three runs: the CHANGELOG has what went wrong in the first two). These scripts let you do the same
+on the shell commands your own agents ran: build a training set, train on a free GPU, and compare the result with the
+base model on sets it never saw. Your data stays in `train/`, which git ignores. To run your checkpoint, point
+`LAYA_GUARD_MODEL` at its folder.
 
 ## Steps
 

@@ -34,7 +34,7 @@
 
 Your coding agent can run `cat ~/.ssh/id_rsa`, `curl … | sh` or `rm -rf ~` on your machine. laya-guard answers
 **before** the command runs: **block** it, **ask** you, or **let it through**. A regex prefilter catches the
-known-dangerous patterns and a small multilingual model (Laya, ~322M, Apache-2.0) judges the rest, on your laptop, in
+known-dangerous patterns and a small multilingual model ([laya-guard-multilingual](https://huggingface.co/Ayaannnnnnn/laya-guard-multilingual), Laya fine-tuned for this, ~322M, Apache-2.0) judges the rest, on your laptop, in
 about 0.1 s.
 
 Free and MIT-licensed. No API key, no per-call billing, and the verdict log never stores the command text.
@@ -91,7 +91,8 @@ laya-guard dashboard                # or do it with a click, and see what the gu
 > ([dockndevai/laya-guard](https://pypi.org/project/laya-guard/)).
 
 Requires Python ≥ 3.10. The model runtime pulls in PyTorch + transformers (hundreds of MB to a few GB depending on
-platform), and the ~322M checkpoint downloads on the first `serve`. `laya-guard service install` starts the server at
+platform), and the model (~650 MB, pinned to one revision and its SHA-256) downloads on the first `serve`;
+`LAYA_GUARD_MODEL=base` runs the original Laya instead. `laya-guard service install` starts the server at
 every login ([details](docs/guide/reliability.md#keep-it-running-and-hear-about-outages)).
 
 ## 🔌 Supported agents
@@ -158,7 +159,7 @@ command it proposes is judged by the real evaluator. Nothing is run. The screens
 | AgentDojo v1, benign (judge-level) | **92/97 kept** (allow+review) | `eval/run_agentdojo.py` |
 | E2E rollout (qwen2.5:7b agent + guard) | **4/4 scenarios** (1 defended, 2 not attempted, 1 benign OK) | `eval/run_rollout.py` |
 | Real incident replays (7 publicly reported incidents) | **13/13 held** (12/13 on 0.5.1; the miss, a delete inside a GraphQL call, got a rule) | `eval/run_incidents.py` |
-| [Incident benchmark](bench/README.md): the same incidents + 30 shell evasions + 50 everyday commands, vs dcg, cc-safety-net, shellfirm through Claude Code's hook | **13/13, 30/30 held** (22 blocked, 21 asked), 46/50 everyday allowed; dcg 5/13, 26/30, 48/50 | `bench/run.py` |
+| [Incident benchmark](bench/README.md): the same incidents + 30 shell evasions + 50 everyday commands, vs dcg, cc-safety-net, shellfirm through Claude Code's hook | **13/13, 30/30 held** (22 blocked, 21 asked), 48/50 everyday allowed; dcg 5/13, 26/30, 48/50 | `bench/run.py` |
 | Shell commands (own set: 35 everyday + 36 dangerous/bypass) | **69/71** (real model) | `eval/run_eval.py --set shell` |
 | Korean 30 (own set) | **30/30** (mock **and** real) | `eval/run_eval.py` |
 

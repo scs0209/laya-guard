@@ -34,7 +34,7 @@
 
 코딩 에이전트는 당신의 컴퓨터에서 `cat ~/.ssh/id_rsa`, `curl … | sh`, `rm -rf ~`를 실행할 수 있습니다. laya-guard는
 명령이 실행되기 **전에** 답합니다. **막거나**, **묻거나**, **통과시킵니다**. 알려진 위험 패턴은 정규식이 먼저 잡고,
-나머지는 소형 다국어 모델(Laya, ~322M, Apache-2.0)이 노트북에서 약 0.1초 만에 판정합니다.
+나머지는 소형 다국어 모델([laya-guard-multilingual](https://huggingface.co/Ayaannnnnnn/laya-guard-multilingual), 이 용도로 추가 학습한 Laya, ~322M, Apache-2.0)이 노트북에서 약 0.1초 만에 판정합니다.
 
 무료이고 MIT 라이선스입니다. API 키도, 호출당 과금도 없으며, 판정 로그에는 명령 원문을 절대 남기지 않습니다.
 
@@ -89,8 +89,8 @@ laya-guard dashboard                # 클릭으로도 가능하고, 가드가 �
 > **패키지 이름은 `laya-guardrail`입니다.** `pip install laya-guard`는 무관한 다른 프로젝트
 > ([dockndevai/laya-guard](https://pypi.org/project/laya-guard/))를 설치합니다.
 
-Python ≥ 3.10이 필요합니다. 모델 런타임이 PyTorch + transformers를 함께 설치하고(플랫폼에 따라 수백 MB~수 GB), ~322M
-체크포인트는 첫 `serve` 때 내려받습니다. `laya-guard service install`을 쓰면 로그인할 때마다 서버가 켜집니다
+Python ≥ 3.10이 필요합니다. 모델 런타임이 PyTorch + transformers를 함께 설치하고(플랫폼에 따라 수백 MB~수 GB), 모델(약 650MB, 리비전과
+SHA-256 고정)은 첫 `serve` 때 내려받습니다. `LAYA_GUARD_MODEL=base`로 원래 Laya를 쓸 수 있습니다. `laya-guard service install`을 쓰면 로그인할 때마다 서버가 켜집니다
 ([자세히](docs/ko/guide/reliability.md#계속-실행해-두기와-장애-알림)).
 
 ## 🔌 지원 에이전트
@@ -156,7 +156,7 @@ laya-guard footprint --suggest           # 프로젝트별로 무엇을 건드�
 | AgentDojo v1 정상 (심판 레벨) | **92/97 유지** (allow+review) | `eval/run_agentdojo.py` |
 | E2E 롤아웃 (qwen2.5:7b 에이전트 + 가드) | **4/4 시나리오** (1 방어, 2 미시도, 1 정상 OK) | `eval/run_rollout.py` |
 | 실제 사고 재현 (공개된 사고 7건) | **13/13 붙잡음** (0.5.1에선 12/13. 놓친 GraphQL 호출 안의 삭제에 규칙 추가) | `eval/run_incidents.py` |
-| [사고 벤치마크](bench/README.ko.md): 같은 사고 + 셸 변형 30 + 평범한 명령 50을 dcg·cc-safety-net·shellfirm과 Claude Code 훅으로 비교 | **13/13, 30/30 붙잡음**(차단 22, 확인 요청 21), 평범한 명령 46/50 허용; dcg 5/13, 26/30, 48/50 | `bench/run.py` |
+| [사고 벤치마크](bench/README.ko.md): 같은 사고 + 셸 변형 30 + 평범한 명령 50을 dcg·cc-safety-net·shellfirm과 Claude Code 훅으로 비교 | **13/13, 30/30 붙잡음**(차단 22, 확인 요청 21), 평범한 명령 48/50 허용; dcg 5/13, 26/30, 48/50 | `bench/run.py` |
 | 셸 명령 (자체: 일상 35 + 위험/우회 36) | **69/71** (실전 모델) | `eval/run_eval.py --set shell` |
 | 한국어 30문항 (자체) | **30/30** (MOCK·실전 모두) | `eval/run_eval.py` |
 
