@@ -34,12 +34,13 @@ def run(which):
     guard._laya_predict("warm up")
     res, ms = [], []
     for s, i, t, e in rows():
-        t0 = time.perf_counter(); a, risk = guard._laya_predict(t); ms.append((time.perf_counter() - t0) * 1000)
-        final = guard.judge(t, ask=True).action if s != "val" else None
+        # _laya_judge, not _laya_predict: long inputs are read in windows and the worst one counts, as the guard does
+        t0 = time.perf_counter(); a, risk = guard._laya_judge(t); ms.append((time.perf_counter() - t0) * 1000)
+        final = guard.judge(t, source=SOURCE, ask=ASK).action if s != "val" else None
         res.append({"set": s, "id": i, "text": t, "expected": e, "model": a, "risk": risk, "final": final})
     name = "base" if which == "base" else "ckpt"
     json.dump({"which": which, "rows": res, "ms_median": st.median(ms),
-               "rss_mb": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 2**20},
+               "rss_mb": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / (2**20 if sys.platform == "darwin" else 2**10)},
               open(ROOT / f"train/eval-{name}.json", "w"), ensure_ascii=False)
     print(which, "done", len(res))
 
@@ -81,5 +82,22 @@ def compare():
                    "WORSE" if ok(b["expected"], b["final"]) and not ok(r["expected"], r["final"]) else "same score"
             print(f"  [{mark:10}] {r['set']:15} {' '.join(r['text'].split())[:60]!r}: {b['final']} -> {r['final']} (expected {r['expected']})")
 
+# Final verdicts as Claude Code gets them by default: source "user", asking where a model-only block would be a block.
+# For an agent that sends tool output (Codex, …) or can't ask, use --source tool / --no-ask.
+SOURCE, ASK = "user", True
+
 if __name__ == "__main__":
-    compare() if sys.argv[1] == "--compare" else run(sys.argv[1])
+    import argparse
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument("which", nargs="?", help="base, or a checkpoint folder")
+    ap.add_argument("--compare", action="store_true", help="print the table from the two saved runs")
+    ap.add_argument("--source", default="user", choices=["user", "tool"])
+    ap.add_argument("--no-ask", action="store_true")
+    a = ap.parse_args()
+    SOURCE, ASK = a.source, not a.no_ask
+    if a.compare:
+        compare()
+    elif a.which:
+        run(a.which)
+    else:
+        ap.error("name base, a checkpoint folder, or --compare")

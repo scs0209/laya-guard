@@ -1,85 +1,66 @@
 """Shell commands your agents ran (Claude Code and Codex transcripts, read by laya-guard's audit), from the project
-folders you choose, deduplicated, with secrets and the home path masked and anything that overlaps the evaluation sets
-dropped. Writes train/commands.jsonl (train/ is git-ignored: this is your data).
+folders you choose, deduplicated, with secrets and the home path masked and anything like the evaluation sets
+dropped. Writes train/commands.jsonl, readable by you only (train/ is git-ignored: this is your data).
 
     python finetune/extract.py --projects ~/Projects --exclude acme,clientname
 
---projects: only sessions whose working directory is under this folder (default ~/Projects).
---exclude:  words that drop a session folder or a command that contains them, e.g. your employer's or a client's name,
-            so work never ends up in a model you might share."""
-import argparse, json, re, sys
+--projects: only sessions whose working directory is this folder or under it (default ~/Projects).
+--exclude:  words that drop a session folder or a command containing them, e.g. your employer's or a client's name,
+            so work never ends up in a model you might share. Checked against the command as it ran, before masking.
+
+Each row has an `id`: a hash of the command as it ran. Labels refer to it, so re-running this (new sessions, a masking
+change) never moves a label onto another command."""
+import argparse, os, sys
 from pathlib import Path
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import common
+sys.path.insert(0, str(common.ROOT / "src"))
 from laya_guard import audit
 
-HOME = Path.home()
-EXCLUDED_PARTS: tuple = ()                          # set from --exclude
-PROJECTS = "~/Projects/"                            # set from --projects
-SECRETS = [
-    (re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b"), "<GITHUB_TOKEN>"),
-    (re.compile(r"\bhf_[A-Za-z0-9]{20,}\b"), "<HF_TOKEN>"),
-    (re.compile(r"\bsk-(?:ant-)?[A-Za-z0-9_-]{16,}\b"), "<API_KEY>"),
-    (re.compile(r"\bxox[abpors]-[A-Za-z0-9-]{10,}\b"), "<SLACK_TOKEN>"),
-    (re.compile(r"\bAKIA[0-9A-Z]{16}\b"), "<AWS_KEY>"),
-    (re.compile(r"(?i)\b(bearer|token|password|passwd|secret|api[_-]?key)(\s*[:=]\s*|\s+)['\"]?[^\s'\"]{8,}"), r"\1\2<SECRET>"),
-    (re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"), "<EMAIL>"),
-    (re.compile(r"(?<![\w/])[A-Za-z0-9+/_-]{40,}={0,2}(?![\w/])"), "<LONG_STRING>"),
-]
-
-def mask(cmd: str) -> str:
-    cmd = cmd.replace(str(HOME), "~")
-    cmd = re.sub(r"/Users/[^/\s'\"]+", "~", cmd)
-    for rx, rep in SECRETS:
-        cmd = rx.sub(rep, cmd)
-    return cmd
-
-def personal(cwd: str | None) -> bool:
-    if not cwd:
+def in_projects(cwd: str | None, root: str, excluded: tuple) -> bool:
+    if not cwd or not os.path.isabs(cwd):
         return False
-    rel = cwd.replace(str(HOME), "~")
-    return rel.startswith(PROJECTS) and not any(p in rel.lower() for p in EXCLUDED_PARTS)
-
-def eval_texts() -> list[str]:
-    out = [json.loads(l)["command"] for l in open(ROOT / "bench/cases.jsonl") if l.strip()]
-    for f in ("incidents", "ko_30", "shell"):
-        out += [json.loads(l)["tool_call"] for l in open(ROOT / f"eval/testset_{f}.jsonl") if l.strip()]
-    for f in ("never_blocked", "rewrites_blocked"):
-        out += [json.loads(l)["command"] for l in open(ROOT / f"tests/data/{f}.jsonl") if l.strip()]
-    return [" ".join(t.split()) for t in out]
+    path = os.path.normpath(cwd)                           # `~/Projects/../client` is not under ~/Projects
+    return (path == root or path.startswith(root + os.sep)) and not any(w in path.lower() for w in excluded)
 
 def main():
-    global EXCLUDED_PARTS, PROJECTS
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--projects", default="~/Projects")
     ap.add_argument("--exclude", default="", help="comma-separated words")
+    ap.add_argument("--max-chars", type=int, default=1500, help="longer commands are left out")
     args = ap.parse_args()
-    PROJECTS = str(Path(args.projects).expanduser()).replace(str(HOME), "~").rstrip("/") + "/"
-    EXCLUDED_PARTS = tuple(w.strip().lower() for w in args.exclude.split(",") if w.strip())
-    (ROOT / "train").mkdir(exist_ok=True)
-    calls = []
+    root = os.path.normpath(str(Path(args.projects).expanduser().resolve()))
+    excluded = tuple(w.strip().lower() for w in args.exclude.split(",") if w.strip())
+    common.private_dir()
+
+    calls, files = [], 0
     for fn in (audit.claude_calls, audit.codex_calls):
-        calls += fn(HOME, None)[0]
-    evals = eval_texts()
-    seen, rows, dropped = set(), [], {"not personal": 0, "too long": 0, "overlaps eval": 0, "duplicate": 0}
+        got, n = fn(common.HOME, None)
+        calls += got; files += n
+    evals = common.eval_texts()
+    seen, rows = set(), []
+    dropped = {"not in --projects": 0, "excluded word": 0, "too long": 0, "like an eval case": 0, "duplicate": 0}
     for c in calls:
-        if not personal(c.cwd):
-            dropped["not personal"] += 1; continue
-        cmd = mask(c.command.strip())
-        if len(cmd) > 1500:
+        if not in_projects(c.cwd, root, excluded):
+            dropped["not in --projects"] += 1; continue
+        raw = c.command.strip()
+        if any(w in raw.lower() for w in excluded):             # before masking: a masked value can hide the word
+            dropped["excluded word"] += 1; continue
+        cmd = common.mask(raw)
+        if len(cmd) > args.max_chars:
             dropped["too long"] += 1; continue
-        key = " ".join(cmd.split())
-        if any(part in key.lower() for part in EXCLUDED_PARTS):
-            dropped["excluded word"] = dropped.get("excluded word", 0) + 1; continue
-        if any(e and e in key for e in evals) or key in evals:
-            dropped["overlaps eval"] += 1; continue
-        if key in seen:
+        cid = common.command_id(raw)
+        if cid in seen:
             dropped["duplicate"] += 1; continue
-        seen.add(key)
-        rows.append({"command": cmd, "project": c.cwd.replace(str(HOME), "~").split("/")[2], "status": c.status})
-    with open(ROOT / "train/commands.jsonl", "w") as f:
-        for r in rows:
-            f.write(json.dumps(r, ensure_ascii=False) + "\n")
-    print("kept", len(rows), "dropped", dropped)
+        if common.near_eval(cmd, evals):
+            dropped["like an eval case"] += 1; continue
+        seen.add(cid)
+        rows.append({"id": cid, "command": cmd, "project": os.path.relpath(os.path.normpath(c.cwd), root).split(os.sep)[0],
+                     "session": common.command_id(c.session or "")[:12], "status": c.status,
+                     "cwd": os.path.normpath(c.cwd)})   # local only, for split.py's package-script check; never exported
+    common.write_jsonl({common.TRAIN / "commands.jsonl": rows})
+    print(f"read {files} session files; kept {len(rows)}; dropped {dropped}")
+    print("Sessions audit couldn't read, or lines it couldn't parse, are skipped silently; compare the count of session "
+          "files with what you expect.")
 
 main()

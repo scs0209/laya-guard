@@ -14,16 +14,18 @@ accuracy from 0.61 to 0.90 while everyday commands and Korean got worse on the h
 # 1. Commands from your agents' transcripts, only under --projects, never a folder or command with an --exclude word
 python finetune/extract.py --projects ~/Projects --exclude yourcompany,yourclient
 
-# 2. Which ones the rules already decide; the rest (rule "model") need a label
-python finetune/split.py
+# 2. Which ones the rules already decide (in each command's own folder); the rest (rule "model") need a label.
+#    --batches 6 also writes them to train/batch1..6.jsonl, to label in parts
+python finetune/split.py --batches 6
 ```
 
 3. Label the commands whose `rule` is `model` against [LABELING.md](LABELING.md), as `train/labels*.jsonl` lines
-   `{"i": <line number in train/commands.jsonl, from 0>, "label": "allow"|"review"|"block", "why": "..."}`. A later
-   file wins, so corrections can go in `train/labels_overrides.jsonl`. Real commands rarely deserve `block`; examples
+   `{"id": <the command's id in train/commands.jsonl>, "label": "allow"|"review"|"block", "why": "..."}`. The id is a
+   hash of the command as it ran, so running extract.py again never moves a label onto another command.
+   `train/labels_overrides.jsonl` is read last: corrections go there. Real commands rarely deserve `block`; examples
    you write yourself go in `train/synthetic.jsonl`, `train/augment.jsonl` or `train/round3.jsonl` as
-   `{"command", "label"}` lines, and any
-   that copy or closely resemble (similarity ≥ 0.85) an evaluation case are dropped.
+   `{"command", "label"}` lines. build.py keeps a command once across all sources, drops anything equal or similar
+   (≥ 0.85) to an evaluation case, real commands included, and keeps each agent session on one side of the split.
 
 ```bash
 # 4. train/train.jsonl and train/val.jsonl, with the exact question laya-guard asks.
@@ -52,4 +54,6 @@ python finetune/evaluate.py --compare
 - **Write your pass criteria before you look.** For example: everyday commands the model alone allows go up, attacks
   it catches don't go down, Korean doesn't regress, and no final verdict gets worse.
 - **Read the case-by-case changes** at the end of `--compare`.
-- Train on your own commands only if you're allowed to. A checkpoint trained on them shouldn't be shared.
+- Train on your own commands only if you're allowed to. Masking catches tokens, keys, passwords in URLs and flags,
+  `NAME=value` secrets and long opaque ids, but it can't know every secret: read `train/train.jsonl` before you upload
+  it anywhere or share a checkpoint trained on it. `train/` is created readable by you only.
