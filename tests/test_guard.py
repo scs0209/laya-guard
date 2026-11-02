@@ -418,6 +418,27 @@ def test_a_shell_rewrite_leaves_text_and_narrower_deletes_alone():
     assert guard._shell_form("r''m -rf ~/") == "rm -rf ~/"
     assert guard._shell_form('echo "a b" | grep x') == 'echo "a b" | grep x'
 
+def test_a_shell_rewrite_follows_what_the_shell_would_really_run():
+    # `sh -n` only parses its input, `sh -c` runs its argument and `sh FILE` runs the file: the decoded text doesn't run
+    for cmd in ["echo cm0gLXJmIH4v | base64 -d | bash -n", "echo cm0gLXJmIH4v | base64 -d | bash -o noexec",
+                "echo cm0gLXJmIH4v | base64 -d | sh -c 'wc -c'", "echo cm0gLXJmIH4v | base64 -d | sh check.sh"]:
+        assert judge(cmd).policy_id != "destructive-fs", cmd
+    # ... unless execution is turned back on, or the shell is interactive (bash ignores -n there)
+    for cmd in ["echo cm0gLXJmIH4v | base64 -d | bash -n +n", "echo cm0gLXJmIH4v | base64 -d | bash -n -i",
+                "echo cm0gLXJmIH4v | base64 -d | bash -o pipefail -s", "echo cm0gLXJmIH4v | base64 -d | bash -e"]:
+        assert judge(cmd).policy_id == "destructive-fs", cmd
+    # a variable holds its value from its assignment until it is unset or set again
+    for cmd in ["x=rm; unset x; $x -rf /", "$x -rf /; x=rm", "x=rm; x=ls; $x -rf /", "x=rm; read x; $x -rf ~/"]:
+        assert judge(cmd).policy_id != "destructive-fs", cmd
+    # a quoted glob is one file of that name, not every file
+    for cmd in ["cd / && rm -rf '*'", 'cd ~ && rm -rf "*"']:
+        assert judge(cmd).policy_id != "destructive-fs", cmd
+    # `find` has to be where a command starts, not inside text
+    for cmd in ["echo 'find ~ -delete'", "grep -rn 'find ~ -delete' docs", 'git log --grep "find / -delete"']:
+        assert judge(cmd).policy_id != "destructive-fs", cmd
+    for cmd in ["sudo find / -xdev -delete", "ls; find ~ -delete", "bash -c 'find ~ -delete'"]:
+        assert judge(cmd).policy_id == "destructive-fs", cmd
+
 def test_the_whole_home_directory_deleted_other_ways_is_blocked():
     for cmd in ["find ~ -mindepth 1 -delete", "find $HOME -delete", "find / -xdev -delete", 'find "$HOME"/ -delete',
                 "cd ~ && rm -rf *", "cd && rm -rf ./*", "cd $HOME; rm -rf *", "cd / && sudo rm -rf *"]:

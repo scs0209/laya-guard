@@ -88,9 +88,10 @@ policies:
       - '(?:^|[;&|(`\n]|\$\(|\b(?:then|do|else)\b|\b(?:sudo|doas|nohup|time|exec|command|env|xargs)\b(?:\s+-\S+)*|-exec(?:dir)?|\b(?:ba|z|da|k)?sh\s+-\w*c\s+["\''])\s*rm\s+(?:\S+\s+)*?(?:-[A-Za-z]*[rR][A-Za-z]*|--recursive)\s+(?:\S+\s+)*?["\'']?/(?=\s|$|[;&|)`"\''}\\*])'
       - '(?:^|[;&|(`\n]|\$\(|\b(?:then|do|else)\b|\b(?:sudo|doas|nohup|time|exec|command|env|xargs)\b(?:\s+-\S+)*|-exec(?:dir)?|\b(?:ba|z|da|k)?sh\s+-\w*c\s+["\''])\s*rm\s+(?:\S+\s+)*?(?:-[A-Za-z]*[rR][A-Za-z]*|--recursive)\s+(?:\S+\s+)*?["\'']?(?:~|\$HOME|\$\{HOME\})(?:/\*?)?["\'']?(?=\s|$|[;&|)`])'
       # the whole home directory or root by other means (#86): `find ~ -delete` with no filter but depth options, and
-      # `rm -rf *` right after `cd ~` (a bare `cd`, `cd $HOME`, `cd /`). A name filter or a subfolder is left to the model.
-      - '\bfind\s+["'']?(?:~|\$HOME|\$\{HOME\}|/)/?["'']?(?:\s+-(?:mindepth|maxdepth)\s+\d+|\s+-(?:depth|xdev|mount|d))*\s+-delete\b'
-      - '(?:^|[;&|(\n])\s*cd(?:\s+["'']?(?:~|\$HOME|\$\{HOME\}|/)/?["'']?)?\s*(?:&&|;|\n)\s*(?:sudo\s+(?:-\S+\s+)*)?rm\s+(?:\S+\s+)*?(?:-[A-Za-z]*[rR][A-Za-z]*|--recursive)\s+(?:\S+\s+)*?["'']?(?:\./)?\*["'']?(?=\s|$|[;&|)])'
+      # `rm -rf *` right after `cd ~` (a bare `cd`, `cd $HOME`, `cd /`), each where a command starts (not inside text).
+      # A name filter, a subfolder or a quoted `'*'` (one file of that name) is left to the model.
+      - '(?:^|[;&|(`\n]|\$\(|\b(?:then|do|else)\b|\b(?:sudo|doas|nohup|time|exec|command|env)\b(?:\s+-\S+)*|\b(?:ba|z|da|k)?sh\s+-\w*c\s+["''])\s*find\s+["'']?(?:~|\$HOME|\$\{HOME\}|/)/?["'']?(?:\s+-(?:mindepth|maxdepth)\s+\d+|\s+-(?:depth|xdev|mount|d))*\s+-delete\b'
+      - '(?:^|[;&|(\n])\s*cd(?:\s+["'']?(?:~|\$HOME|\$\{HOME\}|/)/?["'']?)?\s*(?:&&|;|\n)\s*(?:sudo\s+(?:-\S+\s+)*)?rm\s+(?:\S+\s+)*?(?:-[A-Za-z]*[rR][A-Za-z]*|--recursive)\s+(?:\S+\s+)*?(?:\./)?\*(?=\s|$|[;&|)])'
       - 'mkfs(\.| )'
       - '\bdd\s+if=.*of=/dev/'
       - ': ?\{\s*:.*\}\s*;'

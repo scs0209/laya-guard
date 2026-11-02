@@ -109,15 +109,17 @@ def _regex_hit(text: str) -> Policy | None:
 # blocked while `r''m -rf ~/`, `\rm -rf ~/`, `/bin/rm -rf ~/`, `rm${IFS}-rf${IFS}~/`, `eval "rm -rf ~/"` and
 # `x=rm; $x -rf ~/` went to the model, which only asks where someone can answer (#86). So the regexes also read the
 # command as the shell runs it. Only the regexes: the safe lane and the model still see what was written.
-_WORD_QUOTES = re.compile(r"""(['"])([^'"\s;&|<>()`$\\]*)\1""")         # r''m, .s'sh', "r"m: quotes inside one word
+# Quotes inside one word (r''m, .s'sh', "r"m) are taken out, but not around a glob: `rm -rf '*'` names one file.
+_WORD_QUOTES = re.compile(r"""(['"])([^'"\s;&|<>()`$\\*?\[]*)\1""")
 _WORD_ESCAPE = re.compile(r"\\(?=[A-Za-z0-9_./~-])")                     # \rm: an escaped letter is the letter
 _BIN_DIR = re.compile(r"(?<![\w./~$-])/(?:usr/)?(?:local/)?s?bin/(?=[\w.-])")   # /bin/rm, /usr/bin/env: the command
 _IFS = re.compile(r"\$\{IFS\}|\$IFS\b")
 _EVAL = re.compile(r"""\beval\s+(?:(['"])(.*?)\1|(?=\S))""", re.S)
 _PLAIN_ASSIGN = re.compile(r"(?:^|[;&|(\s])([A-Za-z_]\w*)=([\w./~:+-]+)(?=\s*(?:;|&&|\|\||\n|$))")
-_XARGS = re.compile(r"\becho\s+([^|;&\n]+?)\s*\|\s*xargs\s+(?:-[A-Za-z]+\s+)*([^|;&\n]+)")
+_XARGS = re.compile(r"\becho\s+([^|;&\n]+?)\s*\|\s*xargs\s+(?:-[A-Za-z0-9]+\s+)*([^|;&\n]+)")
 _B64 = r"""\becho\s+(?:-n\s+)?(['"]?)([A-Za-z0-9+/]{8,}={0,2})\1\s*\|\s*base64\s+(?:-d|--decode|-D)\b"""
-_B64_RUN = (re.compile(rf"\$\(\s*{_B64}\s*\)"), re.compile(rf"{_B64}\s*\|\s*(?:ba|z|da|k)?sh\b"))  # sh -c "$(…)", | sh
+_B64_SUBST = re.compile(rf"\$\(\s*{_B64}\s*\)")                                  # sh -c "$(echo … | base64 -d)"
+_B64_PIPE = re.compile(rf"{_B64}\s*\|\s*(?:ba|z|da|k)?sh\b((?:[ \t]+[^\s|;&]+)*)")  # echo … | base64 -d | sh [args]
 
 def _decoded(m: re.Match) -> str:
     try:
@@ -126,22 +128,58 @@ def _decoded(m: re.Match) -> str:
         return m.group(0)
     return text if text.isprintable() else m.group(0)
 
+def _runs_stdin(args: str) -> bool:
+    """Whether `sh ARGS` runs the script it reads on stdin. Not with -c (it runs its argument) or a script file, and not
+    with -n (or -o noexec), unless a later +n turns it back on or -i makes it interactive, where bash ignores -n."""
+    words, noexec, interactive = iter(args.split()), False, False
+    for w in words:
+        if w in ("-o", "+o"):                             # `-o noexec` is -n; another option name is skipped
+            noexec = (w == "-o") if next(words, "") == "noexec" else noexec
+        elif w.startswith("-") and not w.startswith("--"):
+            if "c" in w:
+                return False
+            noexec = noexec or "n" in w
+            interactive = interactive or "i" in w
+        elif w.startswith("+"):
+            noexec = noexec and "n" not in w
+        elif not w.startswith("--"):
+            return False                                  # a script file: stdin is its data
+    return interactive or not noexec
+
+def _plain_vars(text: str) -> dict[str, tuple[int, str]]:
+    """{name: (where its assignment ends, value)} for each variable set once, to a plain value, and not changed or
+    unset anywhere else in text, so its value holds from there on."""
+    found: dict[str, tuple[int, str] | None] = {}
+    for m in _PLAIN_ASSIGN.finditer(text):
+        found[m.group(1)] = None if m.group(1) in found else (m.end(), m.group(2))
+    keep = {}
+    for name, at in found.items():
+        assigned = len(re.findall(rf"(?:^|[;&|(\s]){name}\+?=", text))
+        changed = re.search(rf"\b(?:unset|read|mapfile|readarray|getopts|let|declare|typeset|local|printf\s+-v)\b"
+                            rf"[^;&|\n]*\b{name}\b", text)
+        if at is not None and assigned == 1 and not changed:
+            keep[name] = at
+    return keep
+
 def _shell_form(text: str) -> str:
     """text as the shell runs it, as far as the regexes need: a literal base64 string decoded where it is run, `eval`'s
     text, `${IFS}` as a space, quotes inside a word and an escaped letter removed, `/bin/rm` as `rm`, a variable set to a
-    plain value earlier in the line replaced by it, `echo A | xargs cmd` as `cmd A`. Twice, so each step sees the
-    others' output (`eval "r''m -rf ~/"`)."""
+    plain value earlier in the line replaced by it after that point, `echo A | xargs cmd` as `cmd A`. Twice, so each
+    step sees the others' output (`eval "r''m -rf ~/"`)."""
     for _ in range(2):
-        for rx in _B64_RUN:
-            text = rx.sub(_decoded, text)
+        text = _B64_SUBST.sub(_decoded, text)
+        text = _B64_PIPE.sub(lambda m: _decoded(m) if _runs_stdin(m.group(3)) else m.group(0), text)
         text = _EVAL.sub(lambda m: m.group(2) if m.group(1) else "", text)
         text = _IFS.sub(" ", text)
         text = _WORD_QUOTES.sub(r"\2", text)
         text = _WORD_ESCAPE.sub("", text)
         text = _BIN_DIR.sub("", text)
-        known = dict(_PLAIN_ASSIGN.findall(text))
+        known = _plain_vars(text)
         if known:
-            text = _VAR_REF.sub(lambda m: known.get(m.group(1) or m.group(2), m.group(0)), text)
+            def value(m, known=known):
+                at = known.get(m.group(1) or m.group(2))
+                return at[1] if at is not None and m.start() >= at[0] else m.group(0)
+            text = _VAR_REF.sub(value, text)
         text = _XARGS.sub(r"\2 \1", text)
     return text
 
