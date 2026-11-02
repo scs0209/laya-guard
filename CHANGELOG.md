@@ -5,6 +5,17 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- **Tools to fine-tune the model on your own commands** ([finetune/](finetune/README.md)): pull the shell commands
+  your agents ran from their transcripts (only the project folders you name, never one with an `--exclude` word,
+  secrets and the home path masked, nothing that copies or closely resembles an evaluation case), see which ones the
+  rules already decide, label the rest against a written guide, build the training files with the exact question
+  laya-guard asks, train on a free Colab GPU, and compare with the base model on the benchmark and eval sets. Your
+  data stays in `train/`, which git ignores. Nothing changes what laya-guard runs. A first run raised validation
+  accuracy from 0.61 to 0.90 but made everyday commands (25 → 23 of 50 allowed by the model alone) and Korean
+  requests (30 → 28 of 30 end to end) worse, so it wasn't used.
+
 ## [0.6.2] - 2026-11-02
 
 A blocked command stays blocked however the shell is told to run it, the Claude Code hook answers about twice as
