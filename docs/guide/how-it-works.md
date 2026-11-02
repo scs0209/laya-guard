@@ -58,6 +58,15 @@ for its command. Reading the repository and its host is in the list (`git fetch`
 `--prune` or a refspec, `git rev-parse`, `gh pr view`/`checks`, `gh api` without a method or
 body).
 
+The regexes also read the command the way the shell runs it, so writing a blocked command
+another way doesn't soften the answer: `r''m -rf ~/`, `\rm -rf ~/`, `/bin/rm -rf ~/`,
+`rm${IFS}-rf${IFS}~/`, `eval "rm -rf ~/"`, `x=rm; $x -rf ~/`, `echo ~/ | xargs rm -rf` and a
+literal base64 string decoded into `sh` (`echo … | base64 -d | sh`, `sh -c "$(echo … | base64 -d)"`)
+are all blocked as `rm -rf ~/` is. Only quotes inside one word are taken out, so a quoted
+string with a space (`grep "rm -rf ~/" docs`) is still text. The safe lane and the model still
+read the command as written. In a chain, a block a rule reached outranks one only the model
+reached, which in the agents that ask would become a question.
+
 Windows commands get the same lane: a backslash between two path parts is read as a
 path separator (`cd C:\work\api`, `type src\app.py`, `pytest tests\unit`), cmd's
 `%VAR%` counts like `$VAR`, and the list has the cmd.exe and PowerShell equivalents
@@ -105,7 +114,7 @@ the same as one model call, so a 6-window input takes a few seconds.
 
 | id | What it catches | Regex hit ⇒ |
 |---|---|---|
-| `destructive-fs` | `rm -rf /` and `rm -rf ~`/`$HOME` in any flag order (`-fr`, `-r -f`, `--recursive --force`), `mkfs`, `dd` to devices, fork bombs | block |
+| `destructive-fs` | `rm -rf /` and `rm -rf ~`/`$HOME` in any flag order (`-fr`, `-r -f`, `--recursive --force`) and however the shell gets there (`r''m`, `\rm`, `/bin/rm`, `${IFS}`, `eval`, `$x`, `xargs`, base64 into `sh`), `find ~ -delete` and `find / -delete` with no filter, `rm -rf *` right after `cd ~` or `cd /`, `mkfs`, `dd` to devices, fork bombs | block |
 | `pipe-to-shell` | `curl … \| sh`, `wget … \| sudo bash`, `bash -c "$(curl …)"`, `bash <(curl …)` | block |
 | `exfiltration` | tunnels, pipes into `nc`, `curl -d @file` uploads | review |
 | `prompt-injection` | ignore-previous-instructions, jailbreaks, KR+EN | block |
@@ -114,7 +123,7 @@ the same as one model call, so a 6-window input takes a few seconds.
 | `remote-exec` | sketchy package indexes, remote scripts, local pipes into a shell, encoded PS | review |
 | `priv-escalation` | `sudo sh`, `chmod 777`, setuid, redirects into `/etc/` | review |
 | `persistence` | cron, services, shell-rc hooks, git `core.hooksPath`/`core.pager` | review |
-| `mass-delete` | `DROP TABLE`, `s3 rm --recursive`, `kubectl delete --all`, `git push --force`, `git reset --hard`, `git clean -f`, `git checkout -- .`, a delete inside an API request body (`mutation { volumeDelete(...) }`, `{"method": "deleteDatabase"}`) | review |
+| `mass-delete` | `DROP TABLE`, `s3 rm --recursive`, `kubectl delete --all`, `git push --force`, `git reset --hard`, `git clean -f`, `git checkout -- .`, a delete inside an API request body (`mutation { volumeDelete(...) }`, `{"method": "deleteDatabase"}`), `rm -rf` of a folder right under the home directory (`~/Documents`, `~/.config`), Python or Perl removing the home directory (`shutil.rmtree`, `rmtree`, `remove_tree`) | review |
 | `auth-bypass` | auth/TLS disabling, password resets, KR+EN | block |
 | `credential-read` | reading private keys / cloud credentials (`cat ~/.ssh/id_rsa`, `cat ~/.aws/credentials`, …) | review |
 

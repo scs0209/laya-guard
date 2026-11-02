@@ -50,6 +50,13 @@
 펼치지 않는 heredoc(`git commit -F - <<'EOF'`)은 그 명령의 데이터입니다. 저장소와 호스팅을 읽는 명령도 목록에
 있습니다(`--prune`·refspec 없는 `git fetch`, `git rev-parse`, `gh pr view`/`checks`, 메서드·본문 없는 `gh api`).
 
+정규식은 셸이 실제로 실행하는 형태로도 명령을 읽습니다. 그래서 차단되는 명령을 다르게 써도 판정이 약해지지 않습니다.
+`r''m -rf ~/`, `\rm -rf ~/`, `/bin/rm -rf ~/`, `rm${IFS}-rf${IFS}~/`, `eval "rm -rf ~/"`, `x=rm; $x -rf ~/`,
+`echo ~/ | xargs rm -rf`, 그리고 `sh`로 들어가는 base64 문자열(`echo … | base64 -d | sh`, `sh -c "$(echo … | base64 -d)"`)은
+모두 `rm -rf ~/`처럼 차단됩니다. 한 단어 안의 따옴표만 떼므로, 공백이 든 따옴표 문자열(`grep "rm -rf ~/" docs`)은 그대로
+텍스트입니다. 안전 레인과 모델은 여전히 쓰인 그대로의 명령을 읽습니다. 이어진 명령에서는 규칙이 내린 차단이 모델만 내린
+차단보다 우선합니다. 물어볼 수 있는 에이전트에서는 모델만 내린 차단이 질문으로 바뀌기 때문입니다.
+
 Windows 명령도 같은 레인을 탑니다. 경로 사이의 백슬래시는 경로 구분자로 읽고
 (`cd C:\work\api`, `type src\app.py`, `pytest tests\unit`), cmd의 `%VAR%`는 `$VAR`처럼
 취급하며, cmd.exe·PowerShell의 같은 명령(`dir`, `type`, `findstr`, `where`, `md`,
@@ -85,7 +92,7 @@ build`, `vite build`, `jest` 같은 평범한 스크립트를 차단하기 때�
 
 | id | 잡는 것 | 정규식 적중 시 |
 |---|---|---|
-| `destructive-fs` | `rm -rf /`, `rm -rf ~`/`$HOME` (플래그 순서 무관: `-fr`, `-r -f`, `--recursive --force`), `mkfs`, 디바이스 `dd`, 포크밤 | block |
+| `destructive-fs` | `rm -rf /`, `rm -rf ~`/`$HOME` (플래그 순서 무관: `-fr`, `-r -f`, `--recursive --force`, 셸이 어떻게 풀든: `r''m`, `\rm`, `/bin/rm`, `${IFS}`, `eval`, `$x`, `xargs`, `sh`로 들어가는 base64), 필터 없는 `find ~ -delete`·`find / -delete`, `cd ~`·`cd /` 바로 뒤의 `rm -rf *`, `mkfs`, 디바이스 `dd`, 포크밤 | block |
 | `pipe-to-shell` | `curl … \| sh`, `wget … \| sudo bash`, `bash -c "$(curl …)"`, `bash <(curl …)` | block |
 | `exfiltration` | 터널, `nc`로 파이프, `curl -d @파일` 업로드 | review |
 | `prompt-injection` | 이전 지시 무시, 탈옥, 한영 | block |
@@ -94,7 +101,7 @@ build`, `vite build`, `jest` 같은 평범한 스크립트를 차단하기 때�
 | `remote-exec` | 수상한 패키지 인덱스, 원격 스크립트, 로컬 내용을 셸로 파이프, 인코딩된 PS | review |
 | `priv-escalation` | `sudo sh`, `chmod 777`, setuid, `/etc/`로 리다이렉트 | review |
 | `persistence` | cron, 서비스 등록, 셸rc 후킹, git `core.hooksPath`/`core.pager` | review |
-| `mass-delete` | `DROP TABLE`, `s3 rm --recursive`, `kubectl delete --all`, `git push --force`, `git reset --hard`, `git clean -f`, `git checkout -- .`, API 요청 본문 안의 삭제(`mutation { volumeDelete(...) }`, `{"method": "deleteDatabase"}`) | review |
+| `mass-delete` | `DROP TABLE`, `s3 rm --recursive`, `kubectl delete --all`, `git push --force`, `git reset --hard`, `git clean -f`, `git checkout -- .`, API 요청 본문 안의 삭제(`mutation { volumeDelete(...) }`, `{"method": "deleteDatabase"}`), 홈 바로 아래 폴더의 `rm -rf`(`~/Documents`, `~/.config`), Python·Perl로 홈 디렉터리 지우기(`shutil.rmtree`, `rmtree`, `remove_tree`) | review |
 | `auth-bypass` | 인증/TLS 무력화, 비밀번호 초기화, 한영 | block |
 | `credential-read` | 개인키·클라우드 자격 증명 읽기(`cat ~/.ssh/id_rsa`, `cat ~/.aws/credentials` 등) | review |
 

@@ -18,6 +18,26 @@ All notable changes to this project are documented here. Versions follow
   are allowed for the project (separate rows). Five credential-reading cases and two native Windows commands sent as
   Bash are counted apart in a by-kind table. The page says plainly that the set was written by laya-guard's author.
 
+### Changed
+
+- **A blocked command written another way is blocked too** (#86). The regexes also read the command the way the shell
+  runs it: quotes inside a word (`r''m`), an escaped letter (`\rm`), `/bin/rm`, `${IFS}`, `eval "…"`, a variable used
+  as the command (`x=rm; $x`), `echo … | xargs cmd`, and a literal base64 string decoded into `sh` or `sh -c "$(…)"`.
+  These used to reach only the model, and a block the model reaches alone becomes a question in Claude Code, Cursor,
+  Qwen Code and Copilot CLI, so the less obvious form got the softer answer. The safe lane and the model still read
+  the command as written. In the benchmark, laya-guard now blocks 20 of the 30 evasions instead of 9, and the
+  everyday commands, incidents and eval gates are unchanged.
+- `destructive-fs` also blocks `find ~ -delete` / `find / -delete` with no filter but depth options, and `rm -rf *`
+  right after `cd ~`, a bare `cd`, `cd $HOME` or `cd /`.
+- `mass-delete` (asks) also covers `rm -rf` of a folder right under the home directory (`~/Documents`, `~/.config`)
+  and Python or Perl removing the home directory (`shutil.rmtree`, `rmtree`, `remove_tree`). These can move to block
+  once they're seen not to catch ordinary work.
+
+### Fixed
+
+- In a chain, a block a rule reached now outranks one only the model reached with a higher risk. The model's became a
+  question in the agents that ask, so `cd ~ && rm -rf *` was asked about although its rule blocks.
+
 ## [0.6.1] - 2026-10-23
 
 A force-push hole closed, and a page where anyone can try the guard without installing it.

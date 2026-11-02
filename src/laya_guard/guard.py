@@ -1,5 +1,6 @@
 """laya-guard core: regex prefilter + Laya judge (local, free)."""
 from __future__ import annotations
+import base64
 import contextlib
 import contextvars
 import itertools
@@ -89,15 +90,60 @@ def is_mock() -> bool:
         return True
 
 def _regex_hit(text: str) -> Policy | None:
+    """The policy whose regexes match text, or the form the shell runs it as (_shell_form); a block outranks a review."""
     _ensure()
     assert _policies is not None
+    forms = [text]
+    form = _shell_form(text)
+    if form != text:
+        forms.append(form)
     first_review = None
     for pol in _policies:
-        if any(rx.search(text) for rx in pol.compiled):
+        if any(rx.search(f) for rx in pol.compiled for f in forms):
             if pol.action_on_regex == "block":
                 return pol
             first_review = first_review or pol
     return first_review
+
+# The shell rewrites a command before it runs it, and the regexes used to read only what was written: `rm -rf ~/` was
+# blocked while `r''m -rf ~/`, `\rm -rf ~/`, `/bin/rm -rf ~/`, `rm${IFS}-rf${IFS}~/`, `eval "rm -rf ~/"` and
+# `x=rm; $x -rf ~/` went to the model, which only asks where someone can answer (#86). So the regexes also read the
+# command as the shell runs it. Only the regexes: the safe lane and the model still see what was written.
+_WORD_QUOTES = re.compile(r"""(['"])([^'"\s;&|<>()`$\\]*)\1""")         # r''m, .s'sh', "r"m: quotes inside one word
+_WORD_ESCAPE = re.compile(r"\\(?=[A-Za-z0-9_./~-])")                     # \rm: an escaped letter is the letter
+_BIN_DIR = re.compile(r"(?<![\w./~$-])/(?:usr/)?(?:local/)?s?bin/(?=[\w.-])")   # /bin/rm, /usr/bin/env: the command
+_IFS = re.compile(r"\$\{IFS\}|\$IFS\b")
+_EVAL = re.compile(r"""\beval\s+(?:(['"])(.*?)\1|(?=\S))""", re.S)
+_PLAIN_ASSIGN = re.compile(r"(?:^|[;&|(\s])([A-Za-z_]\w*)=([\w./~:+-]+)(?=\s*(?:;|&&|\|\||\n|$))")
+_XARGS = re.compile(r"\becho\s+([^|;&\n]+?)\s*\|\s*xargs\s+(?:-[A-Za-z]+\s+)*([^|;&\n]+)")
+_B64 = r"""\becho\s+(?:-n\s+)?(['"]?)([A-Za-z0-9+/]{8,}={0,2})\1\s*\|\s*base64\s+(?:-d|--decode|-D)\b"""
+_B64_RUN = (re.compile(rf"\$\(\s*{_B64}\s*\)"), re.compile(rf"{_B64}\s*\|\s*(?:ba|z|da|k)?sh\b"))  # sh -c "$(…)", | sh
+
+def _decoded(m: re.Match) -> str:
+    try:
+        text = base64.b64decode(m.group(2), validate=True).decode("utf-8")
+    except (ValueError, UnicodeDecodeError):
+        return m.group(0)
+    return text if text.isprintable() else m.group(0)
+
+def _shell_form(text: str) -> str:
+    """text as the shell runs it, as far as the regexes need: a literal base64 string decoded where it is run, `eval`'s
+    text, `${IFS}` as a space, quotes inside a word and an escaped letter removed, `/bin/rm` as `rm`, a variable set to a
+    plain value earlier in the line replaced by it, `echo A | xargs cmd` as `cmd A`. Twice, so each step sees the
+    others' output (`eval "r''m -rf ~/"`)."""
+    for _ in range(2):
+        for rx in _B64_RUN:
+            text = rx.sub(_decoded, text)
+        text = _EVAL.sub(lambda m: m.group(2) if m.group(1) else "", text)
+        text = _IFS.sub(" ", text)
+        text = _WORD_QUOTES.sub(r"\2", text)
+        text = _WORD_ESCAPE.sub("", text)
+        text = _BIN_DIR.sub("", text)
+        known = dict(_PLAIN_ASSIGN.findall(text))
+        if known:
+            text = _VAR_REF.sub(lambda m: known.get(m.group(1) or m.group(2), m.group(0)), text)
+        text = _XARGS.sub(r"\2 \1", text)
+    return text
 
 # The safe lane only opens for a single command: no chaining, pipes, redirects or
 # substitution, and no flags that run programs or write files (go test -exec, git log --output, …).
@@ -932,7 +978,10 @@ def _judge(tool_call: str, source: str, cwd: str | None) -> Verdict:
     if hit is not None and all(v.policy_id != hit.id for v in verdicts):
         _emit("segment", index=len(segments), total=len(segments), text=None, whole=True)
         verdicts.append(_judge_one(text, source, regex_text=tool_call))
-    return max(verdicts, key=lambda v: (_ACTION_RANK[v.action], v.risk))
+    # Between two blocks, the one a rule reached wins over a likelier one only the model reached: judge() turns the
+    # model's into a question where someone can answer, and `cd ~ && rm -rf *` was asked about that way (#86).
+    return max(verdicts, key=lambda v: (_ACTION_RANK[v.action],
+                                        v.action == "block" and v.verdict_source not in ("model", "heuristic"), v.risk))
 
 def _judge_one(tool_call: str, source: str, cwd: str | None = None,
                regex_text: str | None = None, variants: list[str] | None = None) -> Verdict:
