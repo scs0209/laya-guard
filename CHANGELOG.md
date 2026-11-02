@@ -13,13 +13,19 @@ All notable changes to this project are documented here. Versions follow
   Each guard is installed by its own Claude Code installer into its own temporary HOME, gets the JSON Claude Code
   sends a PreToolUse hook, and is read with Claude Code's rules (exit 2/deny/block, ask, otherwise run).
   `bash bench/setup.sh && python bench/run.py`; raw answers in `bench/results/`. laya-guard held 13/13 incidents and
-  30/30 evasions, mostly by asking, and asked about 4 of 50 everyday commands; dcg held 5/13 and 26/30 and blocked 2
+  30/30 evasions (22 of the 43 by blocking, after the changes below; 11 before), and asked about 4 of 50 everyday
+  commands; dcg held 5/13 and 26/30 and blocked 2
   everyday ones, and 9/13 and 28/30 with three of its opt-in packs on, and 50/50 everyday when the two held commands
   are allowed for the project (separate rows). Five credential-reading cases and two native Windows commands sent as
   Bash are counted apart in a by-kind table. The page says plainly that the set was written by laya-guard's author.
 
 ### Changed
 
+- **The Claude Code hook answers about twice as fast** (#85). It used to start `python3` six or seven times per call
+  (one per field it read, ~20 ms each); now twice, one to read the hook input and one to read the answer. Through the
+  installed hook on the benchmark's 97 cases, the median went from 171 ms to 71 ms on main, with every decision the
+  same, and the old and new hooks give the same exit code, output, request and offline fallback on 768 combinations of
+  input, server answer and settings.
 - **A blocked command written another way is blocked too** (#86). The regexes also read the command the way the shell
   runs it: quotes inside a word (`r''m`), an escaped letter (`\rm`), `/bin/rm`, `${IFS}`, `eval "…"`, `$'…'`, brace
   lists (`{rm,-rf,~/}`), `env FOO=bar` and `command` before the command, a variable used as the command (`x=rm; $x`,

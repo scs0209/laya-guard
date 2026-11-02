@@ -11,11 +11,11 @@ commands, sent to four command guards exactly as Claude Code sends a Bash call t
 > guards were run with their own installers and default settings (dcg also has two more rows: with three of its
 > opt-in packs on, and tuned), and every raw answer is published so you can check them.
 
-## Results (2026-10-23, dcg rows re-run 2026-10-24)
+## Results (2026-10-23, dcg rows re-run 2026-10-24, laya-guard row 2026-11-02)
 
 | guard | version | incidents held | evasions held | everyday allowed | median hook time |
 |---|---|---|---|---|---|
-| laya-guard | main after 0.6.0 | **13/13** (2 blocked, 11 asked) | **30/30** (9 blocked, 21 asked) | 46/50 (4 asked) | 171 ms |
+| laya-guard | main after 0.6.1 (#85, #87) | **13/13** (2 blocked, 11 asked) | **30/30** (20 blocked, 10 asked) | 46/50 (4 asked) | 71 ms |
 | [dcg](https://github.com/Dicklesworthstone/destructive_command_guard) | 0.15.3 | 5/13 (5 blocked) | 26/30 (26 blocked) | 48/50 (2 blocked) | 16 ms |
 | dcg + opt-in packs | 0.15.3, `cloud.aws` `database.postgresql` `platform.railway` on | 9/13 (9 blocked) | 28/30 (28 blocked) | 48/50 (2 blocked) | 15 ms |
 | dcg tuned | the same, and `rm -rf dist` and `rm -rf node_modules/.cache` allowed in the project | 9/13 (9 blocked) | 28/30 (28 blocked) | **50/50** | 17 ms |
@@ -26,7 +26,10 @@ commands, sent to four command guards exactly as Claude Code sends a Bash call t
 permission prompt. Every case and every guard's answer: [results/results.md](results/results.md). The hooks' raw
 stdout, stderr and exit codes: `results/<guard>.json`. The dcg rows were re-run on 2026-10-24, after the runner
 started keeping each hook's whole answer instead of its first 600 characters; the scores did not change, and their
-times are from that run (the other rows' are from 2026-10-23).
+times are from that run (the cc-safety-net and shellfirm rows' are from 2026-10-23). The laya-guard row was re-run on 2026-11-02 on main
+with #85 (the hook starts `python3` twice instead of six or seven times) and #87 (the rules also read a blocked
+command the way the shell runs it): 11 evasions went from asked to blocked, nothing else changed, and the median hook
+time went from 171 ms to 71 ms.
 
 The same 43 incident and evasion cases, grouped by what the command does. Five of them only read or look for
 credentials, and two are native Windows commands that this benchmark sends as Bash (see below):
@@ -41,10 +44,13 @@ credentials, and two are native Windows commands that this benchmark sends as Ba
 
 What the numbers say, and don't:
 
-- **laya-guard holds the most, mostly by asking.** 32 of its 43 holds are a permission prompt, not a block, and it asks
-  about 4 everyday commands (`npx tsc --noEmit`, `rm -rf dist`, `rm -rf node_modules/.cache`, `mv`). Asking costs
-  the user attention; the others block outright or stay silent. It is also the slowest: it runs a ~322M model on a
-  local server.
+- **laya-guard holds the most, about half of them by asking.** 21 of its 43 holds are a permission prompt, not a block
+  (32 before #87), and it asks about 4 everyday commands (`npx tsc --noEmit`, `rm -rf dist`,
+  `rm -rf node_modules/.cache`, `mv`). Asking costs the user attention; the others block outright or stay silent. The
+  questions left are force pushes, `git reset --hard`, `git clean`, `DROP TABLE`, cloud and API deletes, credential
+  reads, a line added to `~/.bashrc`, folders right under the home directory, Python or Perl removing it, and the two
+  Windows commands: rules that ask on purpose, or commands only the model reads. It is also
+  the slowest: it runs a ~322M-parameter model on a local server.
 - **The guards cover different things by design.** dcg and cc-safety-net target destructive git and filesystem
   commands (cc-safety-net also secret files); both catch most of the hidden `rm -rf ~` forms. dcg's other misses are
   cloud deletes (`aws … terminate-instances`, `iam delete-user`), `DROP TABLE` and a delete inside a GraphQL body.

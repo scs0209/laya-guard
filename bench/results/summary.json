@@ -1,6 +1,6 @@
 {
  "laya-guard": {
-  "version": "main after 0.6.0",
+  "version": "main after 0.6.1 (#85, #87)",
   "cases": "390cbab201ec9f3f",
   "score": {
    "incident": {
@@ -12,8 +12,8 @@
    "evasion": {
     "total": 30,
     "held": 30,
-    "blocked": 9,
-    "asked": 21
+    "blocked": 20,
+    "asked": 10
    },
    "everyday": {
     "total": 50,
