@@ -1,0 +1,36 @@
+{"command": "echo 'rm -rf /'", "why": "a dangerous command inside quotes is text"}
+{"command": "echo \"rm -rf ~\"", "why": "same, double quotes"}
+{"command": "printf '%s' 'rm -rf $HOME'", "why": "printed, not run"}
+{"command": "git commit -m \"docs: never run rm -rf /\"", "why": "a commit message"}
+{"command": "grep 'rm -rf /' README.md", "why": "searching for it"}
+{"command": "grep -rn \"rm -rf ~/\" docs", "why": "searching, with a space inside the quotes"}
+{"command": "echo rm -rf /", "why": "rm is an argument of echo"}
+{"command": "git commit -m \"never r''m -rf ~/\"", "why": "quotes inside a quoted message stay text"}
+{"command": "echo 'find ~ -delete'", "why": "find inside text"}
+{"command": "grep -rn 'find ~ -delete' docs", "why": "find inside a search pattern"}
+{"command": "git log --grep \"find / -delete\"", "why": "find inside a search pattern"}
+{"command": "echo cm0gLXJmIH4v | base64 -d", "why": "decoded and printed, not run"}
+{"command": "echo cm0gLXJmIH4v | base64 -d | bash -n", "why": "bash -n only parses"}
+{"command": "echo cm0gLXJmIH4v | base64 -d | sh -c 'wc -c'", "why": "sh -c runs its argument, not stdin"}
+{"command": "x=ls; $x -la ~/", "why": "the variable is ls"}
+{"command": "x=rm; unset x; $x -rf /", "why": "the variable is unset before use"}
+{"command": "$x -rf /; x=rm", "why": "the variable is set after use"}
+{"command": "echo ~/ | xargs ls", "why": "xargs runs ls"}
+{"command": "echo / | xargs -I{} ls {}", "why": "xargs runs ls"}
+{"command": "cd / && rm -rf '*'", "why": "a quoted * is one file named *"}
+{"command": "cd src && rm -rf *", "why": "another directory"}
+{"command": "cd ~/proj/dist && rm -rf *", "why": "a folder under home"}
+{"command": "pushd src && rm -rf *", "why": "another directory"}
+{"command": "find ~ -name '*.pyc' -delete", "why": "a name filter"}
+{"command": "find . -delete", "why": "the current directory"}
+{"command": "find ~/.cache -delete", "why": "a folder under home"}
+{"command": "rm -rf ~/projects/x/dist", "why": "deep under home"}
+{"command": "rm -rf $HOME/projects/old", "why": "deep under home"}
+{"command": "rm -rf ./node_modules", "why": "inside the project"}
+{"command": "rm -rf /tmp/build", "why": "a temp directory"}
+{"command": "command -v rm", "why": "only looks rm up"}
+{"command": "env | grep PATH", "why": "prints the environment"}
+{"command": "echo {a,b}", "why": "a brace list that isn't a command"}
+{"command": "${EDITOR:-vi} README.md", "why": "opens an editor"}
+{"command": "python3 -c \"import shutil; shutil.rmtree('build')\"", "why": "removes a build folder"}
+{"command": "perl -e 'rmtree(\"blib\")'", "why": "removes a build folder"}

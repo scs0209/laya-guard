@@ -1,0 +1,20 @@
+{"command": "r''m -rf ~/"}
+{"command": "\"r\"m -rf ~/"}
+{"command": "\\rm -rf ~/"}
+{"command": "/bin/rm -rf ~/"}
+{"command": "/usr/bin/rm -rf /"}
+{"command": "rm${IFS}-rf${IFS}${HOME}/"}
+{"command": "eval \"rm -rf ~/\""}
+{"command": "bash -c $'rm -rf /'"}
+{"command": "{rm,-rf,~/}"}
+{"command": "env FOO=bar rm -rf ~/"}
+{"command": "command rm -rf ~/"}
+{"command": "x=rm; $x -rf ~/"}
+{"command": "x=1; ${x:+rm} -rf /"}
+{"command": "echo ~/ | xargs -n 1 rm -rf"}
+{"command": "echo / | xargs -I{} find {} -delete"}
+{"command": "echo cm0gLXJmIH4v | base64 -d | sh"}
+{"command": "printf 'cm0gLXJmIH4vCg==' | base64 -d | sh"}
+{"command": "sh -c \"$(echo cm0gLXJmIH4v | base64 -d)\""}
+{"command": "find ~ -mindepth 1 -delete"}
+{"command": "cd ~ && rm -rf *"}

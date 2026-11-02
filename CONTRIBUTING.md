@@ -58,6 +58,19 @@ LAYA_GUARD_MOCK=1 PYTHONPATH=src python eval/run_eval.py --min-acc 1.0
 LAYA_GUARD_MOCK=1 PYTHONPATH=src python eval/run_eval.py --set shell --source tool --min-acc 0.96
 ```
 
+`tests/test_rule_line.py` holds the line between the rules and the model
+([What the rules catch](docs/guide/how-it-works.md#what-the-rules-catch-and-what-they-leave-to-the-model)), without
+the model, and fails the PR when:
+
+- a rule blocks an ordinary command: the benchmark's everyday commands, the eval set's allowed ones, or
+  `tests/data/never_blocked.jsonl`. There is no way around this one: change the rule;
+- a rewrite in `tests/data/rewrites_blocked.jsonl` (the shell runs it as a blocked command) is no longer blocked;
+- what the rules answer for any reference command changed and `tests/data/rule_verdicts.json` wasn't updated. If the
+  change is intended, run `python scripts/rule_snapshot.py --update` and commit the file: the diff is what reviewers
+  read. `python scripts/rule_snapshot.py` alone lists what changed.
+
+Found an ordinary command a rule shouldn't block, or a rewrite it should? Add it to the matching file in `tests/data/`.
+
 ### If you change `policy.yaml`, the safe-command lane, or what the model sees
 
 MOCK mode doesn't exercise the model, so also run the real-model evals and put

@@ -157,6 +157,10 @@ so nothing downstream can correct it.
 When someone (or a review bot) reports a bypass: fix it if it is in the first group and the fix adds no false block;
 otherwise reply that it is left to the model on purpose, with a link to this section.
 
+CI holds this line on every PR (`tests/test_rule_line.py`, no model needed): no rule may block an ordinary command,
+the rewrites in `tests/data/rewrites_blocked.jsonl` stay blocked, and any change to what the rules answer is saved in
+`tests/data/rule_verdicts.json` in the same PR ([CONTRIBUTING](../../CONTRIBUTING.md)).
+
 ## Benchmarks (reproducible, not cherry-picked)
 
 | Suite | Result | Command |

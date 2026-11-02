@@ -39,6 +39,10 @@ All notable changes to this project are documented here. Versions follow
   ([What the rules catch](docs/guide/how-it-works.md#what-the-rules-catch-and-what-they-leave-to-the-model)): a
   rewrite the shell does from the text alone is the rules' job; anything that needs a command to run or the machine to
   be read first is left to the model and the OS sandbox; a false block outranks a missed rewrite.
+- CI holds that line (`tests/test_rule_line.py`, no model): a rule blocking an ordinary command fails the PR, so does a
+  rewrite in `tests/data/rewrites_blocked.jsonl` that is no longer blocked, and so does any change to what the rules
+  answer for the 271 reference commands unless `tests/data/rule_verdicts.json` is updated with it
+  (`python scripts/rule_snapshot.py --update`).
 
 ### Fixed
 
