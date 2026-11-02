@@ -5,6 +5,18 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- **Tools to fine-tune the model on your own commands** ([finetune/](finetune/README.md)): pull the shell commands
+  your agents ran from their transcripts (only the project folders you name, never one with an `--exclude` word,
+  secrets, keys, passwords in URLs and flags, and the home path masked, nothing equal or similar to an evaluation
+  case), see which ones the rules already decide, label the rest against a written guide (labels are keyed by a hash
+  of the command, so they never move), build the training files with the exact question laya-guard asks, train on a
+  free Colab GPU, and compare with the base model on the benchmark and eval sets. Your data stays in `train/`, which
+  git ignores and only you can read. They made the model below in three runs: the first got stricter on ordinary
+  commands (25 → 23 of 50 allowed by the model alone), the second let a Windows drive wipe and a delete hidden behind
+  a comment through, and the third is the one laya-guard runs.
+
 ### Changed
 
 - **The model step runs a fine-tuned Laya** ([laya-guard-multilingual](https://huggingface.co/Ayaannnnnnn/laya-guard-multilingual)):

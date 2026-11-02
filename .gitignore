@@ -19,3 +19,6 @@ build/
 
 # benchmark: third-party guards installed by bench/setup.sh
 bench/.tools/
+
+# fine-tuning: your own commands, labels and checkpoints (finetune/README.md)
+train/
