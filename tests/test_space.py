@@ -79,6 +79,7 @@ def test_the_app_serves_the_page_and_the_judge_only(monkeypatch):
     import app
     c = TestClient(app.app)
     assert c.get("/").status_code == 200 and "laya-guard trial" in c.get("/").text
+    assert c.get("/api/health").json() == {"model": False}  # warm-up failed: judgments are the fallback's
     r = c.post("/api/judge", json={"command": "d=~; rm -rf $d", "agent": "codex"}).json()
     assert r["action"] == "block"
     assert c.post("/api/judge", json={"command": "ls", "agent": "other"}).status_code == 400
