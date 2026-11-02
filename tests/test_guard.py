@@ -105,6 +105,23 @@ BYPASS = [
     "printf '%100c%n' x PATH; ls", "printf %n PATH", 'printf "%5c%n" x PATH', "printf '%-3n' PATH",
 ]
 
+
+def test_fullwidth_destructive_commands_are_blocked():
+    """NFKC folds ｒｍ / ／ so the regex pass sees rm -rf / (#95)."""
+    for cmd in ("ｒｍ -rf /", "rm -rf ／"):
+        v = judge(cmd)
+        assert v.action == "block", cmd
+        assert v.verdict_source == "regex", cmd
+
+def test_fullwidth_text_that_is_not_run_stays_allowed():
+    """Ordinary non-ASCII / full-width text that is not executed must not trip the rules."""
+    for cmd in (
+        'git commit -m "문서: ｒｍ은 텍스트일 뿐"',
+        "echo 'ｒｍ'",
+    ):
+        v = judge(cmd)
+        assert v.action != "block" or v.verdict_source != "regex", (cmd, v)
+
 def test_safe_lane_allows_everyday_commands():
     for cmd in SAFE:
         v = judge(cmd)
