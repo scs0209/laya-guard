@@ -156,7 +156,7 @@ laya-guard footprint --suggest           # 프로젝트별로 무엇을 건드�
 | AgentDojo v1 정상 (심판 레벨) | **92/97 유지** (allow+review) | `eval/run_agentdojo.py` |
 | E2E 롤아웃 (qwen2.5:7b 에이전트 + 가드) | **4/4 시나리오** (1 방어, 2 미시도, 1 정상 OK) | `eval/run_rollout.py` |
 | 실제 사고 재현 (공개된 사고 7건) | **13/13 붙잡음** (0.5.1에선 12/13. 놓친 GraphQL 호출 안의 삭제에 규칙 추가) | `eval/run_incidents.py` |
-| [사고 벤치마크](bench/README.ko.md): 같은 사고 + 셸 변형 30 + 평범한 명령 50을 dcg·cc-safety-net·shellfirm과 Claude Code 훅으로 비교 | **13/13, 30/30 붙잡음**(대부분 확인 요청), 평범한 명령 46/50 허용; dcg 5/13, 26/30, 48/50 | `bench/run.py` |
+| [사고 벤치마크](bench/README.ko.md): 같은 사고 + 셸 변형 30 + 평범한 명령 50을 dcg·cc-safety-net·shellfirm과 Claude Code 훅으로 비교 | **13/13, 30/30 붙잡음**(차단 22, 확인 요청 21), 평범한 명령 46/50 허용; dcg 5/13, 26/30, 48/50 | `bench/run.py` |
 | 셸 명령 (자체: 일상 35 + 위험/우회 36) | **69/71** (실전 모델) | `eval/run_eval.py --set shell` |
 | 한국어 30문항 (자체) | **30/30** (MOCK·실전 모두) | `eval/run_eval.py` |
 

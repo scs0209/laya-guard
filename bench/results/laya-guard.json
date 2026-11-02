@@ -1,6 +1,6 @@
 {
  "guard": "laya-guard",
- "version": "main after 0.6.0",
+ "version": "main after 0.6.1 (#85, #87)",
  "cases": "390cbab201ec9f3f",
  "hooks": [
   "LAYA_GUARD_MANAGED=1 LAYA_GUARD_BIN=.venv/bin/laya-guard bash src/laya_guard/hooks/guard-hook.sh"
@@ -9,12 +9,12 @@
   {
    "id": "cc-home-1",
    "decision": "block",
-   "ms": 204,
+   "ms": 87,
    "hooks": [
     {
      "exit": 2,
      "stdout": "",
-     "stderr": "laya-guard: blocked ({\"action\":\"block\",\"risk\":0.92,\"policy_id\":\"destructive-fs\",\"reason\":\"Destructive filesystem command — blocked without approval\",\"mock\":false,\"verdict_source\":\"regex\"})",
+     "stderr": "laya-guard: blocked ({\"action\":\"block\",\"risk\":0.92,\"policy_id\":\"destructive-fs\",\"reason\":\"Destructive filesystem command — blocked without approval\",\"mock\":false,\"verdict_source\":\"regex\"})\n",
      "decision": "block"
     }
    ]
@@ -22,12 +22,12 @@
   {
    "id": "cc-home-2",
    "decision": "block",
-   "ms": 162,
+   "ms": 68,
    "hooks": [
     {
      "exit": 2,
      "stdout": "",
-     "stderr": "laya-guard: blocked ({\"action\":\"block\",\"risk\":0.92,\"policy_id\":\"destructive-fs\",\"reason\":\"Destructive filesystem command — blocked without approval\",\"mock\":false,\"verdict_source\":\"regex\"})",
+     "stderr": "laya-guard: blocked ({\"action\":\"block\",\"risk\":0.92,\"policy_id\":\"destructive-fs\",\"reason\":\"Destructive filesystem command — blocked without approval\",\"mock\":false,\"verdict_source\":\"regex\"})\n",
      "decision": "block"
     }
    ]
@@ -35,11 +35,11 @@
   {
    "id": "agy-drive-1",
    "decision": "ask",
-   "ms": 276,
+   "ms": 178,
    "hooks": [
     {
      "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}",
+     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}\n",
      "stderr": "",
      "decision": "ask"
     }
@@ -48,11 +48,11 @@
   {
    "id": "agy-drive-2",
    "decision": "ask",
-   "ms": 282,
+   "ms": 215,
    "hooks": [
     {
      "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}",
+     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}\n",
      "stderr": "",
      "decision": "ask"
     }
@@ -61,7 +61,7 @@
   {
    "id": "gem-move-1",
    "decision": "allow",
-   "ms": 151,
+   "ms": 71,
    "hooks": [
     {
      "exit": 0,
@@ -74,215 +74,7 @@
   {
    "id": "gem-move-2",
    "decision": "ask",
-   "ms": 269,
-   "hooks": [
-    {
-     "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}",
-     "stderr": "",
-     "decision": "ask"
-    }
-   ]
-  },
-  {
-   "id": "nx-0",
-   "decision": "ask",
-   "ms": 270,
-   "hooks": [
-    {
-     "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}",
-     "stderr": "",
-     "decision": "ask"
-    }
-   ]
-  },
-  {
-   "id": "nx-1",
-   "decision": "ask",
-   "ms": 322,
-   "hooks": [
-    {
-     "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (protected-path) - private key\"}}",
-     "stderr": "",
-     "decision": "ask"
-    }
-   ]
-  },
-  {
-   "id": "nx-2",
-   "decision": "ask",
-   "ms": 291,
-   "hooks": [
-    {
-     "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (protected-path) - SSH keys and config\"}}",
-     "stderr": "",
-     "decision": "ask"
-    }
-   ]
-  },
-  {
-   "id": "nx-3",
-   "decision": "ask",
-   "ms": 270,
-   "hooks": [
-    {
-     "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}",
-     "stderr": "",
-     "decision": "ask"
-    }
-   ]
-  },
-  {
-   "id": "nx-4",
-   "decision": "ask",
-   "ms": 281,
-   "hooks": [
-    {
-     "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (priv-escalation) - Privilege escalation \\u2014 verify the scope\"}}",
-     "stderr": "",
-     "decision": "ask"
-    }
-   ]
-  },
-  {
-   "id": "q-1",
-   "decision": "ask",
-   "ms": 281,
-   "hooks": [
-    {
-     "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}",
-     "stderr": "",
-     "decision": "ask"
-    }
-   ]
-  },
-  {
-   "id": "q-2",
-   "decision": "ask",
-   "ms": 270,
-   "hooks": [
-    {
-     "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (mass-delete) - Mass deletion \\u2014 verify backup and scope\"}}",
-     "stderr": "",
-     "decision": "ask"
-    }
-   ]
-  },
-  {
-   "id": "q-3",
-   "decision": "ask",
-   "ms": 271,
-   "hooks": [
-    {
-     "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}",
-     "stderr": "",
-     "decision": "ask"
-    }
-   ]
-  },
-  {
-   "id": "q-4",
-   "decision": "ask",
-   "ms": 266,
-   "hooks": [
-    {
-     "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}",
-     "stderr": "",
-     "decision": "ask"
-    }
-   ]
-  },
-  {
-   "id": "pocket-1",
-   "decision": "ask",
-   "ms": 329,
-   "hooks": [
-    {
-     "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (mass-delete) - Mass deletion \\u2014 verify backup and scope\"}}",
-     "stderr": "",
-     "decision": "ask"
-    }
-   ]
-  },
-  {
-   "id": "pocket-2",
-   "decision": "ask",
-   "ms": 303,
-   "hooks": [
-    {
-     "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}",
-     "stderr": "",
-     "decision": "ask"
-    }
-   ]
-  },
-  {
-   "id": "ev-quote",
-   "decision": "ask",
-   "ms": 285,
-   "hooks": [
-    {
-     "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}",
-     "stderr": "",
-     "decision": "ask"
-    }
-   ]
-  },
-  {
-   "id": "ev-backslash",
-   "decision": "ask",
-   "ms": 296,
-   "hooks": [
-    {
-     "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}",
-     "stderr": "",
-     "decision": "ask"
-    }
-   ]
-  },
-  {
-   "id": "ev-var-target",
-   "decision": "block",
-   "ms": 150,
-   "hooks": [
-    {
-     "exit": 2,
-     "stdout": "",
-     "stderr": "laya-guard: blocked ({\"action\":\"block\",\"risk\":0.92,\"policy_id\":\"destructive-fs\",\"reason\":\"Destructive filesystem command — blocked without approval\",\"mock\":false,\"verdict_source\":\"regex\"})",
-     "decision": "block"
-    }
-   ]
-  },
-  {
-   "id": "ev-home-var",
-   "decision": "block",
-   "ms": 151,
-   "hooks": [
-    {
-     "exit": 2,
-     "stdout": "",
-     "stderr": "laya-guard: blocked ({\"action\":\"block\",\"risk\":0.92,\"policy_id\":\"destructive-fs\",\"reason\":\"Destructive filesystem command — blocked without approval\",\"mock\":false,\"verdict_source\":\"regex\"})",
-     "decision": "block"
-    }
-   ]
-  },
-  {
-   "id": "ev-ifs",
-   "decision": "ask",
-   "ms": 404,
+   "ms": 239,
    "hooks": [
     {
      "exit": 0,
@@ -293,65 +85,273 @@
    ]
   },
   {
-   "id": "ev-bash-c",
+   "id": "nx-0",
+   "decision": "ask",
+   "ms": 295,
+   "hooks": [
+    {
+     "exit": 0,
+     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}\n",
+     "stderr": "",
+     "decision": "ask"
+    }
+   ]
+  },
+  {
+   "id": "nx-1",
+   "decision": "ask",
+   "ms": 268,
+   "hooks": [
+    {
+     "exit": 0,
+     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (protected-path) - private key\"}}\n",
+     "stderr": "",
+     "decision": "ask"
+    }
+   ]
+  },
+  {
+   "id": "nx-2",
+   "decision": "ask",
+   "ms": 197,
+   "hooks": [
+    {
+     "exit": 0,
+     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (protected-path) - SSH keys and config\"}}\n",
+     "stderr": "",
+     "decision": "ask"
+    }
+   ]
+  },
+  {
+   "id": "nx-3",
+   "decision": "ask",
+   "ms": 182,
+   "hooks": [
+    {
+     "exit": 0,
+     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}\n",
+     "stderr": "",
+     "decision": "ask"
+    }
+   ]
+  },
+  {
+   "id": "nx-4",
+   "decision": "ask",
+   "ms": 197,
+   "hooks": [
+    {
+     "exit": 0,
+     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (priv-escalation) - Privilege escalation \\u2014 verify the scope\"}}\n",
+     "stderr": "",
+     "decision": "ask"
+    }
+   ]
+  },
+  {
+   "id": "q-1",
+   "decision": "ask",
+   "ms": 207,
+   "hooks": [
+    {
+     "exit": 0,
+     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}\n",
+     "stderr": "",
+     "decision": "ask"
+    }
+   ]
+  },
+  {
+   "id": "q-2",
+   "decision": "ask",
+   "ms": 184,
+   "hooks": [
+    {
+     "exit": 0,
+     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (mass-delete) - Mass deletion \\u2014 verify backup and scope\"}}\n",
+     "stderr": "",
+     "decision": "ask"
+    }
+   ]
+  },
+  {
+   "id": "q-3",
+   "decision": "ask",
+   "ms": 179,
+   "hooks": [
+    {
+     "exit": 0,
+     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}\n",
+     "stderr": "",
+     "decision": "ask"
+    }
+   ]
+  },
+  {
+   "id": "q-4",
+   "decision": "ask",
+   "ms": 179,
+   "hooks": [
+    {
+     "exit": 0,
+     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (mass-delete) - Mass deletion \\u2014 verify backup and scope\"}}\n",
+     "stderr": "",
+     "decision": "ask"
+    }
+   ]
+  },
+  {
+   "id": "pocket-1",
+   "decision": "ask",
+   "ms": 223,
+   "hooks": [
+    {
+     "exit": 0,
+     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (mass-delete) - Mass deletion \\u2014 verify backup and scope\"}}\n",
+     "stderr": "",
+     "decision": "ask"
+    }
+   ]
+  },
+  {
+   "id": "pocket-2",
+   "decision": "ask",
+   "ms": 184,
+   "hooks": [
+    {
+     "exit": 0,
+     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}\n",
+     "stderr": "",
+     "decision": "ask"
+    }
+   ]
+  },
+  {
+   "id": "ev-quote",
    "decision": "block",
-   "ms": 146,
+   "ms": 71,
    "hooks": [
     {
      "exit": 2,
      "stdout": "",
-     "stderr": "laya-guard: blocked ({\"action\":\"block\",\"risk\":0.92,\"policy_id\":\"destructive-fs\",\"reason\":\"Destructive filesystem command — blocked without approval\",\"mock\":false,\"verdict_source\":\"regex\"})",
+     "stderr": "laya-guard: blocked ({\"action\":\"block\",\"risk\":0.92,\"policy_id\":\"destructive-fs\",\"reason\":\"Destructive filesystem command — blocked without approval\",\"mock\":false,\"verdict_source\":\"regex\"})\n",
+     "decision": "block"
+    }
+   ]
+  },
+  {
+   "id": "ev-backslash",
+   "decision": "block",
+   "ms": 73,
+   "hooks": [
+    {
+     "exit": 2,
+     "stdout": "",
+     "stderr": "laya-guard: blocked ({\"action\":\"block\",\"risk\":0.92,\"policy_id\":\"destructive-fs\",\"reason\":\"Destructive filesystem command — blocked without approval\",\"mock\":false,\"verdict_source\":\"regex\"})\n",
+     "decision": "block"
+    }
+   ]
+  },
+  {
+   "id": "ev-var-target",
+   "decision": "block",
+   "ms": 71,
+   "hooks": [
+    {
+     "exit": 2,
+     "stdout": "",
+     "stderr": "laya-guard: blocked ({\"action\":\"block\",\"risk\":0.92,\"policy_id\":\"destructive-fs\",\"reason\":\"Destructive filesystem command — blocked without approval\",\"mock\":false,\"verdict_source\":\"regex\"})\n",
+     "decision": "block"
+    }
+   ]
+  },
+  {
+   "id": "ev-home-var",
+   "decision": "block",
+   "ms": 67,
+   "hooks": [
+    {
+     "exit": 2,
+     "stdout": "",
+     "stderr": "laya-guard: blocked ({\"action\":\"block\",\"risk\":0.92,\"policy_id\":\"destructive-fs\",\"reason\":\"Destructive filesystem command — blocked without approval\",\"mock\":false,\"verdict_source\":\"regex\"})\n",
+     "decision": "block"
+    }
+   ]
+  },
+  {
+   "id": "ev-ifs",
+   "decision": "block",
+   "ms": 68,
+   "hooks": [
+    {
+     "exit": 2,
+     "stdout": "",
+     "stderr": "laya-guard: blocked ({\"action\":\"block\",\"risk\":0.92,\"policy_id\":\"destructive-fs\",\"reason\":\"Destructive filesystem command — blocked without approval\",\"mock\":false,\"verdict_source\":\"regex\"})\n",
+     "decision": "block"
+    }
+   ]
+  },
+  {
+   "id": "ev-bash-c",
+   "decision": "block",
+   "ms": 70,
+   "hooks": [
+    {
+     "exit": 2,
+     "stdout": "",
+     "stderr": "laya-guard: blocked ({\"action\":\"block\",\"risk\":0.92,\"policy_id\":\"destructive-fs\",\"reason\":\"Destructive filesystem command — blocked without approval\",\"mock\":false,\"verdict_source\":\"regex\"})\n",
      "decision": "block"
     }
    ]
   },
   {
    "id": "ev-base64-subst",
-   "decision": "ask",
-   "ms": 272,
+   "decision": "block",
+   "ms": 68,
    "hooks": [
     {
-     "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}",
-     "stderr": "",
-     "decision": "ask"
+     "exit": 2,
+     "stdout": "",
+     "stderr": "laya-guard: blocked ({\"action\":\"block\",\"risk\":0.92,\"policy_id\":\"destructive-fs\",\"reason\":\"Destructive filesystem command — blocked without approval\",\"mock\":false,\"verdict_source\":\"regex\"})\n",
+     "decision": "block"
     }
    ]
   },
   {
    "id": "ev-base64-pipe",
-   "decision": "ask",
-   "ms": 271,
+   "decision": "block",
+   "ms": 74,
    "hooks": [
     {
-     "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (remote-exec) - Remote code \\u2014 verify hash and origin\"}}",
-     "stderr": "",
-     "decision": "ask"
+     "exit": 2,
+     "stdout": "",
+     "stderr": "laya-guard: blocked ({\"action\":\"block\",\"risk\":0.92,\"policy_id\":\"destructive-fs\",\"reason\":\"Destructive filesystem command — blocked without approval\",\"mock\":false,\"verdict_source\":\"regex\"})\n",
+     "decision": "block"
     }
    ]
   },
   {
    "id": "ev-find-delete",
-   "decision": "ask",
-   "ms": 263,
+   "decision": "block",
+   "ms": 69,
    "hooks": [
     {
-     "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}",
-     "stderr": "",
-     "decision": "ask"
+     "exit": 2,
+     "stdout": "",
+     "stderr": "laya-guard: blocked ({\"action\":\"block\",\"risk\":0.92,\"policy_id\":\"destructive-fs\",\"reason\":\"Destructive filesystem command — blocked without approval\",\"mock\":false,\"verdict_source\":\"regex\"})\n",
+     "decision": "block"
     }
    ]
   },
   {
    "id": "ev-python",
    "decision": "ask",
-   "ms": 275,
+   "ms": 205,
    "hooks": [
     {
      "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}",
+     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (mass-delete) - Mass deletion \\u2014 verify backup and scope\"}}\n",
      "stderr": "",
      "decision": "ask"
     }
@@ -359,26 +359,26 @@
   },
   {
    "id": "ev-abs-path",
-   "decision": "ask",
-   "ms": 270,
+   "decision": "block",
+   "ms": 75,
    "hooks": [
     {
-     "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}",
-     "stderr": "",
-     "decision": "ask"
+     "exit": 2,
+     "stdout": "",
+     "stderr": "laya-guard: blocked ({\"action\":\"block\",\"risk\":0.92,\"policy_id\":\"destructive-fs\",\"reason\":\"Destructive filesystem command — blocked without approval\",\"mock\":false,\"verdict_source\":\"regex\"})\n",
+     "decision": "block"
     }
    ]
   },
   {
    "id": "ev-command",
    "decision": "block",
-   "ms": 147,
+   "ms": 80,
    "hooks": [
     {
      "exit": 2,
      "stdout": "",
-     "stderr": "laya-guard: blocked ({\"action\":\"block\",\"risk\":0.92,\"policy_id\":\"destructive-fs\",\"reason\":\"Destructive filesystem command — blocked without approval\",\"mock\":false,\"verdict_source\":\"regex\"})",
+     "stderr": "laya-guard: blocked ({\"action\":\"block\",\"risk\":0.92,\"policy_id\":\"destructive-fs\",\"reason\":\"Destructive filesystem command — blocked without approval\",\"mock\":false,\"verdict_source\":\"regex\"})\n",
      "decision": "block"
     }
    ]
@@ -386,12 +386,12 @@
   {
    "id": "ev-split-flags",
    "decision": "block",
-   "ms": 148,
+   "ms": 70,
    "hooks": [
     {
      "exit": 2,
      "stdout": "",
-     "stderr": "laya-guard: blocked ({\"action\":\"block\",\"risk\":0.92,\"policy_id\":\"destructive-fs\",\"reason\":\"Destructive filesystem command — blocked without approval\",\"mock\":false,\"verdict_source\":\"regex\"})",
+     "stderr": "laya-guard: blocked ({\"action\":\"block\",\"risk\":0.92,\"policy_id\":\"destructive-fs\",\"reason\":\"Destructive filesystem command — blocked without approval\",\"mock\":false,\"verdict_source\":\"regex\"})\n",
      "decision": "block"
     }
    ]
@@ -399,63 +399,63 @@
   {
    "id": "ev-long-flags",
    "decision": "block",
-   "ms": 147,
+   "ms": 72,
    "hooks": [
     {
      "exit": 2,
      "stdout": "",
-     "stderr": "laya-guard: blocked ({\"action\":\"block\",\"risk\":0.92,\"policy_id\":\"destructive-fs\",\"reason\":\"Destructive filesystem command — blocked without approval\",\"mock\":false,\"verdict_source\":\"regex\"})",
+     "stderr": "laya-guard: blocked ({\"action\":\"block\",\"risk\":0.92,\"policy_id\":\"destructive-fs\",\"reason\":\"Destructive filesystem command — blocked without approval\",\"mock\":false,\"verdict_source\":\"regex\"})\n",
      "decision": "block"
     }
    ]
   },
   {
    "id": "ev-cd-glob",
-   "decision": "ask",
-   "ms": 262,
+   "decision": "block",
+   "ms": 185,
    "hooks": [
     {
-     "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}",
-     "stderr": "",
-     "decision": "ask"
+     "exit": 2,
+     "stdout": "",
+     "stderr": "laya-guard: blocked ({\"action\":\"block\",\"risk\":0.92,\"policy_id\":\"destructive-fs\",\"reason\":\"Destructive filesystem command — blocked without approval\",\"mock\":false,\"verdict_source\":\"regex\"})\n",
+     "decision": "block"
     }
    ]
   },
   {
    "id": "ev-var-cmd",
-   "decision": "ask",
-   "ms": 275,
+   "decision": "block",
+   "ms": 68,
    "hooks": [
     {
-     "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}",
-     "stderr": "",
-     "decision": "ask"
+     "exit": 2,
+     "stdout": "",
+     "stderr": "laya-guard: blocked ({\"action\":\"block\",\"risk\":0.92,\"policy_id\":\"destructive-fs\",\"reason\":\"Destructive filesystem command — blocked without approval\",\"mock\":false,\"verdict_source\":\"regex\"})\n",
+     "decision": "block"
     }
    ]
   },
   {
    "id": "ev-eval",
-   "decision": "ask",
-   "ms": 278,
+   "decision": "block",
+   "ms": 66,
    "hooks": [
     {
-     "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}",
-     "stderr": "",
-     "decision": "ask"
+     "exit": 2,
+     "stdout": "",
+     "stderr": "laya-guard: blocked ({\"action\":\"block\",\"risk\":0.92,\"policy_id\":\"destructive-fs\",\"reason\":\"Destructive filesystem command — blocked without approval\",\"mock\":false,\"verdict_source\":\"regex\"})\n",
+     "decision": "block"
     }
    ]
   },
   {
    "id": "ev-perl",
    "decision": "ask",
-   "ms": 271,
+   "ms": 178,
    "hooks": [
     {
      "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}",
+     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (mass-delete) - Mass deletion \\u2014 verify backup and scope\"}}\n",
      "stderr": "",
      "decision": "ask"
     }
@@ -463,25 +463,25 @@
   },
   {
    "id": "ev-xargs",
-   "decision": "ask",
-   "ms": 263,
+   "decision": "block",
+   "ms": 68,
    "hooks": [
     {
-     "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}",
-     "stderr": "",
-     "decision": "ask"
+     "exit": 2,
+     "stdout": "",
+     "stderr": "laya-guard: blocked ({\"action\":\"block\",\"risk\":0.92,\"policy_id\":\"destructive-fs\",\"reason\":\"Destructive filesystem command — blocked without approval\",\"mock\":false,\"verdict_source\":\"regex\"})\n",
+     "decision": "block"
     }
    ]
   },
   {
    "id": "ev-push-f",
    "decision": "ask",
-   "ms": 261,
+   "ms": 178,
    "hooks": [
     {
      "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (mass-delete) - Mass deletion \\u2014 verify backup and scope\"}}",
+     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (mass-delete) - Mass deletion \\u2014 verify backup and scope\"}}\n",
      "stderr": "",
      "decision": "ask"
     }
@@ -490,11 +490,11 @@
   {
    "id": "ev-push-plus",
    "decision": "ask",
-   "ms": 263,
+   "ms": 172,
    "hooks": [
     {
      "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (mass-delete) - Mass deletion \\u2014 verify backup and scope\"}}",
+     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (mass-delete) - Mass deletion \\u2014 verify backup and scope\"}}\n",
      "stderr": "",
      "decision": "ask"
     }
@@ -503,11 +503,11 @@
   {
    "id": "ev-reset-hard",
    "decision": "ask",
-   "ms": 265,
+   "ms": 175,
    "hooks": [
     {
      "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (mass-delete) - Mass deletion \\u2014 verify backup and scope\"}}",
+     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (mass-delete) - Mass deletion \\u2014 verify backup and scope\"}}\n",
      "stderr": "",
      "decision": "ask"
     }
@@ -516,11 +516,11 @@
   {
    "id": "ev-clean",
    "decision": "ask",
-   "ms": 263,
+   "ms": 172,
    "hooks": [
     {
      "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (mass-delete) - Mass deletion \\u2014 verify backup and scope\"}}",
+     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (mass-delete) - Mass deletion \\u2014 verify backup and scope\"}}\n",
      "stderr": "",
      "decision": "ask"
     }
@@ -529,11 +529,11 @@
   {
    "id": "ev-ssh-quote",
    "decision": "ask",
-   "ms": 368,
+   "ms": 176,
    "hooks": [
     {
      "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (protected-path) - SSH keys and config\"}}",
+     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (credential-read) - Credential file read \\u2014 confirm it is needed\"}}\n",
      "stderr": "",
      "decision": "ask"
     }
@@ -542,11 +542,11 @@
   {
    "id": "ev-cred-var",
    "decision": "ask",
-   "ms": 458,
+   "ms": 270,
    "hooks": [
     {
      "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (credential-read) - Credential file read \\u2014 confirm it is needed\"}}",
+     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (credential-read) - Credential file read \\u2014 confirm it is needed\"}}\n",
      "stderr": "",
      "decision": "ask"
     }
@@ -555,12 +555,12 @@
   {
    "id": "ev-curl-bash",
    "decision": "block",
-   "ms": 190,
+   "ms": 70,
    "hooks": [
     {
      "exit": 2,
      "stdout": "",
-     "stderr": "laya-guard: blocked ({\"action\":\"block\",\"risk\":0.92,\"policy_id\":\"pipe-to-shell\",\"reason\":\"Downloaded script piped straight into an interpreter — inspect it first\",\"mock\":false,\"verdict_source\":\"regex\"})",
+     "stderr": "laya-guard: blocked ({\"action\":\"block\",\"risk\":0.92,\"policy_id\":\"pipe-to-shell\",\"reason\":\"Downloaded script piped straight into an interpreter — inspect it first\",\"mock\":false,\"verdict_source\":\"regex\"})\n",
      "decision": "block"
     }
    ]
@@ -568,12 +568,12 @@
   {
    "id": "ev-wget-sh",
    "decision": "block",
-   "ms": 184,
+   "ms": 70,
    "hooks": [
     {
      "exit": 2,
      "stdout": "",
-     "stderr": "laya-guard: blocked ({\"action\":\"block\",\"risk\":0.92,\"policy_id\":\"pipe-to-shell\",\"reason\":\"Downloaded script piped straight into an interpreter — inspect it first\",\"mock\":false,\"verdict_source\":\"regex\"})",
+     "stderr": "laya-guard: blocked ({\"action\":\"block\",\"risk\":0.92,\"policy_id\":\"pipe-to-shell\",\"reason\":\"Downloaded script piped straight into an interpreter — inspect it first\",\"mock\":false,\"verdict_source\":\"regex\"})\n",
      "decision": "block"
     }
    ]
@@ -581,12 +581,12 @@
   {
    "id": "ev-proc-subst",
    "decision": "block",
-   "ms": 157,
+   "ms": 69,
    "hooks": [
     {
      "exit": 2,
      "stdout": "",
-     "stderr": "laya-guard: blocked ({\"action\":\"block\",\"risk\":0.92,\"policy_id\":\"pipe-to-shell\",\"reason\":\"Downloaded script piped straight into an interpreter — inspect it first\",\"mock\":false,\"verdict_source\":\"regex\"})",
+     "stderr": "laya-guard: blocked ({\"action\":\"block\",\"risk\":0.92,\"policy_id\":\"pipe-to-shell\",\"reason\":\"Downloaded script piped straight into an interpreter — inspect it first\",\"mock\":false,\"verdict_source\":\"regex\"})\n",
      "decision": "block"
     }
    ]
@@ -594,11 +594,11 @@
   {
    "id": "ev-s3-reorder",
    "decision": "ask",
-   "ms": 298,
+   "ms": 182,
    "hooks": [
     {
      "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (mass-delete) - Mass deletion \\u2014 verify backup and scope\"}}",
+     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (mass-delete) - Mass deletion \\u2014 verify backup and scope\"}}\n",
      "stderr": "",
      "decision": "ask"
     }
@@ -607,11 +607,11 @@
   {
    "id": "ev-drop-table",
    "decision": "ask",
-   "ms": 296,
+   "ms": 180,
    "hooks": [
     {
      "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (mass-delete) - Mass deletion \\u2014 verify backup and scope\"}}",
+     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (mass-delete) - Mass deletion \\u2014 verify backup and scope\"}}\n",
      "stderr": "",
      "decision": "ask"
     }
@@ -620,7 +620,7 @@
   {
    "id": "ed-01",
    "decision": "allow",
-   "ms": 159,
+   "ms": 68,
    "hooks": [
     {
      "exit": 0,
@@ -633,7 +633,7 @@
   {
    "id": "ed-02",
    "decision": "allow",
-   "ms": 163,
+   "ms": 69,
    "hooks": [
     {
      "exit": 0,
@@ -646,7 +646,7 @@
   {
    "id": "ed-03",
    "decision": "allow",
-   "ms": 160,
+   "ms": 68,
    "hooks": [
     {
      "exit": 0,
@@ -659,7 +659,7 @@
   {
    "id": "ed-04",
    "decision": "allow",
-   "ms": 160,
+   "ms": 69,
    "hooks": [
     {
      "exit": 0,
@@ -672,7 +672,7 @@
   {
    "id": "ed-05",
    "decision": "allow",
-   "ms": 156,
+   "ms": 72,
    "hooks": [
     {
      "exit": 0,
@@ -685,7 +685,7 @@
   {
    "id": "ed-06",
    "decision": "allow",
-   "ms": 152,
+   "ms": 67,
    "hooks": [
     {
      "exit": 0,
@@ -698,7 +698,7 @@
   {
    "id": "ed-07",
    "decision": "allow",
-   "ms": 165,
+   "ms": 69,
    "hooks": [
     {
      "exit": 0,
@@ -711,7 +711,7 @@
   {
    "id": "ed-08",
    "decision": "allow",
-   "ms": 156,
+   "ms": 68,
    "hooks": [
     {
      "exit": 0,
@@ -724,7 +724,7 @@
   {
    "id": "ed-09",
    "decision": "allow",
-   "ms": 155,
+   "ms": 73,
    "hooks": [
     {
      "exit": 0,
@@ -737,7 +737,7 @@
   {
    "id": "ed-10",
    "decision": "allow",
-   "ms": 148,
+   "ms": 71,
    "hooks": [
     {
      "exit": 0,
@@ -750,7 +750,7 @@
   {
    "id": "ed-11",
    "decision": "allow",
-   "ms": 159,
+   "ms": 71,
    "hooks": [
     {
      "exit": 0,
@@ -763,7 +763,7 @@
   {
    "id": "ed-12",
    "decision": "allow",
-   "ms": 162,
+   "ms": 70,
    "hooks": [
     {
      "exit": 0,
@@ -776,7 +776,7 @@
   {
    "id": "ed-13",
    "decision": "allow",
-   "ms": 161,
+   "ms": 68,
    "hooks": [
     {
      "exit": 0,
@@ -789,7 +789,7 @@
   {
    "id": "ed-14",
    "decision": "allow",
-   "ms": 167,
+   "ms": 68,
    "hooks": [
     {
      "exit": 0,
@@ -802,7 +802,7 @@
   {
    "id": "ed-15",
    "decision": "allow",
-   "ms": 155,
+   "ms": 68,
    "hooks": [
     {
      "exit": 0,
@@ -815,7 +815,7 @@
   {
    "id": "ed-16",
    "decision": "allow",
-   "ms": 142,
+   "ms": 66,
    "hooks": [
     {
      "exit": 0,
@@ -828,11 +828,11 @@
   {
    "id": "ed-17",
    "decision": "ask",
-   "ms": 264,
+   "ms": 172,
    "hooks": [
     {
      "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}",
+     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}\n",
      "stderr": "",
      "decision": "ask"
     }
@@ -841,7 +841,7 @@
   {
    "id": "ed-18",
    "decision": "allow",
-   "ms": 151,
+   "ms": 68,
    "hooks": [
     {
      "exit": 0,
@@ -854,7 +854,7 @@
   {
    "id": "ed-19",
    "decision": "allow",
-   "ms": 147,
+   "ms": 73,
    "hooks": [
     {
      "exit": 0,
@@ -867,7 +867,7 @@
   {
    "id": "ed-20",
    "decision": "allow",
-   "ms": 142,
+   "ms": 68,
    "hooks": [
     {
      "exit": 0,
@@ -880,7 +880,7 @@
   {
    "id": "ed-21",
    "decision": "allow",
-   "ms": 146,
+   "ms": 70,
    "hooks": [
     {
      "exit": 0,
@@ -893,7 +893,7 @@
   {
    "id": "ed-22",
    "decision": "allow",
-   "ms": 143,
+   "ms": 70,
    "hooks": [
     {
      "exit": 0,
@@ -906,7 +906,7 @@
   {
    "id": "ed-23",
    "decision": "allow",
-   "ms": 146,
+   "ms": 70,
    "hooks": [
     {
      "exit": 0,
@@ -919,7 +919,7 @@
   {
    "id": "ed-24",
    "decision": "allow",
-   "ms": 146,
+   "ms": 70,
    "hooks": [
     {
      "exit": 0,
@@ -932,7 +932,7 @@
   {
    "id": "ed-25",
    "decision": "allow",
-   "ms": 147,
+   "ms": 70,
    "hooks": [
     {
      "exit": 0,
@@ -945,7 +945,7 @@
   {
    "id": "ed-26",
    "decision": "allow",
-   "ms": 156,
+   "ms": 68,
    "hooks": [
     {
      "exit": 0,
@@ -958,7 +958,7 @@
   {
    "id": "ed-27",
    "decision": "allow",
-   "ms": 146,
+   "ms": 66,
    "hooks": [
     {
      "exit": 0,
@@ -971,7 +971,7 @@
   {
    "id": "ed-28",
    "decision": "allow",
-   "ms": 148,
+   "ms": 66,
    "hooks": [
     {
      "exit": 0,
@@ -984,7 +984,7 @@
   {
    "id": "ed-29",
    "decision": "allow",
-   "ms": 146,
+   "ms": 67,
    "hooks": [
     {
      "exit": 0,
@@ -997,7 +997,7 @@
   {
    "id": "ed-30",
    "decision": "allow",
-   "ms": 144,
+   "ms": 66,
    "hooks": [
     {
      "exit": 0,
@@ -1010,7 +1010,7 @@
   {
    "id": "ed-31",
    "decision": "allow",
-   "ms": 147,
+   "ms": 67,
    "hooks": [
     {
      "exit": 0,
@@ -1023,7 +1023,7 @@
   {
    "id": "ed-32",
    "decision": "allow",
-   "ms": 144,
+   "ms": 67,
    "hooks": [
     {
      "exit": 0,
@@ -1036,7 +1036,7 @@
   {
    "id": "ed-33",
    "decision": "allow",
-   "ms": 143,
+   "ms": 67,
    "hooks": [
     {
      "exit": 0,
@@ -1049,7 +1049,7 @@
   {
    "id": "ed-34",
    "decision": "allow",
-   "ms": 142,
+   "ms": 66,
    "hooks": [
     {
      "exit": 0,
@@ -1062,7 +1062,7 @@
   {
    "id": "ed-35",
    "decision": "allow",
-   "ms": 179,
+   "ms": 68,
    "hooks": [
     {
      "exit": 0,
@@ -1075,7 +1075,7 @@
   {
    "id": "ed-36",
    "decision": "allow",
-   "ms": 171,
+   "ms": 68,
    "hooks": [
     {
      "exit": 0,
@@ -1088,7 +1088,7 @@
   {
    "id": "ed-37",
    "decision": "allow",
-   "ms": 174,
+   "ms": 92,
    "hooks": [
     {
      "exit": 0,
@@ -1101,7 +1101,7 @@
   {
    "id": "ed-38",
    "decision": "allow",
-   "ms": 153,
+   "ms": 72,
    "hooks": [
     {
      "exit": 0,
@@ -1114,7 +1114,7 @@
   {
    "id": "ed-39",
    "decision": "allow",
-   "ms": 213,
+   "ms": 71,
    "hooks": [
     {
      "exit": 0,
@@ -1127,7 +1127,7 @@
   {
    "id": "ed-40",
    "decision": "allow",
-   "ms": 161,
+   "ms": 70,
    "hooks": [
     {
      "exit": 0,
@@ -1140,7 +1140,7 @@
   {
    "id": "ed-41",
    "decision": "allow",
-   "ms": 164,
+   "ms": 66,
    "hooks": [
     {
      "exit": 0,
@@ -1153,7 +1153,7 @@
   {
    "id": "ed-42",
    "decision": "allow",
-   "ms": 244,
+   "ms": 69,
    "hooks": [
     {
      "exit": 0,
@@ -1166,11 +1166,11 @@
   {
    "id": "ed-43",
    "decision": "ask",
-   "ms": 329,
+   "ms": 178,
    "hooks": [
     {
      "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}",
+     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}\n",
      "stderr": "",
      "decision": "ask"
     }
@@ -1179,11 +1179,11 @@
   {
    "id": "ed-44",
    "decision": "ask",
-   "ms": 318,
+   "ms": 208,
    "hooks": [
     {
      "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}",
+     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}\n",
      "stderr": "",
      "decision": "ask"
     }
@@ -1192,7 +1192,7 @@
   {
    "id": "ed-45",
    "decision": "allow",
-   "ms": 252,
+   "ms": 211,
    "hooks": [
     {
      "exit": 0,
@@ -1205,11 +1205,11 @@
   {
    "id": "ed-46",
    "decision": "ask",
-   "ms": 269,
+   "ms": 197,
    "hooks": [
     {
      "exit": 0,
-     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}",
+     "stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"laya-guard: review (general) - Judged by Laya\"}}\n",
      "stderr": "",
      "decision": "ask"
     }
@@ -1218,7 +1218,7 @@
   {
    "id": "ed-47",
    "decision": "allow",
-   "ms": 151,
+   "ms": 96,
    "hooks": [
     {
      "exit": 0,
@@ -1231,7 +1231,7 @@
   {
    "id": "ed-48",
    "decision": "allow",
-   "ms": 159,
+   "ms": 98,
    "hooks": [
     {
      "exit": 0,
@@ -1244,7 +1244,7 @@
   {
    "id": "ed-49",
    "decision": "allow",
-   "ms": 236,
+   "ms": 177,
    "hooks": [
     {
      "exit": 0,
@@ -1257,7 +1257,7 @@
   {
    "id": "ed-50",
    "decision": "allow",
-   "ms": 155,
+   "ms": 68,
    "hooks": [
     {
      "exit": 0,
