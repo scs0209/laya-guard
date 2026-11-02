@@ -42,6 +42,10 @@ def main():
         for b in range(args.batches):
             files[common.TRAIN / f"batch{b + 1}.jsonl"] = need[b * size:(b + 1) * size]
     common.write_jsonl(files)
+    if args.batches:                                         # an earlier, larger --batches leaves files to label twice
+        for stale in common.TRAIN.glob("batch*.jsonl"):
+            if stale not in files:
+                stale.unlink()
     print(dict(collections.Counter(r["rule"].split(":")[0] for r in rows)), "| need a label:", len(need))
 
 main()
