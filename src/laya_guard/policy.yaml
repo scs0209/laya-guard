@@ -187,9 +187,10 @@ policies:
       - 'transfer \$[0-9,]+.*to the ac'
       - 'recurring payment.*to (be|the account)'
       # On-chain transactions: a broadcast can't be undone. forge script without --broadcast only simulates,
-      # and read-only cast calls (cast call, cast balance) stay with the model.
-      - '\bforge\s+script\b[^|;&\n]*\s--broadcast\b'
-      - '\bcast\s+(?:send|publish)\b'
+      # and read-only cast calls (cast call, cast balance) stay with the model. Where a command starts (not in a
+      # quoted message or a comment), and across `\`-newline continuations.
+      - '(?:^|[;&|(`\n]|\$\(|\b(?:then|do|else)\b|\b(?:sudo|doas|nohup|time|exec|command|env|xargs)\b(?:\s+-\S+)*|\b(?:ba|z|da|k)?sh\s+-\w*c\s+["''])\s*(?:[A-Za-z_]\w*=\S*\s+)*forge\s+script\b(?:[^|;&\n]|\\\n)*(?<=\s)--broadcast\b'
+      - '(?:^|[;&|(`\n]|\$\(|\b(?:then|do|else)\b|\b(?:sudo|doas|nohup|time|exec|command|env|xargs)\b(?:\s+-\S+)*|\b(?:ba|z|da|k)?sh\s+-\w*c\s+["''])\s*(?:[A-Za-z_]\w*=\S*\s+)*cast\s+(?:send|publish)\b'
     laya:
       choice: ["allow", "review", "block"]
       score_hint: "risk that money actually moves"
@@ -304,9 +305,10 @@ policies:
     title: "Credential read"
     patterns:
       - '\b(?:cat|less|more|head|tail|bat|strings|xxd|base64|cp)\b[^|;&]*(?:\.ssh/id_\w+|\.aws/credentials|\.gnupg/|\.kube/config|\.netrc|\.git-credentials)'
-      # Commands that print a credential without naming a file: the Foundry keystore is read by account name
-      - '\bcast\s+wallet\s+(?:decrypt-keystore|dk)\b'
-      - '\bgh\s+auth\s+token\b'
+      # Commands that print a credential without naming a file (the Foundry keystore is read by account name),
+      # where a command starts
+      - '(?:^|[;&|(`\n]|\$\(|\b(?:then|do|else)\b|\b(?:sudo|doas|nohup|time|exec|command|env|xargs)\b(?:\s+-\S+)*|\b(?:ba|z|da|k)?sh\s+-\w*c\s+["''])\s*(?:[A-Za-z_]\w*=\S*\s+)*cast\s+wallet\s+(?:decrypt-keystore|dk)\b'
+      - '(?:^|[;&|(`\n]|\$\(|\b(?:then|do|else)\b|\b(?:sudo|doas|nohup|time|exec|command|env|xargs)\b(?:\s+-\S+)*|\b(?:ba|z|da|k)?sh\s+-\w*c\s+["''])\s*(?:[A-Za-z_]\w*=\S*\s+)*gh\s+auth\s+token\b'
     laya:
       choice: ["allow", "review", "block"]
       choice_hint: "review when reading private keys or cloud credentials"

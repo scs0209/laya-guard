@@ -576,24 +576,32 @@ def test_credential_file_read_is_flagged():
 def test_printing_a_credential_is_flagged():
     # No file is named: the Foundry keystore is read by account name, gh prints the token it holds (#102)
     for cmd in ["cast wallet decrypt-keystore deployer", "cast wallet dk deployer", "gh auth token",
-                "TOKEN=$(gh auth token) && echo ok"]:
+                "TOKEN=$(gh auth token) && echo ok", "bash -c 'gh auth token'"]:
         v = judge(cmd)
         assert (v.action, v.policy_id) == ("review", "credential-read"), cmd
-        assert guard.judge_offline(cmd).policy_id == "credential-read", cmd
-    for cmd in ["cast wallet list", "cast wallet address --account deployer", "gh auth status", "gh auth login"]:
-        assert judge(cmd).policy_id != "credential-read", cmd
+        o = guard.judge_offline(cmd)                 # offline, any rule hit blocks
+        assert (o.action, o.policy_id) == ("block", "credential-read"), cmd
+    # Only where a command starts: not the other cast wallet / gh auth commands, and not text that mentions it
+    for cmd in ["cast wallet list", "cast wallet address --account deployer", "gh auth status", "gh auth login",
+                "echo gh auth token", "git commit -m 'never run gh auth token here'"]:
+        assert judge(cmd).policy_id == "general", cmd
 
 def test_onchain_transactions_ask():
     # A broadcast can't be undone; a forge script without --broadcast only simulates (#102)
     for cmd in ["forge script script/Deploy.s.sol --rpc-url $RPC_URL --broadcast",
                 "forge script script/Deploy.s.sol --broadcast --private-key $PK",
+                "forge script script/Deploy.s.sol \\\n  --rpc-url $RPC_URL \\\n  --broadcast",   # continued lines
+                "PK=$KEY forge script script/Deploy.s.sol --broadcast",
                 "cast send 0xabc 'transfer(address,uint256)' 0xdef 1 --rpc-url $RPC_URL",
-                "cast publish 0x02f8..."]:
+                "sudo cast send 0xabc 'f()'", "cd contracts && cast publish 0x02f8..."]:
         v = judge(cmd)
         assert (v.action, v.policy_id) == ("review", "payment-action"), cmd
+        o = guard.judge_offline(cmd)
+        assert (o.action, o.policy_id) == ("block", "payment-action"), cmd
     for cmd in ["forge script script/Deploy.s.sol --rpc-url $RPC_URL", "forge build", "forge test",
-                "cast call 0xabc 'balanceOf(address)' 0xdef", "cast balance 0xabc"]:
-        assert judge(cmd).policy_id != "payment-action", cmd
+                "cast call 0xabc 'balanceOf(address)' 0xdef", "cast balance 0xabc",
+                "echo 'cast send x'", "git commit -m 'run cast send later'", "# cast send x\nls"]:
+        assert judge(cmd).policy_id == "general", cmd
 
 def test_git_work_loss_commands_flagged():
     for cmd in ["git reset --hard origin/main", "git reset --hard HEAD~3", "git clean -fdx", "git clean -f",
