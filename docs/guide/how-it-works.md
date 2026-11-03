@@ -123,13 +123,13 @@ the same as one model call, so a 6-window input takes a few seconds.
 | `exfiltration` | tunnels, pipes into `nc`, `curl -d @file` uploads | review |
 | `prompt-injection` | ignore-previous-instructions, jailbreaks, KR+EN | block |
 | `secrets-leak` | API keys, private keys, tokens, key files (`~/.ssh`, `~/.aws`, …) piped into `curl`/`wget`/`nc` | block |
-| `payment-action` | payments/refunds/charges, KR+EN | review |
+| `payment-action` | payments/refunds/charges, KR+EN; on-chain transactions (`forge script … --broadcast`, `cast send`, `cast publish`) | review |
 | `remote-exec` | sketchy package indexes, remote scripts, local pipes into a shell, encoded PS | review |
 | `priv-escalation` | `sudo sh`, `chmod 777`, setuid, redirects into `/etc/` | review |
 | `persistence` | cron, services, shell-rc hooks, git `core.hooksPath`/`core.pager` | review |
 | `mass-delete` | `DROP TABLE`, `s3 rm --recursive`, `kubectl delete --all`, `git push --force`, `git reset --hard`, `git clean -f`, `git checkout -- .`, a delete inside an API request body (`mutation { volumeDelete(...) }`, `{"method": "deleteDatabase"}`), `rm -rf` of a folder right under the home directory (`~/Documents`, `~/.config`), Python or Perl removing the home directory (`shutil.rmtree`, `rmtree`, `remove_tree`) | review |
 | `auth-bypass` | auth/TLS disabling, password resets, KR+EN | block |
-| `credential-read` | reading private keys / cloud credentials (`cat ~/.ssh/id_rsa`, `cat ~/.aws/credentials`, …) | review |
+| `credential-read` | reading private keys / cloud credentials (`cat ~/.ssh/id_rsa`, `cat ~/.aws/credentials`, …), and commands that print one (`cast wallet decrypt-keystore`, `gh auth token`) | review |
 
 All patterns live in [policy.yaml](../../src/laya_guard/policy.yaml) — edit, add your own, no code changes needed.
 

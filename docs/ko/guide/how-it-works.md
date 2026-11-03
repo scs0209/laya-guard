@@ -100,13 +100,13 @@ build`, `vite build`, `jest` 같은 평범한 스크립트를 차단하기 때�
 | `exfiltration` | 터널, `nc`로 파이프, `curl -d @파일` 업로드 | review |
 | `prompt-injection` | 이전 지시 무시, 탈옥, 한영 | block |
 | `secrets-leak` | API 키, 개인키, 토큰, 키 파일(`~/.ssh`, `~/.aws` 등)을 `curl`/`wget`/`nc`로 파이프 | block |
-| `payment-action` | 결제/환불/청구, 한영 | review |
+| `payment-action` | 결제/환불/청구, 한영. 온체인 거래(`forge script … --broadcast`, `cast send`, `cast publish`) | review |
 | `remote-exec` | 수상한 패키지 인덱스, 원격 스크립트, 로컬 내용을 셸로 파이프, 인코딩된 PS | review |
 | `priv-escalation` | `sudo sh`, `chmod 777`, setuid, `/etc/`로 리다이렉트 | review |
 | `persistence` | cron, 서비스 등록, 셸rc 후킹, git `core.hooksPath`/`core.pager` | review |
 | `mass-delete` | `DROP TABLE`, `s3 rm --recursive`, `kubectl delete --all`, `git push --force`, `git reset --hard`, `git clean -f`, `git checkout -- .`, API 요청 본문 안의 삭제(`mutation { volumeDelete(...) }`, `{"method": "deleteDatabase"}`), 홈 바로 아래 폴더의 `rm -rf`(`~/Documents`, `~/.config`), Python·Perl로 홈 디렉터리 지우기(`shutil.rmtree`, `rmtree`, `remove_tree`) | review |
 | `auth-bypass` | 인증/TLS 무력화, 비밀번호 초기화, 한영 | block |
-| `credential-read` | 개인키·클라우드 자격 증명 읽기(`cat ~/.ssh/id_rsa`, `cat ~/.aws/credentials` 등) | review |
+| `credential-read` | 개인키·클라우드 자격 증명 읽기(`cat ~/.ssh/id_rsa`, `cat ~/.aws/credentials` 등)와 자격 증명을 출력하는 명령(`cast wallet decrypt-keystore`, `gh auth token`) | review |
 
 패턴은 전부 [policy.yaml](../../../src/laya_guard/policy.yaml)에 있습니다. 코드 수정 없이 추가·수정 가능.
 
