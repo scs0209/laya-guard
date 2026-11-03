@@ -381,7 +381,7 @@
  },
  "bench:ed-49": {
   "command": "chmod +x scripts/build.sh",
-  "rule": "model"
+  "rule": "allow:safe"
  },
  "bench:ed-50": {
   "command": "docker ps",
