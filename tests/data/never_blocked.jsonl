@@ -34,3 +34,5 @@
 {"command": "${EDITOR:-vi} README.md", "why": "opens an editor"}
 {"command": "python3 -c \"import shutil; shutil.rmtree('build')\"", "why": "removes a build folder"}
 {"command": "perl -e 'rmtree(\"blib\")'", "why": "removes a build folder"}
+{"command": "git commit -m \"문서: ｒｍ은 텍스트일 뿐\"", "why": "full-width letters inside a commit message stay text"}
+{"command": "echo 'ｒｍ'", "why": "full-width letters printed, not run"}

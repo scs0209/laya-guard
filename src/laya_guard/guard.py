@@ -9,6 +9,7 @@ import logging
 import os
 import re
 import threading
+import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 import yaml
@@ -90,14 +91,26 @@ def is_mock() -> bool:
         _laya_ok = False
         return True
 
-def _regex_hit(text: str) -> Policy | None:
-    """The policy whose regexes match text, or the form the shell runs it as (_shell_form); a block outranks a review."""
-    _ensure()
-    assert _policies is not None
+def _regex_forms(text: str) -> list[str]:
+    """Forms the regex pass reads: the text as written, as the shell runs it, and NFKC-folded.
+    Full-width look-alikes (`ｒｍ`, `／`) fold to ASCII so a later normalizer cannot sneak past the rules.
+    Only the regex pass uses these; the safe lane and the model still see what was written (#95)."""
     forms = [text]
     form = _shell_form(text)
     if form != text:
         forms.append(form)
+    for candidate in (text, form):
+        folded = unicodedata.normalize("NFKC", candidate)
+        if folded not in forms:
+            forms.append(folded)
+    return forms
+
+
+def _regex_hit(text: str) -> Policy | None:
+    """The policy whose regexes match text, or the form the shell runs it as (_shell_form); a block outranks a review."""
+    _ensure()
+    assert _policies is not None
+    forms = _regex_forms(text)
     first_review = None
     for pol in _policies:
         if any(rx.search(f) for rx in pol.compiled for f in forms):
@@ -1051,7 +1064,7 @@ def policy_matches(text: str) -> list[Policy]:
     block-level match, so this is how to tell which other policies would also have matched."""
     _ensure()
     assert _policies is not None
-    forms = [text] if _shell_form(text) == text else [text, _shell_form(text)]       # what _regex_hit reads, too
+    forms = _regex_forms(text)       # what _regex_hit reads, too
     return [pol for pol in _policies if any(rx.search(f) for rx in pol.compiled for f in forms)]
 
 def judge_traced(tool_call: str, source: str = "user", cwd: str | None = None, emit=None,
