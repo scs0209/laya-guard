@@ -133,6 +133,13 @@ laya-guard footprint --suggest           # per project: what was touched, and pr
 * **What it sees.** The hooks see the paths a tool call or a command's text names, including one inside `python -c`
   code. A path a script only builds while it runs reaches only `watch`, which records it but can't block it.
 
+Browser tools are opt-in too: `laya-guard install claude-code --browser` (combine with `--files` for both) guards the
+Claude app's built-in browser, Claude in Chrome, and the chrome-devtools and Playwright MCP servers. They are judged by
+rules alone, by what each field holds: secrets typed, put in a URL or in a page script are blocked; a site not on your
+list, a card number or password field, a click or Enter described as paying, ordering, deleting or sending, an upload
+and an installer download are asked about. List your sites in `~/.config/laya-guard/browser.yaml`. A click names an
+element id or coordinates, so what is clicked is only known from the agent's own description of it, when it gives one.
+
 More in the **[Files guide](docs/guide/file-protection.md)**.
 
 ## 📸 Screenshots

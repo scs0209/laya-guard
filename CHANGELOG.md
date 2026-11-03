@@ -5,6 +5,17 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- **Browser tools** (`laya-guard install claude-code --browser`): the Claude app's built-in browser, Claude in Chrome,
+  chrome-devtools MCP and Playwright MCP are judged by their fields, by rules alone (no model): secrets typed, in a URL
+  or in a page script are blocked, and so are a script that reads cookies or storage and sends something out and an
+  upload of a protected path; a site not on the list (`browser.yaml`, localhost always on it), a card number or
+  password field, a click or Enter described as paying, ordering, deleting or sending, an upload and an installer or
+  archive download are asked about. `browser_batch` is judged step by step. A click without a description follows
+  `unlabeled_clicks` (allow by default). The hook now sends the input of a tool that is neither Bash nor a file tool
+  as it is (`tool_input`), and `laya-guard check --input-json` reads it.
+
 ### Fixed
 
 - **Unicode look-alikes no longer bypass the rules (#95)**: `judge()` and `judge_offline()` judge the command as

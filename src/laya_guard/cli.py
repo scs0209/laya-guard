@@ -1,7 +1,7 @@
 """CLI: laya-guard check / serve / eval."""
 from __future__ import annotations
 import argparse, dataclasses, json, os, sys, time
-from . import activity, footprint, osmonitor
+from . import activity, browser, footprint, osmonitor
 from .fileaccess import judge_file_call, judge_shell, stricter
 from .guard import judge, judge_offline, is_mock, warmup
 from .install import InstallError
@@ -9,7 +9,16 @@ from .install import InstallError
 def cmd_check(args):
     text = " ".join(args.text) if args.text else sys.stdin.read()
     cwd = os.path.abspath(args.cwd)
-    v = judge_file_call(args.tool_name, args.path, cwd, args.access or None)   # a file call is judged by its paths alone
+    v = None
+    if args.input_json:          # the text is the tool's input as JSON: a browser tool is judged by its fields
+        try:
+            tool_input = json.loads(text)
+        except ValueError:
+            tool_input = None
+        text = browser.call_text(args.tool_name, tool_input)
+        v = browser.judge_browser_call(args.tool_name, tool_input, cwd)
+    if v is None:
+        v = judge_file_call(args.tool_name, args.path, cwd, args.access or None)   # a file call is judged by its paths alone
     shell = text if (args.shell or args.tool_name == "Bash") else None      # a shell command is also held to the protected paths
     if args.offline:
         # LAYA_GUARD_FAIL: ask (default) sends what it can't judge to a human, closed blocks it, open passes it
@@ -251,20 +260,24 @@ def _probe_line(agent, label, expected, got) -> str:
     return f"  {ok} {label} (answered {_ANSWERS.get(got, f'exit {got}')}, expected {_ANSWERS.get(expected, expected)})"
 
 def cmd_install(args):
-    if args.files:
+    browser_tools = getattr(args, "browser", False)
+    if args.files or browser_tools:
         from . import install as ins_mod
+        flag = "--files" if args.files else "--browser"
         try:
             agent_id = ins_mod.spec_for(args.agent).id
         except InstallError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
         if agent_id != "claude-code":
-            print("error: --files only applies to claude-code", file=sys.stderr)
+            print(f"error: {flag} only applies to claude-code", file=sys.stderr)
             return 1
         if args.matcher:
-            print("error: --files and --matcher both choose the tools the hook guards; use one", file=sys.stderr)
+            print(f"error: {flag} and --matcher both choose the tools the hook guards; use one", file=sys.stderr)
             return 1
-        args.matcher = ins_mod.FILES_MATCHER
+        args.matcher = ins_mod.FILES_MATCHER if args.files else ins_mod.DEFAULT_MATCHER
+        if browser_tools:
+            args.matcher += "|" + browser.BROWSER_MATCHER
     try:
         ins, plan = _plan(args, "install")
     except InstallError as exc:
@@ -509,6 +522,8 @@ def main(argv=None):
     c.add_argument("--tool-name", default=None,
                    help="the agent's name for the tool (Read, Edit, Write, ...): with --path, the call is judged by the paths alone")
     c.add_argument("--agent", default=None, help="which agent is calling (claude-code, ...): labels the file activity log")
+    c.add_argument("--input-json", action="store_true",
+                   help="the text is the tool's input as JSON (with --tool-name): a browser tool is judged by its fields")
     c.add_argument("--shell", action="store_true",
                    help="the text is a shell command an agent is about to run: the paths it names are checked against "
                         "the protected paths, and the file activity log labels it")
@@ -582,6 +597,9 @@ def main(argv=None):
     i.add_argument("--files", action="store_true",
                    help="Claude Code only: also guard the file tools (Read, Edit, MultiEdit, Write, NotebookEdit, Glob, Grep), "
                         "so the protected paths apply to them")
+    i.add_argument("--browser", action="store_true",
+                   help="Claude Code only: also guard the browser tools (the Claude app's browser, Claude in Chrome, "
+                        "chrome-devtools and Playwright MCP), judged by the rules in browser.yaml")
     i.add_argument("--bin", default=None, help="absolute path of the laya-guard executable (default: found automatically)")
     i.add_argument("--dry-run", action="store_true", help="print the diff, write nothing")
     i.add_argument("-y", "--yes", action="store_true", help="apply without asking")
