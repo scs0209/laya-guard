@@ -1003,6 +1003,14 @@
   "command": "perl -e 'rmtree(\"blib\")'",
   "rule": "model"
  },
+ "never_blocked:36": {
+  "command": "echo 'ｒｍ'",
+  "rule": "allow:safe"
+ },
+ "never_blocked:37": {
+  "command": "git commit -m \"문서: ｒｍ은 텍스트일 뿐\"",
+  "rule": "allow:safe"
+ },
  "rewrites_blocked:0": {
   "command": "r''m -rf ~/",
   "rule": "block:destructive-fs"
@@ -1081,6 +1089,14 @@
  },
  "rewrites_blocked:19": {
   "command": "cd ~ && rm -rf *",
+  "rule": "block:destructive-fs"
+ },
+ "rewrites_blocked:20": {
+  "command": "ｒｍ -rf /",
+  "rule": "block:destructive-fs"
+ },
+ "rewrites_blocked:21": {
+  "command": "rm -rf ／",
   "rule": "block:destructive-fs"
  }
 }

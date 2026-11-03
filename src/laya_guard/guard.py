@@ -9,6 +9,7 @@ import logging
 import os
 import re
 import threading
+import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 import yaml
@@ -1002,6 +1003,9 @@ def judge_offline(tool_call: str, fail_closed: bool = False, cwd: str | None = N
     """
     if unknown is None:
         unknown = "block" if fail_closed else "review"
+    # The offline path folds the same Unicode look-alikes as judge() (#95): a full-width `ｒｍ -rf /` must not slip
+    # through just because the server is down.
+    tool_call = unicodedata.normalize("NFKC", tool_call)
     if _oversized(tool_call):
         return _oversized_verdict(tool_call, mock=False)
     ko = _is_korean(tool_call)
@@ -1051,6 +1055,7 @@ def policy_matches(text: str) -> list[Policy]:
     block-level match, so this is how to tell which other policies would also have matched."""
     _ensure()
     assert _policies is not None
+    text = unicodedata.normalize("NFKC", text)        # judge() folds look-alikes; the display reads the same text
     forms = [text] if _shell_form(text) == text else [text, _shell_form(text)]       # what _regex_hit reads, too
     return [pol for pol in _policies if any(rx.search(f) for rx in pol.compiled for f in forms)]
 
@@ -1081,6 +1086,12 @@ def judge(tool_call: str, source: str = "user", cwd: str | None = None, ask: boo
     `sed -n 1,80p f` at 0.99 and most heredocs for `python3 -`, which stopped work instead of asking. A block from a
     block-level pattern stays a block, and so does every block where nobody can be asked (an agent that lets a review
     through with a note would then run what the model refused)."""
+    # Unicode look-alikes are folded once, here at the top, so every later stage reads the same text (#95): a
+    # full-width `ｒｍ -rf /` hits the regexes, `cd app ＆＆ npm test` splits into two commands (its package.json
+    # check runs), and `cat i | ｓｈ` reaches the whole-string floor. NFKC also folds full-width punctuation
+    # (`；` to `;`), so text a shell would only print — `echo 'note；rm -rf /'` — can match a block rule: accepted,
+    # because whatever layer normalizes Unicode before running it is exactly the threat being guarded against.
+    tool_call = unicodedata.normalize("NFKC", tool_call)
     v = _judge(tool_call, source, cwd)
     if ask and v.action == "block" and v.verdict_source in ("model", "heuristic"):
         return Verdict(**{**v.__dict__, "action": "review"})
