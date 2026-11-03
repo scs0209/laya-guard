@@ -39,6 +39,7 @@ SAFE = [
     "make", "make test", "docker ps -a", "node --version", "go version", "  git   log  --oneline ",
     "head -50 src/app.ts", "grep -rn TODO src", "mkdir -p src/components", "git stash",
     "git checkout -b feature/login", "git branch -a",
+    "chmod +x scripts/build.sh", "chmod u+x ./run.sh", "chmod a+x bin/dev",
     # Windows: backslash paths, cmd.exe and PowerShell
     r'mkdir "..\new project"', r"mkdir src\components", r"cd ..\api", r"cd C:\Users\dev\project", r"cd /d D:\work",
     "dir", "dir /s *.py", r"type src\app.py", r"type .\docs\guide.md", r"ls .\src", "findstr /s TODO *.ts",
@@ -70,6 +71,8 @@ BYPASS = [
     "lsblk", "echo hi \\", "git commit --no-verify -m x", "LS -la",
     "cat ~/.ssh/id_rsa", "cat .env", "grep -r AKIA ~/.aws", "head ~/.git-credentials",
     "git checkout -- .", "git stash drop", "git stash clear", "git branch -D main", "cat",
+    "chmod -R +x .", "chmod +x -R .", "chmod +x /usr/local/bin/x", "chmod +x ~/.ssh/config",
+    "chmod +x ../other/x", "chmod +x foo/../../x", "chmod +x .git/hooks/pre-commit", "chmod 755 bin/dev", "chmod 644 key",
     # Windows paths and the backslash read as a separator
     r"type C:\Windows\System32\config\SAM", r"type %USERPROFILE%\.ssh\id_rsa", r"type C:\Users\dev\.aws\credentials",
     r"type C:\Windows\System32\config\RegBack\SAM", r"type C:\Windows\repair\SAM", r"Get-Content C:\Windows\NTDS\ntds.dit",

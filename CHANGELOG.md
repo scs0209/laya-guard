@@ -5,6 +5,10 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+### Fixed
+
+- Allow only `chmod +x`, `chmod u+x` and `chmod a+x` on relative project paths; absolute, home, parent-traversal and `.git/` targets, numeric modes and flags stay outside the safe lane.
+
 ## [0.7.1] - 2026-11-03
 
 Commands that print a credential or put a transaction on chain are asked about by the rules, not left to the model.
