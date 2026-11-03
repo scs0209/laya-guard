@@ -5,6 +5,10 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-11-03
+
+Commands that print a credential or put a transaction on chain are asked about by the rules, not left to the model.
+
 ### Fixed
 
 - **Commands that print a credential or put a transaction on chain are asked about by the rules** (#102). They used to
@@ -14,6 +18,11 @@ All notable changes to this project are documented here. Versions follow
     `gh auth token`, which name no file.
   - `payment-action` also covers on-chain transactions: `forge script … --broadcast`, `cast send`, `cast publish`.
     `forge script` without `--broadcast` and read-only calls (`cast call`, `cast balance`) stay with the model.
+
+### Changed
+
+- A new logo (#91): the dashboard's sidebar shows it and the dashboard has a favicon (inline, since its page loads
+  nothing else); the README, the Space page and its thumbnail use it too.
 
 ## [0.7.0] - 2026-11-02
 
@@ -731,7 +740,8 @@ a verdict.
   Claude Code PreToolUse hook, local redacted telemetry, Korean 30-case eval,
   AgentDojo judge-level eval, E2E rollout harness.
 
-[Unreleased]: https://github.com/scs0209/laya-guard/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/scs0209/laya-guard/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/scs0209/laya-guard/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/scs0209/laya-guard/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/scs0209/laya-guard/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/scs0209/laya-guard/compare/v0.6.0...v0.6.1
