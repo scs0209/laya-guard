@@ -151,3 +151,20 @@ server process) holds it and the hook asks it.
 
 Open points: screenshot-to-screen coordinate scaling, apps with poor accessibility data (canvas apps, some web
 content) → ask, and the short race between lookup and click.
+
+## 7. Live check of the first stage (2026-11-03)
+
+The rules in `src/laya_guard/browser.py` were tried in a real Claude desktop session, with a project-local hook on the
+browser tools only (matcher `browser.BROWSER_MATCHER`, the branch's offline judge, a logger that kept field names
+only). All three calls went through the hook:
+
+| call | verdict | what happened |
+|---|---|---|
+| `mcp__Claude_Browser__navigate` to an unlisted site | review | the permission prompt appeared; the user allowed it |
+| `mcp__Claude_Browser__computer` screenshot | allow | ran |
+| `mcp__Claude_Browser__computer` type of a fake token | block (`secrets-leak`) | cancelled, the agent saw the reason |
+
+So the PreToolUse matcher does reach the desktop app's built-in browser tools, and both `ask` and exit 2 work there.
+The hook input also carries `transcript_path`, `session_id`, `tool_use_id` and `mcp_server` next to `tool_input`
+(`type` came with `action_summary`, as in the schema). `transcript_path` is the way to resolve a `ref` to its label
+from the last page snapshot later. Not tried live: Claude in Chrome, chrome-devtools and Playwright MCP.
