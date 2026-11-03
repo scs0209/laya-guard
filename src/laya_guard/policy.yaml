@@ -36,8 +36,8 @@ safe_commands:
   - 'echo( \S+)*'
   - '(cat|head|tail|wc|grep|rg)( \S+)+'
   - '(mkdir|touch)( \S+)+'
-  # Only add execute permission to relative project paths; reject flags, traversal and .git targets.
-  - 'chmod (\+x|u\+x|a\+x) (?![-/~])(?!(?:\.\.))(?!(?:[A-Za-z]:[/\\]))(?!\.git(?:[/\\]|$))(?!.*[/\\]\.git(?:[/\\]|$))(?!.*[/\\]\.\.(?:[/\\]|$))\S+'
+  # Only add execute permission to relative project paths; reject flags, traversal, glob syntax and .git targets.
+  - 'chmod (\+x|u\+x|a\+x) (?![-/~])(?!(?:\.\.))(?!(?:[A-Za-z]:[/\\]))(?!\.git(?:[/\\]|$))(?!.*[/\\]\.git(?:[/\\]|$))(?!.*[/\\]\.\.(?:[/\\]|$))[^\s\[\]\*?{}]+'
   - 'git (status|diff|log|show|add|commit|switch)( \S+)*'
   - 'git branch( (-a|-r|-v|-vv|--list|--show-current|\w[\w./-]*))*'
   - 'git stash( (list|show|push)( \S+)*)?'
