@@ -130,7 +130,20 @@ Second run, by the user with the permission granted: `AXIsProcessTrusted=true`, 
 id, the focused element, the element at the point and its parents). The mouse stayed over the Claude desktop app
 (Electron): every element was an untitled `AXGroup`; the only label was a parent's description ("bash 코드"), and the
 focused element's ("채팅 메시지"). So web-content apps give little at the leaf; the label, when there is one, is up the
-parent chain. Finder files and native buttons are **not tested yet**.
+parent chain.
+
+Third run (Finder list view, Chrome, Claude app):
+- **Finder: the file path is there.** With the pointer on a file's name, the element is an `AXTextField` with `AXURL`
+  (full path) and `AXFilename`. On the rest of the row (other columns, padding) it is an `AXCell`/`AXRow` with no
+  path; the name cell is a child of the same `AXOutlineRow`, so the lookup has to go up to the row and down to its
+  name cell. That is enough for "double-click on a file under a protected path → block/ask".
+- **Chrome web page:** like Electron, untitled `AXGroup`s; the nearest label was a landmark region's title. Buttons
+  and inputs inside the page not checked.
+- One point gave no element (AXError -25200).
+- Native app buttons (System Settings etc.): **not tested**.
+
+The probe now prints file names as `<name len=N>.ext`. The raw output of this run showed real file names, so it
+stays out of this note.
 
 Design note: whatever holds the Accessibility permission can also drive the UI. Granting it to the terminal or the
 Claude app would hand the same power to the agent's own shell commands. Better: a separate laya-guard helper (or the

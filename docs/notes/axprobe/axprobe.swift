@@ -9,18 +9,26 @@ func short(_ s: String, _ n: Int = 40) -> String {
     let t = s.replacingOccurrences(of: home, with: "~").replacingOccurrences(of: "\n", with: " ")
     return t.count > n ? String(t.prefix(n)) + "…" : t
 }
+// File names stay out of the probe's output: the folder, then the name's length and extension.
+func masked(_ path: String) -> String {
+    let u = URL(fileURLWithPath: path)
+    let dir = u.deletingLastPathComponent().path.replacingOccurrences(of: home, with: "~")
+    let ext = u.pathExtension.isEmpty ? "" : "." + u.pathExtension
+    return "\(dir)/<name len=\(u.deletingPathExtension().lastPathComponent.count)>\(ext)"
+}
 func attr(_ e: AXUIElement, _ name: String) -> String? {
     var v: CFTypeRef?
     guard AXUIElementCopyAttributeValue(e, name as CFString, &v) == .success, let v = v else { return nil }
     if let s = v as? String { return s.isEmpty ? nil : s }
-    if let u = v as? URL { return u.isFileURL ? u.path : (u.host ?? "url") }
+    if let u = v as? URL { return u.isFileURL ? masked(u.path) : (u.host ?? "url") }
     if CFGetTypeID(v) == AXUIElementGetTypeID() { return "<element>" }
     return String(describing: v)
 }
 func describe(_ e: AXUIElement) -> String {
     var parts: [String] = []
     for k in ["AXRole", "AXSubrole", "AXTitle", "AXDescription", "AXIdentifier", "AXURL", "AXFilename"] {
-        if let v = attr(e, k) { parts.append("\(k.dropFirst(2))=\(short(v))") }
+        guard let v = attr(e, k) else { continue }
+        parts.append(k == "AXFilename" ? "Filename(len=\(v.count))" : "\(k.dropFirst(2))=\(short(v, k == "AXURL" ? 80 : 40))")
     }
     if let v = attr(e, "AXValue") { parts.append("Value(len=\(v.count))") }   // typed text: length only
     return parts.joined(separator: " ")
