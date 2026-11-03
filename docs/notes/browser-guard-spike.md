@@ -168,3 +168,28 @@ So the PreToolUse matcher does reach the desktop app's built-in browser tools, a
 The hook input also carries `transcript_path`, `session_id`, `tool_use_id` and `mcp_server` next to `tool_input`
 (`type` came with `action_summary`, as in the schema). `transcript_path` is the way to resolve a `ref` to its label
 from the last page snapshot later. Not tried live: Claude in Chrome, chrome-devtools and Playwright MCP.
+
+## 8. Desktop computer use: live check (2026-11-03)
+
+`src/laya_guard/desktop.py` judges computer-use calls (Anthropic's `computer` tool shape) by asking the
+`laya-guard-ax` helper what is at the click's coordinates. Checked with a Finder window showing a fake key file and an
+ordinary file, a trial rule blocking the fake key, and a laya-guard server on port 8788:
+
+| call | what was under the point | verdict |
+|---|---|---|
+| `double_click` on the fake key's row | Finder `AXTextField` with the file's `AXURL` | **block** (`protected-path`), hook exit 2 |
+| `double_click` on the ordinary file's row | Finder row, ordinary path | allow |
+| `double_click` on the fake key's old coordinates after the Claude window covered them | Claude window | allow (correct: that click would land on Claude, not the file) |
+
+Learned on the way:
+- **Accessibility follows the responsible app.** A command typed with `!` in Claude, or in Claude's terminal panel,
+  runs under the Claude app, and so does a server started there. Granting Terminal does nothing for those. A real
+  setup needs the server started by launchd (`laya-guard service install`) and Accessibility granted to that, not to
+  the Claude app. Not tried yet.
+- The lookup reads what is on top at that moment, which is what the click will hit. Coordinates the agent got from an
+  older screenshot can point at something else by the time it clicks; the verdict follows the screen, not the
+  screenshot.
+- The desktop app did not load the trial folder's `.mcp.json`, so the call came from the hook script fed the same
+  JSON Claude Code sends (that shape was confirmed live with the browser tools in section 7), not from a live session.
+- Not tried: a real computer-use MCP server and its coordinate scale (`LAYA_GUARD_AX_SCALE`), Return/cmd+O on a
+  selection, desktop icons, Open/Save dialogs.
