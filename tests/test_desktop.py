@@ -153,3 +153,33 @@ def test_the_desktop_check_command(env, tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("LAYA_GUARD_AX", str(_fake_helper(tmp_path, ["/tmp/a"])))
     assert cli.main(["desktop", "check", "10", "20"]) == 0
     assert json.loads(capsys.readouterr().out)["paths"] == ["/tmp/a"]
+
+
+def test_a_blocked_call_tells_the_person_at_the_screen(env, monkeypatch):
+    from laya_guard import alerts
+    started = []
+
+    class P:
+        def __init__(self, cmd, **kw):
+            started.append((cmd, kw.get("env")))
+
+        def wait(self):
+            return 0
+    monkeypatch.setattr(alerts.subprocess, "Popen", P)
+    monkeypatch.setattr(alerts.sys, "platform", "darwin")
+    monkeypatch.delenv("LAYA_GUARD_ALERT_CMD", raising=False)
+    monkeypatch.setenv("LAYA_GUARD_NOTIFY", "1")
+    server.guard(server.GuardReq(tool_call="x", tool_name=CU, tool_input={"action": "type", "text": TOKEN}))
+    (cmd, _), = started
+    assert cmd[0] == "osascript" and cmd[-2].startswith("Blocked: ") and "desktop action" in cmd[-1]
+    assert TOKEN not in " ".join(cmd)                                    # the reason, never what was typed
+    server.guard(server.GuardReq(tool_call="x", tool_name=CU, tool_input={"action": "screenshot"}))
+    assert len(started) == 1                                             # nothing for an allow
+    monkeypatch.setenv("LAYA_GUARD_ALERT_CMD", "notify-me")
+    server.guard(server.GuardReq(tool_call="x", tool_name="mcp__Claude_Browser__computer",
+                                 tool_input={"action": "type", "text": TOKEN}))
+    cmd, environ = started[-1]
+    assert cmd == "notify-me" and environ["LAYA_GUARD_ALERT_KIND"] == "blocked" and "browser action" in environ["LAYA_GUARD_ALERT_MESSAGE"]
+    monkeypatch.setenv("LAYA_GUARD_NOTIFY", "0")
+    server.guard(server.GuardReq(tool_call="x", tool_name=CU, tool_input={"action": "type", "text": TOKEN}))
+    assert len(started) == 2

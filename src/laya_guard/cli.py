@@ -18,6 +18,9 @@ def cmd_check(args):
         text = browser.call_text(args.tool_name, tool_input)
         v = browser.judge_browser_call(args.tool_name, tool_input, cwd) or \
             desktop.judge_desktop_call(args.tool_name, tool_input, cwd)
+        if v is not None and v.action == "block":
+            from .alerts import notify_block
+            notify_block(v.reason, "browser action" if browser.is_browser_tool(args.tool_name) else "desktop action")
     if v is None:
         v = judge_file_call(args.tool_name, args.path, cwd, args.access or None)   # a file call is judged by its paths alone
     shell = text if (args.shell or args.tool_name == "Bash") else None      # a shell command is also held to the protected paths
