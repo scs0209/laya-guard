@@ -573,6 +573,28 @@ def test_credential_file_read_is_flagged():
     for cmd in ["cat README.md", "cat ~/.ssh/config", "ls ~/.aws"]:
         assert judge(cmd).policy_id != "credential-read", cmd
 
+def test_printing_a_credential_is_flagged():
+    # No file is named: the Foundry keystore is read by account name, gh prints the token it holds (#102)
+    for cmd in ["cast wallet decrypt-keystore deployer", "cast wallet dk deployer", "gh auth token",
+                "TOKEN=$(gh auth token) && echo ok"]:
+        v = judge(cmd)
+        assert (v.action, v.policy_id) == ("review", "credential-read"), cmd
+        assert guard.judge_offline(cmd).policy_id == "credential-read", cmd
+    for cmd in ["cast wallet list", "cast wallet address --account deployer", "gh auth status", "gh auth login"]:
+        assert judge(cmd).policy_id != "credential-read", cmd
+
+def test_onchain_transactions_ask():
+    # A broadcast can't be undone; a forge script without --broadcast only simulates (#102)
+    for cmd in ["forge script script/Deploy.s.sol --rpc-url $RPC_URL --broadcast",
+                "forge script script/Deploy.s.sol --broadcast --private-key $PK",
+                "cast send 0xabc 'transfer(address,uint256)' 0xdef 1 --rpc-url $RPC_URL",
+                "cast publish 0x02f8..."]:
+        v = judge(cmd)
+        assert (v.action, v.policy_id) == ("review", "payment-action"), cmd
+    for cmd in ["forge script script/Deploy.s.sol --rpc-url $RPC_URL", "forge build", "forge test",
+                "cast call 0xabc 'balanceOf(address)' 0xdef", "cast balance 0xabc"]:
+        assert judge(cmd).policy_id != "payment-action", cmd
+
 def test_git_work_loss_commands_flagged():
     for cmd in ["git reset --hard origin/main", "git reset --hard HEAD~3", "git clean -fdx", "git clean -f",
                 "git checkout -- ."]:

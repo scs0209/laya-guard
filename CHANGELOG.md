@@ -5,6 +5,16 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+### Fixed
+
+- **Commands that print a credential or put a transaction on chain are asked about by the rules** (#102). They used to
+  reach only the model, which had never seen a Foundry command: `cast wallet decrypt-keystore deployer` (prints the
+  account's private key) was allowed, and `forge script` scored the same with or without `--broadcast`.
+  - `credential-read` (now "Credential read") also covers `cast wallet decrypt-keystore` / `cast wallet dk` and
+    `gh auth token`, which name no file.
+  - `payment-action` also covers on-chain transactions: `forge script … --broadcast`, `cast send`, `cast publish`.
+    `forge script` without `--broadcast` and read-only calls (`cast call`, `cast balance`) stay with the model.
+
 ## [0.7.0] - 2026-11-02
 
 The model step runs a Laya fine-tuned for laya-guard's question: it allows more everyday commands and holds more

@@ -177,7 +177,7 @@ policies:
     message_en: "Secret pattern detected — mask it and resend"
 
   - id: payment-action
-    title: "Payment or transfer"
+    title: "Payment, transfer or on-chain transaction"
     patterns:
       - '(결제|송금|환불|refund|charge|payment).*(실행|진행|승인)'
       - 'toss|kakaopay.*(approve|pay)'
@@ -186,12 +186,16 @@ policies:
       - 'modify the recipient.*(payment|transfer)'
       - 'transfer \$[0-9,]+.*to the ac'
       - 'recurring payment.*to (be|the account)'
+      # On-chain transactions: a broadcast can't be undone. forge script without --broadcast only simulates,
+      # and read-only cast calls (cast call, cast balance) stay with the model.
+      - '\bforge\s+script\b[^|;&\n]*\s--broadcast\b'
+      - '\bcast\s+(?:send|publish)\b'
     laya:
       choice: ["allow", "review", "block"]
       score_hint: "risk that money actually moves"
     action_on_regex: review
-    message: "금전 액션 — 사람 승인 필수"
-    message_en: "Money movement — human approval required"
+    message: "금전·온체인 거래 — 사람 승인 필수"
+    message_en: "Money movement or on-chain transaction — human approval required"
 
   - id: remote-exec
     title: "Remote code execution"
@@ -297,13 +301,16 @@ policies:
     message_en: "Auth bypass — blocked immediately"
 
   - id: credential-read
-    title: "Credential file read"
+    title: "Credential read"
     patterns:
       - '\b(?:cat|less|more|head|tail|bat|strings|xxd|base64|cp)\b[^|;&]*(?:\.ssh/id_\w+|\.aws/credentials|\.gnupg/|\.kube/config|\.netrc|\.git-credentials)'
+      # Commands that print a credential without naming a file: the Foundry keystore is read by account name
+      - '\bcast\s+wallet\s+(?:decrypt-keystore|dk)\b'
+      - '\bgh\s+auth\s+token\b'
     laya:
       choice: ["allow", "review", "block"]
       choice_hint: "review when reading private keys or cloud credentials"
       score_hint: "risk of credentials entering the agent's context"
     action_on_regex: review
-    message: "자격 증명 파일 읽기 — 필요한 작업인지 확인"
-    message_en: "Credential file read — confirm it is needed"
+    message: "자격 증명 읽기 — 필요한 작업인지 확인"
+    message_en: "Credential read — confirm it is needed"
