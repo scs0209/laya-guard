@@ -12,7 +12,7 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
-from . import activity, agentbridge, aisim, alerts, browser, dashboard, fileaccess, footprint, install, service, simulation
+from . import activity, agentbridge, aisim, alerts, browser, dashboard, desktop, fileaccess, footprint, install, service, simulation
 from .guard import ASK_AGENTS, judge, is_mock, model_state
 from .log import load_entries, log_enabled, log_path, log_verdict
 
@@ -28,10 +28,13 @@ def _judge_and_log(text: str, source: str, cwd: str | None = None, tool_name: st
                    paths: list[str] | None = None, agent: str | None = None, accesses: list | None = None,
                    command: str | None = None, tool_input: dict | None = None):
     t0 = time.perf_counter()
-    # A browser tool call is judged by what its fields hold (browser.yaml: no model), a file tool call by the paths it
-    # names alone (the protected paths: no model, no content); everything else goes through the judge, and a shell
-    # command is also held to the protected paths it names.
-    v = browser.judge_browser_call(tool_name, tool_input, cwd) if isinstance(tool_input, dict) else None
+    # A browser tool call is judged by what its fields hold (browser.yaml: no model), a desktop computer-use call by what
+    # is on the screen where it clicks (desktop.py), a file tool call by the paths it names alone (the protected paths:
+    # no model, no content); everything else goes through the judge, and a shell command is also held to the protected
+    # paths it names.
+    v = None
+    if isinstance(tool_input, dict):
+        v = browser.judge_browser_call(tool_name, tool_input, cwd) or desktop.judge_desktop_call(tool_name, tool_input, cwd)
     if v is None:
         v = fileaccess.judge_file_call(tool_name, paths, cwd, accesses)
     if v is None:
@@ -60,7 +63,7 @@ class GuardReq(BaseModel):
     agent: str | None = None  # which agent is calling (claude-code, ...); only used to label the opt-in file activity log
     command: str | None = None  # the bare shell command, when this call is one and tool_call wraps it; held to the protected paths and read for the activity log
     accesses: list[dict] | None = None  # what the call touches, as the adapter reads it: [{"op": read|write|delete, "path": ...}]; judged like paths
-    tool_input: dict | None = None  # the tool's input as the agent sent it, for tools judged by their fields (browser tools)
+    tool_input: dict | None = None  # the tool's input as the agent sent it, for tools judged by their fields (browser, desktop)
 
 class GuardRes(BaseModel):
     action: str

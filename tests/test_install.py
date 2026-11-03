@@ -533,3 +533,12 @@ def test_browser_flag_is_for_claude_code_and_not_with_matcher(home, capsys):
     assert "--browser only applies to claude-code" in capsys.readouterr().err
     assert _cli("install", "claude-code", "--browser", "--matcher", "Bash", "--bin", str(GUARD_BIN), "--yes") == 1
     assert "use one" in capsys.readouterr().err
+
+
+def test_desktop_flag_adds_the_named_servers_to_the_matcher(home, capsys):
+    path = home / ".claude" / "settings.json"
+    assert _cli("install", "claude-code", "--desktop", "computer-use,mac_ctl", "--bin", str(GUARD_BIN), "--yes") == 0
+    matcher = json.loads(path.read_text())["hooks"]["PreToolUse"][0]["matcher"]
+    assert matcher == "Bash|mcp__computer-use__.*|mcp__mac_ctl__.*"
+    assert _cli("install", "claude-code", "--desktop", "x|.*", "--bin", str(GUARD_BIN), "--yes") == 1
+    assert "server names" in capsys.readouterr().err

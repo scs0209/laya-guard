@@ -80,9 +80,9 @@ _TABLES = {"claude": _CLAUDE, "devtools": _DEVTOOLS, "playwright": _PLAYWRIGHT}
 # Words in an element's description that make a click (or Enter) something to ask about.
 _RISKY_CLICK = re.compile(
     r"\b(?:pay|payment|checkout|check out|purchase|buy|order|subscribe|donate|transfer|send|submit|confirm|"
-    r"delete|remove|erase|destroy|deactivate|close account|unsubscribe|publish|post|merge|deploy|approve|authori[sz]e|"
+    r"delete|remove|erase|destroy|trash|deactivate|close account|unsubscribe|publish|post|merge|deploy|approve|authori[sz]e|"
     r"grant|accept|install|sign out|log ?out|wipe|reset|revoke)\b"
-    r"|결제|구매|주문|송금|이체|후원|구독|삭제|제거|탈퇴|해지|전송|보내기|제출|승인|게시|배포|설치|초기화|동의|로그아웃",
+    r"|결제|구매|주문|송금|이체|후원|구독|삭제|휴지통|제거|탈퇴|해지|전송|보내기|제출|승인|게시|배포|설치|초기화|동의|로그아웃",
     re.IGNORECASE)
 _SUBMIT_KEY = re.compile(r"(?:^|[\s+])(?:return|enter)$", re.IGNORECASE)
 _PASSWORDISH = re.compile(r"password|passwd|passcode|\bpin\b|otp|one-time|cvc|cvv|card number|비밀번호|암호|인증번호|카드번호",
