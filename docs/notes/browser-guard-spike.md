@@ -111,3 +111,24 @@ these tools. Read-only actions (`screenshot`, `zoom`, `find`, `get_page_text`, `
 - No local hook test (settings write-protected here); built-in browser + hooks unverified.
 - Real model not run on these inputs (mock only).
 - Real data is one session of 23 read-only calls; click/type shapes come from schemas, not real use.
+
+## 6. Follow-up: look up the screen at hook time (desktop computer use)
+
+A coordinates-only click is undecidable from the call, but the hook runs on the same machine right before the click,
+so it can ask macOS what is there: `AXUIElementCopyElementAtPosition(x, y)` gives the element's role, title, and for a
+Finder item its file path (`AXURL`); the frontmost app's `AXFocusedUIElement` says where typed text goes. Rules could
+then judge "double-click on a file under `~/.ssh`" or "click on a button titled 결제하기" with no model.
+
+Probe: [`axprobe/axprobe.swift`](axprobe/axprobe.swift) (prints role/title/path of the element under the mouse and its
+parents; typed values as length only).
+
+Result so far (2026-11-03): compiles and runs, but returns nothing here: `AXIsProcessTrusted=false`, AXError -25211
+(API disabled) outside the sandbox, -25200 inside it. The Claude app that runs the hook has no Accessibility
+permission. Granting it is the user's call (a security setting), so the element lookup itself is **still unverified**.
+
+Design note: whatever holds the Accessibility permission can also drive the UI. Granting it to the terminal or the
+Claude app would hand the same power to the agent's own shell commands. Better: a separate laya-guard helper (or the
+server process) holds it and the hook asks it.
+
+Open points: screenshot-to-screen coordinate scaling, apps with poor accessibility data (canvas apps, some web
+content) → ask, and the short race between lookup and click.
