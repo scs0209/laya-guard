@@ -124,7 +124,13 @@ parents; typed values as length only).
 
 Result so far (2026-11-03): compiles and runs, but returns nothing here: `AXIsProcessTrusted=false`, AXError -25211
 (API disabled) outside the sandbox, -25200 inside it. The Claude app that runs the hook has no Accessibility
-permission. Granting it is the user's call (a security setting), so the element lookup itself is **still unverified**.
+permission. Granting it is the user's call (a security setting).
+
+Second run, by the user with the permission granted: `AXIsProcessTrusted=true`, the lookup works (app name and bundle
+id, the focused element, the element at the point and its parents). The mouse stayed over the Claude desktop app
+(Electron): every element was an untitled `AXGroup`; the only label was a parent's description ("bash 코드"), and the
+focused element's ("채팅 메시지"). So web-content apps give little at the leaf; the label, when there is one, is up the
+parent chain. Finder files and native buttons are **not tested yet**.
 
 Design note: whatever holds the Accessibility permission can also drive the UI. Granting it to the terminal or the
 Claude app would hand the same power to the agent's own shell commands. Better: a separate laya-guard helper (or the
