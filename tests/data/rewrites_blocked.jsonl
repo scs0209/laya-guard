@@ -18,3 +18,5 @@
 {"command": "sh -c \"$(echo cm0gLXJmIH4v | base64 -d)\""}
 {"command": "find ~ -mindepth 1 -delete"}
 {"command": "cd ~ && rm -rf *"}
+{"command": "ｒｍ -rf /"}
+{"command": "rm -rf ／"}

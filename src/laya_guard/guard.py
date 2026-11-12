@@ -9,6 +9,7 @@ import logging
 import os
 import re
 import threading
+import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 import yaml
@@ -970,6 +971,9 @@ def _scan_script(key: str, body: str, pkg_dir: str, depth: int,
     if len(body) > MAX_SCRIPT_CHARS:
         return _ScriptFinding(key, unresolved="script too long to check")
     hit = _regex_hit(body)
+    folded = unicodedata.normalize("NFKC", body)          # look-alikes in a script, as in a command (#95)
+    if folded != body and (hit is None or hit.action_on_regex != "block"):
+        hit = _regex_hit(folded) or hit
     worst = _ScriptFinding(key, hit=hit) if hit is not None else None
     if worst is not None and worst.rank() == 2:
         return worst
@@ -989,6 +993,13 @@ def _script_reason(f: _ScriptFinding, ko: bool) -> str:
         msg = f.unresolved or ""
     return f"package.json scripts.{f.key}: {msg}"
 
+def _worse(a: Verdict, b: Verdict) -> Verdict:
+    """The stricter of two verdicts on the same call (as written and NFKC-folded), ranked the way _judge ranks a chain:
+    action, then a rule's block over the model's, then risk. On a tie the first one stands."""
+    key = lambda v: (_ACTION_RANK[v.action], v.action == "block" and v.verdict_source not in ("model", "heuristic"),
+                     v.risk)
+    return b if key(b) > key(a) else a
+
 def judge_offline(tool_call: str, fail_closed: bool = False, cwd: str | None = None,
                   unknown: str | None = None) -> Verdict:
     """Regex + safe-command check without the model, for hooks whose server is down.
@@ -1002,6 +1013,15 @@ def judge_offline(tool_call: str, fail_closed: bool = False, cwd: str | None = N
     """
     if unknown is None:
         unknown = "block" if fail_closed else "review"
+    # The offline path folds the same Unicode look-alikes as judge() (#95), the same way: a full-width `ｒｍ -rf /`
+    # must not slip through just because the server is down.
+    v = _judge_offline(tool_call, unknown, cwd)
+    if v.verdict_source == "limit":
+        return v
+    folded = unicodedata.normalize("NFKC", tool_call)
+    return v if folded == tool_call else _worse(v, _judge_offline(folded, unknown, cwd))
+
+def _judge_offline(tool_call: str, unknown: str, cwd: str | None) -> Verdict:
     if _oversized(tool_call):
         return _oversized_verdict(tool_call, mock=False)
     ko = _is_korean(tool_call)
@@ -1051,7 +1071,11 @@ def policy_matches(text: str) -> list[Policy]:
     block-level match, so this is how to tell which other policies would also have matched."""
     _ensure()
     assert _policies is not None
-    forms = [text] if _shell_form(text) == text else [text, _shell_form(text)]       # what _regex_hit reads, too
+    forms = []
+    for t in (text, unicodedata.normalize("NFKC", text)):     # judge() reads both the written and the folded text
+        for f in (t, _shell_form(t)):                          # what _regex_hit reads, too
+            if f not in forms:
+                forms.append(f)
     return [pol for pol in _policies if any(rx.search(f) for rx in pol.compiled for f in forms)]
 
 def judge_traced(tool_call: str, source: str = "user", cwd: str | None = None, emit=None,
@@ -1081,7 +1105,20 @@ def judge(tool_call: str, source: str = "user", cwd: str | None = None, ask: boo
     `sed -n 1,80p f` at 0.99 and most heredocs for `python3 -`, which stopped work instead of asking. A block from a
     block-level pattern stays a block, and so does every block where nobody can be asked (an agent that lets a review
     through with a note would then run what the model refused)."""
+    # Unicode look-alikes (#95): the command is judged as written and, when NFKC changes it, folded too, and the stricter
+    # verdict stands. Folded, a full-width `ｒｍ -rf /` hits the regexes, `cd app ＆＆ npm test` splits into two
+    # commands (its package.json check runs) and `cat i | ｓｈ` reaches the whole-string floor. As written, it is what
+    # the shell runs: `＃`, `＂`, `＇` and `＼` are plain characters there, but fold into a comment, quotes and an
+    # escape that would hide `npm test` in `ls ＃; npm test`, and `cd ａｐｐ` enters ａｐｐ, not app. So folding can
+    # only add to a verdict, never lower one. The written text's length is checked first: NFKC can shorten it.
+    # NFKC also folds full-width punctuation (`；` to `;`), so text a shell would only print — `echo 'note；rm -rf /'`
+    # — can match a block rule: accepted, because whatever layer normalizes Unicode before running it is exactly the
+    # threat being guarded against.
     v = _judge(tool_call, source, cwd)
+    if v.verdict_source != "limit":
+        folded = unicodedata.normalize("NFKC", tool_call)
+        if folded != tool_call:
+            v = _worse(v, _judge(folded, source, cwd))
     if ask and v.action == "block" and v.verdict_source in ("model", "heuristic"):
         return Verdict(**{**v.__dict__, "action": "review"})
     return v
