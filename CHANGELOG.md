@@ -7,12 +7,15 @@ All notable changes to this project are documented here. Versions follow
 
 ### Fixed
 
-- **Unicode look-alikes no longer bypass the rules (#95)**: input is NFKC-normalized once, at the top of `judge()`
-  and `judge_offline()`, before any stage reads the command. A full-width `ｒｍ -rf /` now hits the regex floor,
-  `cd app ＆＆ npm test` splits into two commands (so its package.json check runs), `cat i | ｓｈ` reaches the
-  whole-string regex, and the offline fallback (`check --offline`) folds the same way. NFKC also folds full-width
-  punctuation (`；` to `;`), so text a shell would only print — `echo 'note；rm -rf /'` — can match a block rule:
-  accepted, because whatever layer normalizes Unicode before running it is exactly the threat being guarded against.
+- **Unicode look-alikes no longer bypass the rules (#95)**: `judge()` and `judge_offline()` judge the command as
+  written and, when NFKC changes it, folded too, and the stricter verdict stands. Folded, a full-width `ｒｍ -rf /` hits
+  the regex floor, `cd app ＆＆ npm test` splits into two commands (so its package.json check runs) and `cat i | ｓｈ`
+  reaches the whole-string regex. As written, it is what the shell runs, so folding never lowers a verdict: `＃`, `＂`,
+  `＇` and `＼` can't hide `npm test` in `ls ＃; npm test`, and `cd ａｐｐ` has the scripts of ａｐｐ checked, not app.
+  The length limit reads the text as written. Package scripts and the dashboard's policy list read both forms too.
+  NFKC also folds full-width punctuation (`；` to `;`), so text a shell would only print — `echo 'note；rm -rf /'` —
+  can match a block rule: accepted, because whatever layer normalizes Unicode before running it is exactly the threat
+  being guarded against.
 - Allow only `chmod +x`, `chmod u+x` and `chmod a+x` on relative project paths; absolute, home, parent-traversal and `.git/` targets, numeric modes and flags stay outside the safe lane.
 
 ## [0.7.1] - 2026-11-03
