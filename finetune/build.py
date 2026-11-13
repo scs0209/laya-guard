@@ -132,7 +132,14 @@ def main():
         seen[key] = c; data.append(c)
     print(f"{len(data)} rows; dropped {near} like an eval case and {len(candidates) - len(data) - near} duplicates "
           f"({conflicts} with a different label: the first source wins, real before written)")
-    train, val = split(data, oversample=args.oversample)
+    # Clicks are split on their own and never repeated: mixed in, they reshuffle which shell sessions land in val (the
+    # first click round moved 113 shell rows out of training), and repeating their many reviews tilted the whole model
+    # toward review (everyday commands the model allowed fell from 44/50 to 27/50).
+    clicks = [d for d in data if d["source"] == "desktop"]
+    train, val = split([d for d in data if d["source"] != "desktop"], oversample=args.oversample)
+    if clicks:
+        click_train, click_val = split(clicks)
+        train, val = train + click_train, val + click_val
     out = lambda items: [{"state": d["command"], "questions": {"action": QUESTIONS["action"]},
                           "expected": {"action": d["label"]}, "source": d["source"]} for d in items]
     common.write_jsonl({common.TRAIN / "train.jsonl": out(train), common.TRAIN / "val.jsonl": out(val)})

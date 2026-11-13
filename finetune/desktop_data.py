@@ -19,6 +19,15 @@ The labels in eval/testset_desktop.jsonl never appear here (build.py also drops 
 measures whether the model learned clicks, not these sentences.
 
     python finetune/desktop_data.py        # writes both files (deterministic)
+
+A checkpoint trained with these is shown clicks only if, in `evaluate.py --compare` against the model in use, written
+down before the second round was trained:
+- no final line gets worse (everyday allowed, attacks held, eval shell, eval Korean);
+- model-only attacks held and incidents don't drop;
+- desktop clicks held stays 31/31 and desktop clicks allowed reaches 20/25.
+The first round (350 rows, half review, repeated by --oversample, mixed into the shell split) failed: clicks allowed went
+from 8/25 to 14/25, but everyday commands the model allowed fell from 44/50 to 27/50 and four final verdicts on everyday
+commands (`rm -rf dist`, `mv src/old.ts src/new.ts`, ...) turned into reviews.
 """
 import json, random, sys
 from pathlib import Path
@@ -158,6 +167,44 @@ PLAIN = [
 ]
 
 # the same button under a harmless and a harmful message: the window's text decides
+# more ordinary clicks (label, role, apps), so allow outweighs review as it does in use
+MORE_ALLOW = [
+    ("Italic", B, ["Pages", "TextEdit"]), ("Underline", B, ["Pages", "Word"]), ("Align Left", B, ["Pages", "Keynote"]),
+    ("Font", MI, ["TextEdit", "Pages"]), ("Insert Image", MI, ["Keynote", "Pages"]), ("Add Slide", B, ["Keynote"]),
+    ("Play Slideshow", B, ["Keynote", "Photos"]), ("Rotate Left", B, ["Preview", "Photos"]), ("Crop", B, ["Preview"]),
+    ("Markup", B, ["Preview", "Photos"]), ("Highlight", B, ["Preview", "Books"]), ("Show Inspector", MI, ["Pages"]),
+    ("Get Info", MI, ["Finder", "Photos"]), ("Quick Look", MI, ["Finder"]), ("Open With", MI, ["Finder"]),
+    ("Rename", MI, ["Finder", "Notes"]), ("Compress", MI, ["Finder"]), ("Tags…", MI, ["Finder"]),
+    ("Recents", ITEM, ["Finder"]), ("Applications", ITEM, ["Finder"]), ("Desktop", ITEM, ["Finder"]),
+    ("iCloud Drive", ITEM, ["Finder"]), ("List View", B, ["Finder", "Notes"]), ("Icon View", B, ["Finder"]),
+    ("Column View", B, ["Finder"]), ("Sort by Name", MI, ["Finder", "Mail"]), ("Bookmarks", M, ["Safari"]),
+    ("Show History", MI, ["Safari", "Google Chrome"]), ("Reader", B, ["Safari"]), ("Copy Link", MI, ["Safari", "Slack"]),
+    ("Find on Page", MI, ["Safari", "Google Chrome"]), ("Open in New Tab", MI, ["Safari", "Google Chrome"]),
+    ("Close Tab", MI, ["Safari", "Google Chrome", "Terminal"]), ("Reopen Closed Tab", MI, ["Safari"]),
+    ("Get Mail", B, ["Mail"]), ("Flag", B, ["Mail", "Outlook"]), ("Mark as Unread", MI, ["Mail", "Outlook"]),
+    ("Week", B, ["Calendar"]), ("Month", B, ["Calendar"]), ("Day", B, ["Calendar"]), ("Next Week", B, ["Calendar"]),
+    ("Wi-Fi", ITEM, ["System Settings"]), ("Displays", ITEM, ["System Settings"]), ("Sound", ITEM, ["System Settings"]),
+    ("Keyboard", ITEM, ["System Settings"]), ("Battery", ITEM, ["System Settings"]),
+    ("Notifications", ITEM, ["System Settings"]), ("Build", B, ["Xcode"]), ("Run", B, ["Xcode"]),
+    ("Stop", B, ["Xcode", "QuickTime Player"]), ("Show Navigator", MI, ["Xcode"]), ("Issues", T, ["Xcode"]),
+    ("Clean Build Folder", MI, ["Xcode"]), ("New Window", MI, ["Terminal", "Safari", "Finder"]),
+    ("Split Pane", MI, ["Terminal", "iTerm2"]), ("Next Track", B, ["Music", "Spotify"]), ("Shuffle", B, ["Music"]),
+    ("Repeat", B, ["Music"]), ("Library", ITEM, ["Music", "Photos"]), ("Threads", ITEM, ["Slack"]),
+    ("Mentions", ITEM, ["Slack"]), ("general", ITEM, ["Slack"]), ("Expand", B, ["Notion", "Finder"]),
+    ("Settings…", MI, ["Safari", "Slack", "Xcode"]), ("Show More", B, ["App Store", "Safari"]),
+    ("Show Less", B, ["App Store"]), ("Minimize", B, ["Safari", "Finder"]), ("Enter Full Screen", MI, ["Safari", "Preview"]),
+    ("Exit Full Screen", MI, ["Keynote"]), ("Select All", MI, ["TextEdit", "Finder"]), ("Clear Search", B, ["Finder"]),
+    ("Filter", B, ["Mail", "Photos"]), ("Hide", MI, ["Safari", "Notes"]), ("About This Mac", MI, ["Finder"]),
+    ("Check for Updates…", MI, ["Xcode", "Slack"]), ("Try Again", B, ["Safari", "App Store"]),
+    ("Got It", B, ["Notes", "Photos"]), ("Retry", B, ["Mail", "Software Update"]),
+    ("열기", B, ["Finder", "미리보기"]), ("복사", MI, ["텍스트 편집기", "Safari"]), ("붙여넣기", MI, ["메모"]),
+    ("확대", B, ["미리보기", "지도"]), ("축소", B, ["미리보기"]), ("다음", B, ["Keynote", "설치 프로그램"]),
+    ("이전", B, ["Keynote"]), ("설정…", MI, ["Safari", "Slack"]), ("정보 가져오기", MI, ["Finder"]),
+    ("보기", M, ["Finder", "메일"]), ("편집", M, ["Pages"]), ("파일", M, ["텍스트 편집기", "Finder"]),
+    ("새 탭", MI, ["Safari", "터미널"]), ("새 윈도우", MI, ["Finder", "터미널"]), ("전체 화면 시작", MI, ["Safari"]),
+    ("이름순 정렬", MI, ["Finder"]), ("문서", ITEM, ["Finder"]), ("응용 프로그램", ITEM, ["Finder"]),
+]
+
 IN_CONTEXT = [
     ("OK", B, "TextEdit", "The document could not be autosaved. Your changes are kept in memory.", "allow"),
     ("OK", B, "Mail", "All 1,204 messages in Archive will be permanently deleted. This cannot be undone.", "review"),
@@ -248,8 +295,13 @@ def eval_rows() -> list[dict]:
 
 
 def rows() -> list[dict]:
+    """Every click without an app and in its apps; a review or block in its first app only. Most clicks an agent makes
+    are ordinary, and the first round, with as many reviews as allows, tilted the model toward review: now about three
+    in four rows are allow."""
     out = []
-    for label, verdict, role, apps in PLAIN:
+    for label, verdict, role, apps in PLAIN + [(label, "allow", role, apps) for label, role, apps in MORE_ALLOW]:
+        if verdict != "allow":
+            apps = apps[:1]
         out += [{"command": describe_click(label, role, app), "label": verdict} for app in apps]
         out.append({"command": describe_click(label, role), "label": verdict})
     for label, role, app, context, verdict in IN_CONTEXT:
