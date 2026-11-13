@@ -173,6 +173,23 @@ def second_opinion():
     return ask
 
 
+_KINDS = {"AXButton": "button", "AXMenuItem": "menu item", "AXMenuBarItem": "menu", "AXCheckBox": "checkbox",
+          "AXRadioButton": "option", "AXLink": "link", "AXTab": "tab", "AXPopUpButton": "pop-up menu",
+          "AXRow": "row", "AXCell": "item", "AXStaticText": "item", "AXTextField": "item", "AXImage": "icon"}
+
+
+def describe_click(label: str, role: str = "", app: str = "", context: str = "") -> str:
+    """A click as the model reads it, in training and in use alike (finetune/desktop_data.py writes its examples
+    with this): what is clicked, where, and, when known, what the window around it says."""
+    kind = _KINDS.get(role, "button" if not role else "element")
+    text = f'desktop: click the "{label.strip()[:120]}" {kind}'
+    if app.strip():
+        text += f" in {app.strip()[:60]}"
+    if context.strip():
+        text += f' (the window says: "{" ".join(context.split())[:300]}")'
+    return text
+
+
 def _confirm(v: Verdict, text: str, what: str, model) -> Verdict:
     """An allow from the rules, shown to the model when it is on: it may become a review, never a block. The reason
     names what was done, never the text itself (it can be shown on screen)."""

@@ -21,6 +21,11 @@ def rows():
             r = json.loads(l)
             if r.get("expected", "any") != "any":
                 out.append(("eval-" + f, r["id"], r["tool_call"], r["expected"]))
+    # desktop clicks (finetune/desktop_data.py): the guard only shows them to the model, so they have no final verdict
+    for l in open(ROOT / "eval/testset_desktop.jsonl", encoding="utf-8"):
+        r = json.loads(l)
+        out.append(("desktop-" + ("allow" if r["expected"] == "allow" else "hold"), r["id"], r["tool_call"],
+                    r["expected"]))
     for i, l in enumerate(open(ROOT / "train/val.jsonl")):
         r = json.loads(l)
         out.append(("val", i, r["state"], r["expected"]["action"]))
@@ -36,7 +41,7 @@ def run(which):
     for s, i, t, e in rows():
         # _laya_judge, not _laya_predict: long inputs are read in windows and the worst one counts, as the guard does
         t0 = time.perf_counter(); a, risk = guard._laya_judge(t); ms.append((time.perf_counter() - t0) * 1000)
-        final = guard.judge(t, source=SOURCE, ask=ASK).action if s != "val" else None
+        final = guard.judge(t, source=SOURCE, ask=ASK).action if s != "val" and not s.startswith("desktop-") else None
         res.append({"set": s, "id": i, "text": t, "expected": e, "model": a, "risk": risk, "final": final})
     name = "base" if which == "base" else "ckpt"
     json.dump({"which": which, "mode": {"source": SOURCE, "ask": ASK}, "rows": res, "ms_median": st.median(ms),
@@ -69,6 +74,8 @@ def compare():
              ("model-only: everyday allowed", ("bench-everyday",), "model"),
              ("model-only: eval shell", ("eval-shell",), "model"), ("model-only: eval Korean", ("eval-ko_30",), "model"),
              ("model-only: eval incidents", ("eval-incidents",), "model"),
+             ("model-only: desktop clicks allowed", ("desktop-allow",), "model"),
+             ("model-only: desktop clicks held", ("desktop-hold",), "model"),
              ("final: attacks held", ("bench-incident", "bench-evasion"), "final"),
              ("final: everyday allowed", ("bench-everyday",), "final"),
              ("final: eval shell", ("eval-shell",), "final"), ("final: eval Korean", ("eval-ko_30",), "final")]
@@ -89,7 +96,7 @@ def compare():
     B = {(r["set"], r["id"]): r for r in R["base"]["rows"]}
     for r in R["ckpt"]["rows"]:
         b = B[(r["set"], r["id"])]
-        if r["set"] != "val" and r["final"] != b["final"]:
+        if r["final"] is not None and r["final"] != b["final"]:
             mark = "better" if ok(r["expected"], r["final"], True) and not ok(b["expected"], b["final"], True) else \
                    "WORSE" if ok(b["expected"], b["final"], True) and not ok(r["expected"], r["final"], True) else "same score"
             print(f"  [{mark:10}] {r['set']:15} {' '.join(r['text'].split())[:60]!r}: {b['final']} -> {r['final']} (expected {r['expected']})")

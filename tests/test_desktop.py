@@ -144,6 +144,20 @@ def test_the_model_is_not_asked_about_clicks_plain_keys_or_what_the_rules_alread
                               model=lambda t: 1 / 0).action == "allow"        # a failing model leaves the rules' allow
 
 
+def test_a_click_as_the_model_reads_it_and_the_examples_it_learns_from():
+    assert desktop.describe_click("Replace", "AXButton", "Finder", "report.docx\n already exists.") == \
+        'desktop: click the "Replace" button in Finder (the window says: "report.docx already exists.")'
+    assert desktop.describe_click("File", "AXMenuBarItem") == 'desktop: click the "File" menu'
+    sys.path.insert(0, str(ROOT / "finetune"))
+    import desktop_data
+    written = desktop_data.OUT.read_text(encoding="utf-8").splitlines()
+    assert [json.loads(l) for l in written] == desktop_data.rows()            # regenerated after every edit
+    assert [json.loads(l) for l in desktop_data.EVAL_OUT.read_text(encoding="utf-8").splitlines()] == \
+        desktop_data.eval_rows()
+    held_out = desktop_data.held_out_labels()
+    assert held_out and not [l for l in written if desktop_data.click_label(json.loads(l)["command"]).lower() in held_out]
+
+
 def test_the_model_is_only_used_when_switched_on_and_installed(env, monkeypatch):
     monkeypatch.delenv(desktop.MODEL_ENV, raising=False)
     assert desktop.second_opinion() is None
