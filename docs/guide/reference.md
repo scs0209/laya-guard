@@ -85,6 +85,7 @@ there. It only reads the screen. It needs the Accessibility permission, given to
 | `LAYA_GUARD_BROWSER` | env | `~/.config/laya-guard/browser.yaml` — your browser rules: `sites` an agent may open without asking, and `unlabeled_clicks` (`allow` or `review`) for clicks the call doesn't describe |
 | `LAYA_GUARD_AX` | env (server, offline check) | `~/.config/laya-guard/bin/laya-guard-ax` — the screen lookup helper `laya-guard desktop setup` builds |
 | `LAYA_GUARD_AX_SCALE` | env (server, offline check) | `1` — multiplies a computer-use call's coordinates, for a server that sends screenshot pixels rather than screen points |
+| `LAYA_GUARD_DESKTOP_MODEL` | env (server) | off — `1` also shows the Laya model the text a desktop agent types and its cmd/ctrl/option shortcuts when the rules allow them; the model can only turn them into a review (`desktop-model`), never a block. Clicks and plain keys stay with the rules. Needs the model installed (no effect in mock mode); about 0.1 s per call on CPU |
 | `LAYA_GUARD_ALERT_COOLDOWN` | env | `600` — seconds before the same kind of alert can run again |
 | block/review thresholds | `policy.yaml` → `defaults` | 0.8 / 0.45 |
 | model checkpoint | `policy.yaml` → `defaults.model` | `multilingual` |

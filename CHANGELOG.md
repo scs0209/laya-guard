@@ -29,6 +29,11 @@ All notable changes to this project are documented here. Versions follow
   what was typed or clicked), or `LAYA_GUARD_ALERT_CMD` runs with `LAYA_GUARD_ALERT_KIND=blocked`.
   `LAYA_GUARD_NOTIFY=dialog` shows it as an alert in the middle of the screen instead of a banner (it closes itself
   after 30 seconds); `LAYA_GUARD_NOTIFY=0` turns it off.
+- **The model as a second opinion on desktop typing** (`LAYA_GUARD_DESKTOP_MODEL=1`, off by default): text a desktop
+  agent types and its cmd/ctrl/option shortcuts, when the rules allow them, are also shown to the Laya model, which can
+  raise them to a review (`desktop-model`) but never to a block. On hand-written cases it held `rm -rf ~/Documents`,
+  `curl ... | sh` and cmd+delete and let ordinary text through, but it scored button labels too evenly to judge clicks
+  (it held "Cancel"), so clicks and plain keys stay with the rules.
 
 ### Fixed
 

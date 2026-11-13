@@ -15,6 +15,13 @@ Peekaboo (openclaw/Peekaboo) has tools of its own: a click names an element ID f
 coordinates. A query is looked up by name in the target app (and Finder); an element ID is turned into its label from
 that `see` result in the agent's transcript, then looked up the same way. `agent` (Peekaboo's own model running steps
 the hook never sees) and `analyze` (a screenshot sent to an AI provider) are asked about.
+
+The Laya model as a second opinion (LAYA_GUARD_DESKTOP_MODEL=1, server only, off by default): text the rules let an
+agent type, and shortcuts with cmd, ctrl or option, are also shown to the model, which can raise them to a review but
+never to a block, so a wrong guess costs one permission prompt. Measured on hand-written cases, it told typed commands
+(`rm -rf ~/Documents`, `curl ... | sh`) and shortcuts (cmd+delete) from ordinary ones well, but scored nearly every
+button label around its review line (it held "Cancel" at 0.81), so clicks stay with the rules alone, and so do plain
+keys (it held Escape).
 """
 from __future__ import annotations
 
@@ -143,18 +150,60 @@ def _click(action: str, a: dict, cwd: str | None, look) -> Verdict:
     return _v("allow", "a click on nothing protected")
 
 
-def _key(a: dict, cwd: str | None, look) -> Verdict:
+# --- the model's second opinion ---------------------------------------------------------------------------------------
+
+MODEL_ENV = "LAYA_GUARD_DESKTOP_MODEL"
+_MODIFIED = re.compile(r"(?:^|[\s+])(?:cmd|command|ctrl|control|option|opt|alt|super|meta)\+", re.IGNORECASE)
+
+
+def model_enabled() -> bool:
+    return os.environ.get(MODEL_ENV, "").strip().lower() in ("1", "on", "true", "yes")
+
+
+def second_opinion():
+    """The model step for typed text and shortcuts, or None when LAYA_GUARD_DESKTOP_MODEL is off or the model isn't
+    installed (mock mode). It returns (action, risk); a model that fails says allow, so the rules' verdict stands."""
+    if not model_enabled() or is_mock():
+        return None
+    from .guard import _model_or_fallback
+
+    def ask(text: str) -> tuple[str, float]:
+        action, risk, ok = _model_or_fallback(text, None)
+        return (action, risk) if ok else ("allow", 0.0)
+    return ask
+
+
+def _confirm(v: Verdict, text: str, what: str, model) -> Verdict:
+    """An allow from the rules, shown to the model when it is on: it may become a review, never a block. The reason
+    names what was done, never the text itself (it can be shown on screen)."""
+    if model is None or v.action != "allow":
+        return v
+    try:
+        action, risk = model(text)
+    except Exception:
+        return v
+    if action == "allow":
+        return v
+    return Verdict(action="review", risk=round(float(risk), 3), policy_id="desktop-model", mock=False,
+                   reason=f"the Laya model asks about {what} (risk {float(risk):.2f})", verdict_source="model")
+
+
+def _key(a: dict, cwd: str | None, look, model=None) -> Verdict:
     keys = a.get("text") if isinstance(a.get("text"), str) else a.get("key") or a.get("keys")
     keys = "+".join(keys) if isinstance(keys, list) else keys
-    if not isinstance(keys, str) or not any(_OPENS.match(k) for k in keys.split()):
+    if not isinstance(keys, str):
         return _v("allow", "a key press")
+    shortcut = (lambda v: _confirm(v, f"desktop: press {keys[:200]}", "this shortcut", model)) \
+        if _MODIFIED.search(keys) else (lambda v: v)
+    if not any(_OPENS.match(k) for k in keys.split()):
+        return shortcut(_v("allow", "a key press"))
     info = look("selection")
     if info is None:
         return _v("review", "can't see what this key opens (laya-guard desktop setup)")
-    return _files(info, cwd, "opening") or _v("allow", "a key press on nothing protected")
+    return _files(info, cwd, "opening") or shortcut(_v("allow", "a key press on nothing protected"))
 
 
-def _type(a: dict, cwd: str | None) -> Verdict:
+def _type(a: dict, cwd: str | None, model=None) -> Verdict:
     text = " ".join(browser._strs(a.get("text"), a.get("value")))
     hit = browser._sensitive_text(text, "")
     if hit is not None:
@@ -163,17 +212,19 @@ def _type(a: dict, cwd: str | None) -> Verdict:
     rule = judge_accesses([("read", p) for p in paths], cwd) if paths else None
     if rule is not None:
         return _v(rule.action, f"typing the path of a protected file ({rule.reason})", "protected-path")
-    return _v("allow", "typing ordinary text")
+    allowed = _v("allow", "typing ordinary text")
+    return _confirm(allowed, f"desktop: type this text: {text}", "this typed text", model) if text.strip() else allowed
 
 
 def judge_desktop_call(tool_name: str | None, tool_input, cwd: str | None = None, look=None,
-                       transcript: str | None = None) -> Verdict | None:
+                       transcript: str | None = None, model=None) -> Verdict | None:
     """The verdict for a desktop computer-use call, or None when the call isn't one (the caller judges it as usual).
-    transcript: the agent's transcript file, where Peekaboo's element IDs are turned into labels."""
+    transcript: the agent's transcript file, where Peekaboo's element IDs are turned into labels.
+    model: second_opinion()'s callable, which may raise typed text and shortcuts the rules allow to a review."""
     look = look or lookup
     tool = peekaboo_tool(tool_name)
     if tool is not None and isinstance(tool_input, dict):
-        return _peekaboo(tool, tool_input, cwd, look, transcript)
+        return _peekaboo(tool, tool_input, cwd, look, transcript, model)
     parsed = parse(tool_name, tool_input)
     if parsed is None:
         return None
@@ -183,9 +234,9 @@ def judge_desktop_call(tool_name: str | None, tool_input, cwd: str | None = None
     if action in CLICKS:
         return _click(action, a, cwd, look)
     if action in KEYS:
-        return _key(a, cwd, look)
+        return _key(a, cwd, look, model)
     if action in TYPES:
-        return _type(a, cwd)
+        return _type(a, cwd, model)
     return _v("review", f"a desktop action this check doesn't know ({action[:40]})")
 
 
@@ -309,7 +360,7 @@ def _keys(a: dict) -> str:
     return "+".join(mods + [key]) if key else ""
 
 
-def _peekaboo(tool: str, a: dict, cwd: str | None, look, transcript: str | None) -> Verdict:
+def _peekaboo(tool: str, a: dict, cwd: str | None, look, transcript: str | None, model=None) -> Verdict:
     action = str(a.get("action") or "").lower()
     if tool in _RISKY_TOOLS and not (tool == "clipboard" and action in ("status",)):
         return _v("review", _RISKY_TOOLS[tool])
@@ -318,13 +369,15 @@ def _peekaboo(tool: str, a: dict, cwd: str | None, look, transcript: str | None)
     if tool in ("click", "action", "drag"):
         return _on_target(tool, a, cwd, look, transcript)
     if tool == "press":
-        return _key({"text": _keys(a)}, cwd, look)
-    if tool in ("type", "paste", "set_value", "select_text"):
-        return _type(a, cwd)
+        return _key({"text": _keys(a)}, cwd, look, model)
+    if tool in ("type", "paste", "set_value"):
+        return _type(a, cwd, model)
+    if tool == "select_text":
+        return _type(a, cwd)                                    # selecting text types nothing: no second opinion
     if tool in ("menu", "dialog"):
         named = " ".join(browser._strs(a.get("path"), a.get("item"), a.get("button")))
         if a.get("text"):
-            typed = _type(a, cwd)
+            typed = _type(a, cwd, model)
             if typed.action != "allow":
                 return typed
         if named and _OPEN_WORDS.search(named):

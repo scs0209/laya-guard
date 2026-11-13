@@ -105,6 +105,62 @@ def test_typing(env):
     assert _a({"action": "type", "text": "~/.ssh/"}) == ("review", "protected-path")       # Go to Folder
 
 
+def opinion(answer="review", risk=0.97):
+    """A fake model step: always gives `answer`, and records the text it was shown."""
+    seen = []
+
+    def model(text):
+        seen.append(text)
+        return answer, risk
+    model.seen = seen
+    return model
+
+
+def test_the_model_may_raise_typed_text_and_shortcuts_to_a_review(env):
+    model = opinion()
+    v = judge_desktop_call(CU, {"action": "type", "text": "rm -rf ~/Documents"}, "/tmp", screen(), model=model)
+    assert (v.action, v.policy_id, v.verdict_source) == ("review", "desktop-model", "model")
+    assert "rm -rf" not in v.reason and model.seen == ["desktop: type this text: rm -rf ~/Documents"]
+    v = judge_desktop_call(CU, {"action": "key", "text": "cmd+delete"}, "/tmp", screen(), model=model)
+    assert (v.action, v.policy_id) == ("review", "desktop-model") and model.seen[-1] == "desktop: press cmd+delete"
+    blocker = opinion("block", 1.0)                                          # never more than a review
+    assert judge_desktop_call(CU, {"action": "type", "text": "x"}, "/tmp", screen(), model=blocker).action == "review"
+    assert judge_desktop_call(CU, {"action": "type", "text": "hello"}, "/tmp", screen(),
+                              model=opinion("allow", 0.1)).action == "allow"
+    assert judge_desktop_call(CU, {"action": "type", "text": "hello"}, "/tmp", screen()).action == "allow"   # off
+
+
+def test_the_model_is_not_asked_about_clicks_plain_keys_or_what_the_rules_already_hold(env):
+    model = opinion()
+    for inp in ({"action": "left_click", "coordinate": [1, 2]}, {"action": "key", "text": "Escape"},
+                {"action": "key", "text": "Return"}, {"action": "screenshot"}, {"action": "type", "text": "  "}):
+        assert judge_desktop_call(CU, inp, "/tmp", screen(), model=model).action == "allow"
+    assert judge_desktop_call(CU, {"action": "type", "text": TOKEN}, "/tmp", screen(), model=model).action == "block"
+    assert model.seen == []
+    v = judge_desktop_call(CU, {"action": "key", "text": "cmd+o"}, "/tmp", screen(paths=[str(Path.home() / ".ssh" / "id")]),
+                           model=model)
+    assert v.policy_id == "protected-path" and model.seen == []              # a protected file: the rule's verdict
+    assert judge_desktop_call(CU, {"action": "type", "text": "x"}, "/tmp", screen(),
+                              model=lambda t: 1 / 0).action == "allow"        # a failing model leaves the rules' allow
+
+
+def test_the_model_is_only_used_when_switched_on_and_installed(env, monkeypatch):
+    monkeypatch.delenv(desktop.MODEL_ENV, raising=False)
+    assert desktop.second_opinion() is None
+    monkeypatch.setenv(desktop.MODEL_ENV, "1")
+    assert desktop.second_opinion() is None                                  # mock mode: no model to ask
+    monkeypatch.setattr(desktop, "is_mock", lambda: False)
+    monkeypatch.setattr(guard, "_model_or_fallback", lambda text, hit: ("review", 0.9, True))
+    assert desktop.second_opinion()("desktop: press cmd+delete") == ("review", 0.9)
+    monkeypatch.setattr(guard, "_model_or_fallback", lambda text, hit: ("review", 0.6, False))
+    assert desktop.second_opinion()("x") == ("allow", 0.0)                   # the heuristics don't stand in here
+    monkeypatch.setattr(desktop, "second_opinion", lambda: opinion())
+    v = server.guard(server.GuardReq(tool_call="x", tool_name=PB + "type", tool_input={"text": "rm -rf ~"}))
+    assert (v.action, v.policy_id) == ("review", "desktop-model")
+    v = server.guard(server.GuardReq(tool_call="x", tool_name=PB + "press", tool_input={"keys": ["cmd+delete"]}))
+    assert (v.action, v.policy_id) == ("review", "desktop-model")
+
+
 def test_unknown_actions_and_scale(env, monkeypatch):
     assert _a({"action": "warp", "coordinate": [1, 2]}) == ("review", "desktop")
     monkeypatch.setenv("LAYA_GUARD_AX_SCALE", "2")

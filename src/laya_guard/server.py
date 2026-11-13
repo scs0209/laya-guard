@@ -36,7 +36,8 @@ def _judge_and_log(text: str, source: str, cwd: str | None = None, tool_name: st
     if isinstance(tool_input, dict):
         transcript = transcript_path if transcript_path and os.path.isabs(transcript_path) else None
         v = browser.judge_browser_call(tool_name, tool_input, cwd) or \
-            desktop.judge_desktop_call(tool_name, tool_input, cwd, transcript=transcript)
+            desktop.judge_desktop_call(tool_name, tool_input, cwd, transcript=transcript,
+                                       model=desktop.second_opinion())   # LAYA_GUARD_DESKTOP_MODEL: off by default
         if v is not None and v.action == "block":       # nobody is asked about a block: tell the person at the screen
             alerts.notify_block(v.reason, "browser action" if browser.is_browser_tool(tool_name) else "desktop action")
     if v is None:
