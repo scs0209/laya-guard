@@ -185,6 +185,30 @@ def test_a_blocked_call_tells_the_person_at_the_screen(env, monkeypatch):
     assert len(started) == 2
 
 
+def test_the_block_notification_can_be_a_dialog_in_the_middle_of_the_screen(monkeypatch):
+    from laya_guard import alerts
+    started = []
+
+    class P:
+        def __init__(self, cmd, **kw):
+            started.append(cmd)
+
+        def wait(self):
+            return 0
+    monkeypatch.setattr(alerts.subprocess, "Popen", P)
+    monkeypatch.setattr(alerts.sys, "platform", "darwin")
+    monkeypatch.delenv("LAYA_GUARD_ALERT_CMD", raising=False)
+    for value, shown in [("dialog", "display alert"), (" Dialog ", "display alert"), ("banner", "display notification"),
+                         ("1", "display notification"), ("", "display notification"), ("pop", "display notification")]:
+        monkeypatch.setenv("LAYA_GUARD_NOTIFY", value)
+        assert alerts.notify_block("clicking a protected file", "desktop action")
+        script = " ".join(started[-1][1:-2])
+        assert shown in script and started[-1][-2] == "Blocked: clicking a protected file"
+    assert "giving up after" in " ".join(started[0])                     # a dialog nobody answers still goes away
+    monkeypatch.setenv("LAYA_GUARD_NOTIFY", "0")
+    assert not alerts.notify_block("x") and len(started) == 6
+
+
 # --- Peekaboo ------------------------------------------------------------------------------------------------------------
 
 PB = "mcp__peekaboo__"

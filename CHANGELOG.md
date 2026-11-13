@@ -27,7 +27,8 @@ All notable changes to this project are documented here. Versions follow
   and `analyze` tools are asked about.
 - **A blocked browser or desktop call shows a notification**: a block asks nobody, so macOS shows the reason (never
   what was typed or clicked), or `LAYA_GUARD_ALERT_CMD` runs with `LAYA_GUARD_ALERT_KIND=blocked`.
-  `LAYA_GUARD_NOTIFY=0` turns it off.
+  `LAYA_GUARD_NOTIFY=dialog` shows it as an alert in the middle of the screen instead of a banner (it closes itself
+  after 30 seconds); `LAYA_GUARD_NOTIFY=0` turns it off.
 
 ### Fixed
 

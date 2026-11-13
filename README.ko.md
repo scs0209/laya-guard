@@ -144,7 +144,7 @@ MCP 서버를 지킵니다. 이때 클릭은 화면 좌표만 담고 있어서, 
 없으면 클릭을 확인합니다. 처음 한 번 `laya-guard desktop setup`으로 조회 도우미를 빌드하고, 손쉬운 사용 권한은 서버를
 실행하는 앱(`laya-guard service install`)에 주세요. 터미널이나 에이전트 앱에 주면 안 됩니다. 이 권한을 가진 쪽은 화면을
 조작할 수도 있기 때문입니다. 브라우저나 데스크톱 호출을 차단할 때는 아무에게도 묻지 않으므로, 이유를 담은 macOS 알림을
-띄웁니다(`LAYA_GUARD_NOTIFY=0`이면 끔).
+띄웁니다(`LAYA_GUARD_NOTIFY=dialog`이면 화면 가운데에 띄우고, `0`이면 끔).
 
 자세히는 **[파일 가이드](docs/ko/guide/file-protection.md)**에 있습니다.
 

@@ -81,7 +81,7 @@ there. It only reads the screen. It needs the Accessibility permission, given to
 | `--no-warmup` | `laya-guard serve` | off — the model loads before the server listens |
 | `--browser`, `--desktop SERVER[,SERVER]` | `laya-guard install claude-code` | off — also guard the browser tools, or the computer-use MCP servers named (their names go into the hook's matcher) |
 | `LAYA_GUARD_ALERT_CMD` | env (hooks and server) | unset — a shell command run (once per outage, in the background) when calls are judged without the model; see [Keep it running](reliability.md#keep-it-running-and-hear-about-outages). It also runs, with `LAYA_GUARD_ALERT_KIND=blocked`, each time a browser or desktop call is blocked, instead of the macOS notification |
-| `LAYA_GUARD_NOTIFY` | env (hooks and server) | on — a blocked browser or desktop call shows a macOS notification with the reason; `0` turns it off |
+| `LAYA_GUARD_NOTIFY` | env (hooks and server) | on — a blocked browser or desktop call shows a macOS notification banner with the reason; `dialog` shows it as an alert in the middle of the screen instead (it closes itself after 30 seconds); `0` turns it off |
 | `LAYA_GUARD_BROWSER` | env | `~/.config/laya-guard/browser.yaml` — your browser rules: `sites` an agent may open without asking, and `unlabeled_clicks` (`allow` or `review`) for clicks the call doesn't describe |
 | `LAYA_GUARD_AX` | env (server, offline check) | `~/.config/laya-guard/bin/laya-guard-ax` — the screen lookup helper `laya-guard desktop setup` builds |
 | `LAYA_GUARD_AX_SCALE` | env (server, offline check) | `1` — multiplies a computer-use call's coordinates, for a server that sends screenshot pixels rather than screen points |

@@ -98,17 +98,30 @@ def maybe_alert(kind: str, message: str | None = None, now: float | None = None)
 # --- blocked computer-use calls -------------------------------------------------------------------------------------
 # A block of a browser or desktop call asks nobody (a review shows the agent's permission prompt), and the agent only
 # says so in its transcript. The person at the screen is told right away: LAYA_GUARD_ALERT_CMD runs with
-# LAYA_GUARD_ALERT_KIND=blocked when it is set, otherwise macOS shows a notification. LAYA_GUARD_NOTIFY=0 turns it off.
-# No cooldown: every block is its own event. Never raises, never waits.
+# LAYA_GUARD_ALERT_KIND=blocked when it is set, otherwise macOS shows a notification. LAYA_GUARD_NOTIFY picks how:
+# unset or `banner` is the notification banner (top right), `dialog` an alert in the middle of the screen that closes
+# itself after DIALOG_SECONDS, `0` nothing. No cooldown: every block is its own event. Never raises, never waits.
 
 _NOTIFY_SCRIPT = ["-e", "on run argv", "-e",
                   'display notification (item 1 of argv) with title "laya-guard" subtitle (item 2 of argv)',
                   "-e", "end run"]
+DIALOG_SECONDS = 30
+_DIALOG_SCRIPT = ["-e", "on run argv", "-e",
+                  'display alert "laya-guard: " & (item 2 of argv) message (item 1 of argv) as critical '
+                  f"giving up after {DIALOG_SECONDS}",
+                  "-e", "end run"]
+
+
+def notify_style() -> str:
+    """`off`, `dialog` or `banner` (the default, also for a value it doesn't know)."""
+    value = os.environ.get("LAYA_GUARD_NOTIFY", "").strip().lower()
+    return "off" if value == "0" else "dialog" if value == "dialog" else "banner"
 
 
 def notify_block(reason: str, what: str = "computer-use call") -> bool:
     """Tell the person at the screen that a computer-use call was blocked. Returns True if something was started."""
-    if os.environ.get("LAYA_GUARD_NOTIFY", "").strip() == "0":
+    style = notify_style()
+    if style == "off":
         return False
     message = f"Blocked: {reason}"[:240]
     subtitle = f"An AI {what} was stopped"[:120]
@@ -120,7 +133,8 @@ def notify_block(reason: str, what: str = "computer-use call") -> bool:
                                     env=dict(os.environ, LAYA_GUARD_ALERT_KIND="blocked",
                                              LAYA_GUARD_ALERT_MESSAGE=f"{subtitle}. {message}"))
         elif sys.platform == "darwin":
-            proc = subprocess.Popen(["osascript", *_NOTIFY_SCRIPT, message, subtitle], stdin=subprocess.DEVNULL,
+            script = _DIALOG_SCRIPT if style == "dialog" else _NOTIFY_SCRIPT
+            proc = subprocess.Popen(["osascript", *script, message, subtitle], stdin=subprocess.DEVNULL,
                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
         else:
             return False

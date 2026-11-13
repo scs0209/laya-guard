@@ -81,7 +81,7 @@ echo '{"url": "https://unknown.example"}' | \
 | `--no-warmup` | `laya-guard serve` | off — 서버가 대기하기 전에 모델을 먼저 올림 |
 | `--browser`, `--desktop SERVER[,SERVER]` | `laya-guard install claude-code` | off — 브라우저 도구, 또는 지정한 computer-use MCP 서버도 지킴(이름이 훅의 matcher에 들어감) |
 | `LAYA_GUARD_ALERT_CMD` | 환경변수 (훅·서버) | 없음 — 모델 없이 판정한 호출이 생기면 (장애마다 한 번, 백그라운드로) 실행하는 셸 명령. [계속 실행해 두기](reliability.md#계속-실행해-두기와-장애-알림) 참고. 브라우저·데스크톱 호출을 차단할 때마다 macOS 알림 대신 `LAYA_GUARD_ALERT_KIND=blocked`로도 실행됨 |
-| `LAYA_GUARD_NOTIFY` | 환경변수 (훅·서버) | 켜짐 — 브라우저·데스크톱 호출을 차단하면 이유를 담은 macOS 알림을 띄움. `0`이면 끔 |
+| `LAYA_GUARD_NOTIFY` | 환경변수 (훅·서버) | 켜짐 — 브라우저·데스크톱 호출을 차단하면 이유를 담은 macOS 알림 배너를 띄움. `dialog`이면 화면 가운데 대화상자로 띄움(30초 뒤 저절로 닫힘). `0`이면 끔 |
 | `LAYA_GUARD_BROWSER` | 환경변수 | `~/.config/laya-guard/browser.yaml` — 브라우저 규칙. 묻지 않고 열 수 있는 `sites`와, 설명 없는 클릭을 어떻게 할지 정하는 `unlabeled_clicks`(`allow` 또는 `review`) |
 | `LAYA_GUARD_AX` | 환경변수 (서버, 오프라인 검사) | `~/.config/laya-guard/bin/laya-guard-ax` — `laya-guard desktop setup`이 빌드하는 화면 조회 도우미 |
 | `LAYA_GUARD_AX_SCALE` | 환경변수 (서버, 오프라인 검사) | `1` — computer-use 호출의 좌표에 곱하는 값. 화면 좌표가 아니라 스크린샷 픽셀을 보내는 서버용 |

@@ -148,7 +148,7 @@ is asked about; typed secrets are blocked; and when the screen can't be read, th
 `laya-guard desktop setup` once to build the lookup helper, and give the Accessibility permission to the app that runs
 the server (`laya-guard service install`), not to your terminal or the agent's app: whatever holds it can also drive
 the screen. A blocked browser or desktop call asks nobody, so it shows a macOS notification with the reason
-(`LAYA_GUARD_NOTIFY=0` turns that off).
+(`LAYA_GUARD_NOTIFY=dialog` shows it in the middle of the screen instead, `LAYA_GUARD_NOTIFY=0` turns it off).
 
 More in the **[Files guide](docs/guide/file-protection.md)**.
 
