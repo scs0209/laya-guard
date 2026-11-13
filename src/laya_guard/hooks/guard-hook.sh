@@ -58,19 +58,24 @@ if paths:
     p["paths"] = paths
 if name == "Bash":
     p["command"] = p["tool_call"]
+transcript = d.get("transcript_path") if raw_input and isinstance(d, dict) else None
+transcript = transcript if isinstance(transcript, str) and os.path.isabs(transcript) else ""
 if raw_input:
     p["tool_input"] = a
-sys.stdout.write("\0".join([ok, tool, cwd, name or "", json.dumps(p), raw_input] + paths) + "\0")
+if transcript:
+    p["transcript_path"] = transcript          # where a computer-use element ID is turned into its label
+sys.stdout.write("\0".join([ok, tool, cwd, name or "", json.dumps(p), raw_input, transcript] + paths) + "\0")
 ' <<< "$input" 2>/dev/null)
-if [ "${#fields[@]}" -lt 6 ]; then
-  fields=(0 "" "$(pwd)" "" "" "")       # no python3: nothing to send, so the server can't answer and the CLI decides
+if [ "${#fields[@]}" -lt 7 ]; then
+  fields=(0 "" "$(pwd)" "" "" "" "")    # no python3: nothing to send, so the server can't answer and the CLI decides
 fi
 tool=${fields[1]}
 cwd=${fields[2]}
 name=${fields[3]}
 payload=${fields[4]}
 raw_input=${fields[5]}
-paths=("${fields[@]:6}")
+transcript=${fields[6]}
+paths=("${fields[@]:7}")
 if [ "${fields[0]}" != 1 ]; then
   # the input wasn't JSON we can read: judging an empty command would pass it, so the fail mode decides
   tool=""
@@ -93,6 +98,7 @@ if [ -z "$action" ]; then
     # A tool judged by its fields (a browser tool) needs its input, not the flattened text: send that instead.
     stdin_text=$tool
     [ -n "$raw_input" ] && { stdin_text=$raw_input; name_args+=(--input-json); }
+    [ -n "$transcript" ] && name_args+=(--transcript "$transcript")
     res=$(printf '%s' "$stdin_text" | LAYA_GUARD_FAIL="$fail" "${LAYA_GUARD_BIN:-laya-guard}" check --offline --json --cwd "$cwd" --agent claude-code "${name_args[@]}" "${path_args[@]}" 2>/dev/null)
   fi
   # The second python3: the action, and for a review the answer that asks a human through Claude Code's prompt.

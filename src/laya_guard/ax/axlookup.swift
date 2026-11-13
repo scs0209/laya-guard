@@ -2,6 +2,7 @@
 //
 //   laya-guard-ax at X Y      the element at (X, Y) in screen points (top-left of the main display is 0,0)
 //   laya-guard-ax pointer     the element under the mouse pointer (a click that names no coordinate lands there)
+//   laya-guard-ax find Q [PID]  the elements named like Q in those apps' windows (default: the frontmost app and Finder)
 //   laya-guard-ax selection   what is selected in the frontmost app (Finder's selected files, for Return or cmd+O)
 //   laya-guard-ax trusted     whether this process may read the screen (exit 0 yes, 1 no)
 //
@@ -80,6 +81,33 @@ func selection() -> [String: Any] {
             "role": "selection", "labels": labels, "paths": paths]
 }
 
+// The elements whose name contains `query` in the given apps' windows: what a click by name (Peekaboo's `query`, or an
+// element ID resolved to its label) lands on. Bounded, so a huge window can't stall the hook.
+func find(_ query: String, pids: [pid_t]) -> [String: Any] {
+    let q = query.lowercased()
+    var paths: [String] = [], labels: [String] = [], visited = 0
+    func walk(_ e: AXUIElement, _ depth: Int) {
+        if depth > 25 || visited > 4000 || paths.count >= 20 { return }
+        visited += 1
+        var names: [String] = []
+        for k in ["AXFilename", "AXTitle", "AXDescription", "AXValue"] { if let s = str(e, k) { names.append(s) } }
+        if names.contains(where: { $0.lowercased().contains(q) }) {
+            for n in names where !labels.contains(n) && labels.count < 20 { labels.append(String(n.prefix(200))) }
+            var found: [String] = []
+            pathsBelow(e, depth: 1, into: &found)
+            if found.isEmpty, let p = parent(e) { pathsBelow(p, depth: 3, into: &found) }   // a list cell: its row has the file
+            for f in found where !paths.contains(f) { paths.append(f) }
+        }
+        for c in elements(e, "AXChildren").prefix(200) { walk(c, depth + 1) }
+    }
+    for pid in pids {
+        let app = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(app, 0.5)
+        for w in elements(app, "AXWindows").prefix(10) { walk(w, 0) }
+    }
+    return ["trusted": true, "role": "find", "labels": labels, "paths": paths, "found": !labels.isEmpty]
+}
+
 func emit(_ obj: [String: Any]) -> Never {
     let data = try! JSONSerialization.data(withJSONObject: obj, options: [])
     FileHandle.standardOutput.write(data)
@@ -111,5 +139,16 @@ if let (x, y) = point {
     emit(d)
 }
 if args.count >= 2 && args[1] == "selection" { emit(selection()) }
-FileHandle.standardError.write("usage: laya-guard-ax at X Y | pointer | selection | trusted\n".data(using: .utf8)!)
+if args.count >= 3 && args[1] == "find" {
+    // find QUERY [PID ...]: the named apps, or the frontmost app and Finder
+    var pids = args.dropFirst(3).compactMap { pid_t($0) }
+    if pids.isEmpty {
+        if let f = NSWorkspace.shared.frontmostApplication { pids.append(f.processIdentifier) }
+        for a in NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder") where !pids.contains(a.processIdentifier) {
+            pids.append(a.processIdentifier)
+        }
+    }
+    emit(find(args[2], pids: pids))
+}
+FileHandle.standardError.write("usage: laya-guard-ax at X Y | pointer | selection | find QUERY [PID...] | trusted\n".data(using: .utf8)!)
 exit(2)

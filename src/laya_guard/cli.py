@@ -17,7 +17,7 @@ def cmd_check(args):
             tool_input = None
         text = browser.call_text(args.tool_name, tool_input)
         v = browser.judge_browser_call(args.tool_name, tool_input, cwd) or \
-            desktop.judge_desktop_call(args.tool_name, tool_input, cwd)
+            desktop.judge_desktop_call(args.tool_name, tool_input, cwd, transcript=args.transcript)
         if v is not None and v.action == "block":
             from .alerts import notify_block
             notify_block(v.reason, "browser action" if browser.is_browser_tool(args.tool_name) else "desktop action")
@@ -556,6 +556,8 @@ def main(argv=None):
     c.add_argument("--tool-name", default=None,
                    help="the agent's name for the tool (Read, Edit, Write, ...): with --path, the call is judged by the paths alone")
     c.add_argument("--agent", default=None, help="which agent is calling (claude-code, ...): labels the file activity log")
+    c.add_argument("--transcript", default=None, metavar="PATH",
+                   help="the agent's transcript (with --input-json): where a computer-use element ID is turned into its label")
     c.add_argument("--input-json", action="store_true",
                    help="the text is the tool's input as JSON (with --tool-name): a browser or desktop tool is judged by its fields")
     c.add_argument("--shell", action="store_true",

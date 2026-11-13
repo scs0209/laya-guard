@@ -21,6 +21,10 @@ All notable changes to this project are documented here. Versions follow
   protected path, Return or cmd+O on a selected one, or typing its path follows `protect.yaml`; a click on a button
   named like paying, deleting or sending is asked about; typed secrets are blocked; a click is asked about when the
   screen can't be read. `LAYA_GUARD_AX_SCALE` maps a server's screenshot pixels to screen points.
+  [Peekaboo](https://github.com/openclaw/Peekaboo)'s MCP tools are read too: a click by name is looked up in the
+  target app (and Finder), a click by element ID gets its label from the last `see` in the agent's transcript (the hook
+  now passes `transcript_path`), and `press`, `type`, `paste`, `menu` and `dialog` follow the same rules; its `agent`
+  and `analyze` tools are asked about.
 - **A blocked browser or desktop call shows a notification**: a block asks nobody, so macOS shows the reason (never
   what was typed or clicked), or `LAYA_GUARD_ALERT_CMD` runs with `LAYA_GUARD_ALERT_KIND=blocked`.
   `LAYA_GUARD_NOTIFY=0` turns it off.

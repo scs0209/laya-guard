@@ -183,3 +183,95 @@ def test_a_blocked_call_tells_the_person_at_the_screen(env, monkeypatch):
     monkeypatch.setenv("LAYA_GUARD_NOTIFY", "0")
     server.guard(server.GuardReq(tool_call="x", tool_name=CU, tool_input={"action": "type", "text": TOKEN}))
     assert len(started) == 2
+
+
+# --- Peekaboo ------------------------------------------------------------------------------------------------------------
+
+PB = "mcp__peekaboo__"
+
+
+def finder(paths_by_name):
+    """A fake lookup for `find NAME`: the paths of the elements whose name contains NAME."""
+    asked = []
+
+    def look(*args):
+        asked.append(args)
+        if args[0] != "find":
+            return {"trusted": True, "paths": [], "labels": []}
+        hits = {n: p for n, p in paths_by_name.items() if args[1].lower() in n.lower()}
+        return {"trusted": True, "paths": list(hits.values()), "labels": list(hits), "found": bool(hits)}
+    look.asked = asked
+    return look
+
+
+def _pb(tool, inp, look=None, transcript=None):
+    v = judge_desktop_call(PB + tool, inp, "/tmp", look, transcript=transcript)
+    return v.action, v.policy_id
+
+
+def test_peekaboo_clicks_by_name(env):
+    home, _ = env
+    look = finder({"id_rsa": f"{home}/.ssh/id_rsa", "notes.txt": "/tmp/notes.txt"})
+    assert _pb("click", {"query": "id_rsa", "double": True}, look) == ("review", "protected-path")
+    assert look.asked[-1] == ("find", "id_rsa")
+    assert _pb("click", {"query": "notes.txt", "pid": 42}, look) == ("allow", "desktop")
+    assert look.asked[-1] == ("find", "notes.txt", "42")
+    assert _pb("click", {"query": "nowhere"}, look) == ("review", "desktop")            # names nothing on screen
+
+
+def test_peekaboo_element_ids_come_from_the_transcripts_last_see(env, tmp_path):
+    home, _ = env
+    transcript = tmp_path / "t.jsonl"
+    see = {"type": "tool_result", "content": [{"type": "text", "text":
+           "Snapshot ps1_" + "0" * 32 + "\nelem_3 AXButton \"Open\"\nelem_7 AXTextField \"id_rsa\" [10, 20, 80, 18]"}]}
+    transcript.write_text(json.dumps({"type": "user", "message": {"content": [see]}}) + "\n")
+    assert desktop.element_label("elem_7", str(transcript)) == "id_rsa"
+    assert desktop.element_label("elem_3", str(transcript)) == "Open"
+    assert desktop.element_label("elem_9", str(transcript)) is None
+    look = finder({"id_rsa": f"{home}/.ssh/id_rsa"})
+    assert _pb("click", {"on": "elem_7"}, look, str(transcript)) == ("review", "protected-path")
+    assert _pb("click", {"on": "elem_9"}, look, str(transcript)) == ("review", "desktop")   # unknown ID: asked about
+    assert _pb("click", {"on": "elem_7"}, look) == ("review", "desktop")                    # no transcript: asked about
+
+
+def test_peekaboo_coordinates(env, monkeypatch):
+    home, _ = env
+    look = screen(paths=[f"{home}/.ssh/id_rsa"])
+    assert _pb("click", {"coords": "10,20", "coordinate_space": "global"}, look) == ("review", "protected-path")
+    assert look.asked == [("at", "10", "20")]
+    assert _pb("click", {"coords": "10,20"}, look)[0] == "review"                # window-relative: can't be placed
+
+
+def test_peekaboo_keys_text_menus_and_its_own_agent(env):
+    home, _ = env
+    sel = screen(paths=[f"{home}/.ssh/config"])
+    assert _pb("press", {"keys": ["cmd+o"]}, sel) == ("review", "protected-path")
+    assert _pb("press", {"key": "o", "modifiers": ["cmd"]}, sel) == ("review", "protected-path")
+    assert _pb("press", {"keys": ["cmd+c"]}, sel) == ("allow", "desktop")
+    assert _pb("type", {"text": TOKEN}) == ("block", "secrets-leak")
+    assert _pb("paste", {"text": "~/.ssh/"}) == ("review", "protected-path")
+    assert _pb("menu", {"action": "click", "path": "File > Open…"}, sel) == ("review", "protected-path")
+    assert _pb("menu", {"action": "click", "path": "File > Move to Trash"})[0] == "review"
+    assert _pb("menu", {"action": "list", "app": "Finder"}) == ("allow", "desktop")
+    assert _pb("dialog", {"action": "input", "text": "~/.aws/credentials"})[1] == "protected-path"
+    for tool in ("agent", "analyze", "browser", "clipboard"):
+        assert _pb(tool, {"action": "get"})[0] == "review", tool
+    for tool in ("see", "image", "inspect_ui", "window", "scroll", "sleep"):
+        assert _pb(tool, {}) == ("allow", "desktop"), tool
+    assert _pb("teleport", {})[0] == "review"
+    assert desktop.peekaboo_tool("mcp__peekaboo__click") == "click" and desktop.peekaboo_tool("mcp__other__click") is None
+
+
+def test_the_hook_passes_the_transcript_to_the_offline_check(env, tmp_path):
+    home, log = env
+    helper = tmp_path / "laya-guard-ax"
+    helper.write_text("#!/bin/sh\necho '" + json.dumps({"trusted": True, "paths": [f"{home}/.ssh/id_rsa"],
+                                                       "labels": ["id_rsa"], "found": True}) + "'\n")
+    helper.chmod(0o755)
+    transcript = tmp_path / "t.jsonl"
+    see = {"type": "tool_result", "content": "elem_7 AXTextField \"id_rsa\""}
+    transcript.write_text(json.dumps({"type": "user", "message": {"content": [see]}}) + "\n")
+    p = _hook({"tool_name": PB + "click", "tool_input": {"on": "elem_7", "double": True},
+               "transcript_path": str(transcript)}, home=home, LAYA_GUARD_LOG_PATH=str(log), LAYA_GUARD_AX=str(helper))
+    out = json.loads(p.stdout)["hookSpecificOutput"]
+    assert out["permissionDecision"] == "ask" and "protected-path" in out["permissionDecisionReason"]

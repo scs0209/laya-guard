@@ -10,6 +10,11 @@ blocked. When the helper can't see the screen (not set up, no permission, anothe
 The call shape is Anthropic's computer tool, which computer-use MCP servers copy: `action` (left_click, double_click,
 key, type, ...) and `coordinate` [x, y], or one tool per action (`left_click` with `x`, `y`). Coordinates are taken as
 screen points of the main display; LAYA_GUARD_AX_SCALE multiplies them for a server that sends screenshot pixels.
+
+Peekaboo (openclaw/Peekaboo) has tools of its own: a click names an element ID from its last `see`, a text query, or
+coordinates. A query is looked up by name in the target app (and Finder); an element ID is turned into its label from
+that `see` result in the agent's transcript, then looked up the same way. `agent` (Peekaboo's own model running steps
+the hook never sees) and `analyze` (a screenshot sent to an AI provider) are asked about.
 """
 from __future__ import annotations
 
@@ -161,13 +166,18 @@ def _type(a: dict, cwd: str | None) -> Verdict:
     return _v("allow", "typing ordinary text")
 
 
-def judge_desktop_call(tool_name: str | None, tool_input, cwd: str | None = None, look=None) -> Verdict | None:
-    """The verdict for a desktop computer-use call, or None when the call isn't one (the caller judges it as usual)."""
+def judge_desktop_call(tool_name: str | None, tool_input, cwd: str | None = None, look=None,
+                       transcript: str | None = None) -> Verdict | None:
+    """The verdict for a desktop computer-use call, or None when the call isn't one (the caller judges it as usual).
+    transcript: the agent's transcript file, where Peekaboo's element IDs are turned into labels."""
+    look = look or lookup
+    tool = peekaboo_tool(tool_name)
+    if tool is not None and isinstance(tool_input, dict):
+        return _peekaboo(tool, tool_input, cwd, look, transcript)
     parsed = parse(tool_name, tool_input)
     if parsed is None:
         return None
     action, a = parsed
-    look = look or lookup
     if action in READS:
         return _v("allow", "looks at the screen")
     if action in CLICKS:
@@ -177,3 +187,149 @@ def judge_desktop_call(tool_name: str | None, tool_input, cwd: str | None = None
     if action in TYPES:
         return _type(a, cwd)
     return _v("review", f"a desktop action this check doesn't know ({action[:40]})")
+
+
+# --- Peekaboo ---------------------------------------------------------------------------------------------------------
+
+_PEEKABOO = re.compile(r"^mcp__[^_]*peekaboo[^_]*__(\w+)$", re.IGNORECASE)
+PEEKABOO_READS = {"see", "image", "inspect_ui", "capture", "sleep", "verify_state", "permissions", "window", "dock",
+                  "space", "app"}
+_RISKY_TOOLS = {"agent": "Peekaboo's own agent runs steps this check never sees",
+                "analyze": "a screenshot is sent to an AI provider",
+                "browser": "a browser tool passed through Peekaboo",
+                "clipboard": "the clipboard is read or changed"}
+_OPEN_WORDS = re.compile(r"\bopen\b|열기", re.IGNORECASE)
+_ELEMENT_ID = re.compile(r"^[A-Za-z][\w.-]{0,63}$")
+
+
+def peekaboo_tool(tool_name: str | None) -> str | None:
+    """The Peekaboo tool's own name (click, see, ...) for an MCP server whose name says peekaboo, else None."""
+    m = _PEEKABOO.match(tool_name or "")
+    return m.group(1).lower() if m else None
+
+
+def element_label(element_id: str, transcript: str | None, max_bytes: int = 4_000_000) -> str | None:
+    """The label an element ID had in the latest tool result that lists it (Peekaboo's `see`), read from the end of the
+    agent's transcript. None when the transcript is missing or doesn't name the ID."""
+    if not transcript or not _ELEMENT_ID.match(element_id or ""):
+        return None
+    try:
+        with open(transcript, "rb") as f:
+            f.seek(0, os.SEEK_END)
+            f.seek(max(0, f.tell() - max_bytes))
+            lines = f.read().decode("utf-8", "replace").splitlines()
+    except OSError:
+        return None
+    word = re.compile(r"(?<![\w-])" + re.escape(element_id) + r"(?![\w-])")
+    for line in reversed(lines):
+        if element_id not in line:
+            continue
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        for text in _result_texts(entry):
+            for row in text.splitlines():
+                if word.search(row):
+                    label = _label_in(row, element_id)
+                    if label:
+                        return label
+    return None
+
+
+def _result_texts(entry) -> list[str]:
+    """The text of the tool results in one transcript line (where a `see` lists its elements)."""
+    content = (entry.get("message") or {}).get("content") if isinstance(entry, dict) else None
+    out = []
+    for block in content if isinstance(content, list) else []:
+        if isinstance(block, dict) and block.get("type") == "tool_result":
+            inner = block.get("content")
+            out += [inner] if isinstance(inner, str) else browser._strs(inner)
+    return out
+
+
+def _label_in(row: str, element_id: str) -> str | None:
+    quoted = [q for pair in re.findall(r'"([^"]{1,200})"|\'([^\']{1,200})\'', row) for q in pair if q]
+    quoted = [q for q in quoted if q != element_id and not re.fullmatch(r"AX\w+|[\d.,\s()x×-]+", q)]
+    if quoted:
+        return max(quoted, key=len)
+    rest = re.sub(r"(?<![\w-])" + re.escape(element_id) + r"(?![\w-])|\bAX\w+|[\[\](){}:=|]|-?\d+(?:\.\d+)?", " ", row)
+    rest = " ".join(w for w in rest.split() if w.lower() not in ("label", "title", "role", "id", "at", "frame", "bounds"))
+    return rest[:200] or None
+
+
+def _target(a: dict, transcript: str | None, look) -> tuple[dict | None, str]:
+    """What a Peekaboo click/action/drag lands on: the helper's answer, and how it was found (for the reason)."""
+    pid = a.get("pid")
+    pids = [str(int(pid))] if isinstance(pid, (int, float)) and pid > 0 else []
+    query = a.get("query")
+    if isinstance(query, str) and query.strip():
+        return look("find", query.strip()[:200], *pids), f"'{query.strip()[:40]}'"
+    on = a.get("on") or a.get("from")
+    if isinstance(on, str) and on.strip():
+        label = element_label(on.strip(), transcript)
+        if label is None:
+            return None, f"element {on.strip()[:20]} (not in the transcript's last see)"
+        return look("find", label, *pids), f"'{label[:40]}'"
+    coords = a.get("coords") or a.get("from_coords")
+    if isinstance(coords, str) and coords.strip():
+        try:
+            x, y = (float(c) for c in coords.split(",")[:2])
+        except ValueError:
+            return None, "coordinates this check can't read"
+        if str(a.get("coordinate_space") or "").lower() not in ("global", "screen"):
+            return None, "coordinates relative to a window this check can't place"
+        scale = float(os.environ.get("LAYA_GUARD_AX_SCALE", "") or 1.0)
+        return look("at", f"{x * scale:.0f}", f"{y * scale:.0f}"), "the point clicked"
+    return None, "a target this check can't read"
+
+
+def _on_target(tool: str, a: dict, cwd: str | None, look, transcript: str | None) -> Verdict:
+    info, what = _target(a, transcript, look)
+    if info is None:
+        return _v("review", f"can't see what this {tool} lands on: {what}")
+    hit = _files(info, cwd, "dragging" if tool == "drag" else "clicking")
+    if hit is not None:
+        return hit
+    labels = " ".join(s for s in info.get("labels") or [] if isinstance(s, str))
+    if labels and browser._RISKY_CLICK.search(labels):
+        return _v("review", "a click that may pay, order, delete or send something")
+    if not info.get("found", True):
+        return _v("review", f"can't find {what} on the screen")
+    return _v("allow", f"a {tool} on nothing protected")
+
+
+def _keys(a: dict) -> str:
+    """Peekaboo's press as key words: keys ["cmd+o", "Return"], or key "o" with modifiers ["cmd"]."""
+    keys = a.get("keys")
+    if isinstance(keys, list):
+        return " ".join(k for k in keys if isinstance(k, str))
+    key = a.get("key") if isinstance(a.get("key"), str) else ""
+    mods = [m for m in a.get("modifiers") or [] if isinstance(m, str)]
+    return "+".join(mods + [key]) if key else ""
+
+
+def _peekaboo(tool: str, a: dict, cwd: str | None, look, transcript: str | None) -> Verdict:
+    action = str(a.get("action") or "").lower()
+    if tool in _RISKY_TOOLS and not (tool == "clipboard" and action in ("status",)):
+        return _v("review", _RISKY_TOOLS[tool])
+    if tool in PEEKABOO_READS or tool == "scroll" or (tool in ("menu", "dialog") and action == "list"):
+        return _v("allow", "looks at or arranges the screen")
+    if tool in ("click", "action", "drag"):
+        return _on_target(tool, a, cwd, look, transcript)
+    if tool == "press":
+        return _key({"text": _keys(a)}, cwd, look)
+    if tool in ("type", "paste", "set_value", "select_text"):
+        return _type(a, cwd)
+    if tool in ("menu", "dialog"):
+        named = " ".join(browser._strs(a.get("path"), a.get("item"), a.get("button")))
+        if a.get("text"):
+            typed = _type(a, cwd)
+            if typed.action != "allow":
+                return typed
+        if named and _OPEN_WORDS.search(named):
+            return _key({"text": "Return"}, cwd, look)       # opening: whatever is selected is what opens
+        if named and browser._RISKY_CLICK.search(named):
+            return _v("review", f"a {tool} item that may delete, send or pay ('{named[:40]}')")
+        return _v("allow", f"a {tool} action on nothing protected")
+    return _v("review", f"a Peekaboo tool this check doesn't know ({tool[:40]})")
