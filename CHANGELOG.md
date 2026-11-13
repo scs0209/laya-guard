@@ -15,6 +15,15 @@ All notable changes to this project are documented here. Versions follow
   archive download are asked about. `browser_batch` is judged step by step. A click without a description follows
   `unlabeled_clicks` (allow by default). The hook now sends the input of a tool that is neither Bash nor a file tool
   as it is (`tool_input`), and `laya-guard check --input-json` reads it.
+- **Desktop computer use** (macOS, `laya-guard install claude-code --desktop SERVER`): a computer-use call names
+  screen coordinates, so right before it runs a small Accessibility helper (`laya-guard desktop setup` builds it,
+  `laya-guard desktop check` shows what it sees; it only reads) says what is there. A click or drag on a file under a
+  protected path, Return or cmd+O on a selected one, or typing its path follows `protect.yaml`; a click on a button
+  named like paying, deleting or sending is asked about; typed secrets are blocked; a click is asked about when the
+  screen can't be read. `LAYA_GUARD_AX_SCALE` maps a server's screenshot pixels to screen points.
+- **A blocked browser or desktop call shows a notification**: a block asks nobody, so macOS shows the reason (never
+  what was typed or clicked), or `LAYA_GUARD_ALERT_CMD` runs with `LAYA_GUARD_ALERT_KIND=blocked`.
+  `LAYA_GUARD_NOTIFY=0` turns it off.
 
 ### Fixed
 
