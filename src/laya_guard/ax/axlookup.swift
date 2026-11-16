@@ -35,7 +35,7 @@ func parent(_ e: AXUIElement) -> AXUIElement? { elements(e, "AXParent").first }
 // The files under an element, a few levels down: a Finder list row holds its file's URL in the name cell.
 func pathsBelow(_ e: AXUIElement, depth: Int, into out: inout [String]) {
     if let p = fileURL(e), !out.contains(p) { out.append(p) }
-    guard depth > 0, out.count < 50 else { return }
+    guard depth > 0, out.count < 250 else { return }      // above the 200 a selection reads, so none is skipped
     for c in elements(e, "AXChildren").prefix(20) { pathsBelow(c, depth: depth - 1, into: &out) }
 }
 
@@ -66,19 +66,21 @@ func describe(_ start: AXUIElement) -> [String: Any] {
 func selection() -> [String: Any] {
     guard let front = NSWorkspace.shared.frontmostApplication else { return ["trusted": true, "paths": [], "labels": []] }
     let appEl = AXUIElementCreateApplication(front.processIdentifier)
-    var paths: [String] = [], labels: [String] = []
+    var paths: [String] = [], labels: [String] = [], truncated = false
     var cur = elements(appEl, "AXFocusedUIElement").first
     for _ in 0..<6 {                                   // up from the focused element to whatever holds the selection
         guard let e = cur else { break }
         if let p = fileURL(e), !paths.contains(p) { paths.append(p) }
         for k in ["AXTitle", "AXDescription"] { if let s = str(e, k), !labels.contains(s) { labels.append(s) } }
         let selected = elements(e, "AXSelectedRows") + elements(e, "AXSelectedChildren")
-        for s in selected.prefix(50) { pathsBelow(s, depth: 3, into: &paths) }
+        // more selected than read: say so, so a protected file among the rest is asked about rather than missed
+        if selected.count > 200 { truncated = true }
+        for s in selected.prefix(200) { pathsBelow(s, depth: 3, into: &paths) }
         if !selected.isEmpty { break }
         cur = parent(e)
     }
     return ["trusted": true, "app": front.localizedName ?? "", "bundle": front.bundleIdentifier ?? "",
-            "role": "selection", "labels": labels, "paths": paths]
+            "role": "selection", "labels": labels, "paths": paths, "truncated": truncated]
 }
 
 // The elements whose name contains `query` in the given apps' windows: what a click by name (Peekaboo's `query`, or an
@@ -109,12 +111,15 @@ func find(_ query: String, pids: [pid_t]) -> [String: Any] {
         for w in elements(app, "AXWindows").prefix(10) { walk(w, 0) }
     }
     let chosen = matches.contains(where: { $0.exact }) ? matches.filter { $0.exact } : matches
-    var paths: [String] = [], labels: [String] = []
+    var paths: [String] = [], labels: [String] = [], truncated = matches.count >= 40
     for m in chosen {
         for n in m.names where !labels.contains(n) && labels.count < 20 { labels.append(String(n.prefix(200))) }
-        for f in m.paths where !paths.contains(f) && paths.count < 20 { paths.append(f) }
+        for f in m.paths where !paths.contains(f) {
+            if paths.count < 200 { paths.append(f) } else { truncated = true }
+        }
     }
-    return ["trusted": true, "role": "find", "labels": labels, "paths": paths, "found": !labels.isEmpty]
+    return ["trusted": true, "role": "find", "labels": labels, "paths": paths, "found": !labels.isEmpty,
+            "truncated": truncated]
 }
 
 func emit(_ obj: [String: Any]) -> Never {

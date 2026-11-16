@@ -118,8 +118,10 @@ def main():
         for line in open(desktop_data.OUT, encoding="utf-8"):
             d = json.loads(line)
             if desktop_data.click_label(d["command"]).lower() not in held_out:
+                # grouped by the button's label, so "Send" in Mail, in Messages and with no app all fall on one side
+                # of the split: grouped by sentence, 69 of val's 82 clicks had a label also in training
                 candidates.append({"command": d["command"], "label": d["label"], "source": "desktop",
-                                   "group": d["command"]})
+                                   "group": "click:" + desktop_data.click_label(d["command"]).lower()})
     evals = common.eval_texts()
     seen, data, near, conflicts = {}, [], 0, 0
     for c in candidates:

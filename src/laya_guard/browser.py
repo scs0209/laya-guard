@@ -60,7 +60,7 @@ _COMPUTER = {"left_click": "click", "right_click": "click", "double_click": "cli
 _DEVTOOLS = {
     "navigate_page": "navigate", "new_page": "navigate", "click": "click", "drag": "click", "fill": "type",
     "fill_form": "type", "type_text": "type", "press_key": "key", "upload_file": "upload", "evaluate_script": "script",
-    "handle_dialog": "click",
+    "handle_dialog": "dialog",
     **{t: "read" for t in ("list_pages", "select_page", "close_page", "take_snapshot", "take_screenshot", "wait_for",
                            "hover", "resize_page", "emulate", "list_console_messages", "get_console_message",
                            "list_network_requests", "get_network_request", "get_css_styles", "lighthouse_audit",
@@ -70,7 +70,7 @@ _DEVTOOLS = {
 _PLAYWRIGHT = {
     "browser_navigate": "navigate", "browser_click": "click", "browser_drag": "click", "browser_type": "type",
     "browser_fill_form": "type", "browser_select_option": "click", "browser_press_key": "key",
-    "browser_file_upload": "upload", "browser_evaluate": "script", "browser_handle_dialog": "click",
+    "browser_file_upload": "upload", "browser_evaluate": "script", "browser_handle_dialog": "dialog",
     **{t: "read" for t in ("browser_snapshot", "browser_take_screenshot", "browser_hover", "browser_wait_for",
                            "browser_resize", "browser_tabs", "browser_close", "browser_console_messages",
                            "browser_network_requests", "browser_navigate_back", "browser_install")},
@@ -92,8 +92,10 @@ _DOWNLOAD_EXT = re.compile(r"\.(?:dmg|pkg|mpkg|exe|msi|bat|cmd|ps1|sh|command|ap
                            r"bz2|xz|7z|rar)$", re.IGNORECASE)
 _TOKEN_PARAM = re.compile(r"(?:^|[?&#;])(?:access_token|id_token|refresh_token|token|api_?key|apikey|secret|password|"
                           r"passwd|sig|signature|auth|session|sessionid|code)=[^&#]{8,}", re.IGNORECASE)
-_SCRIPT_READS = re.compile(r"document\s*\.\s*cookie|localStorage|sessionStorage|indexedDB|\.getAll\(|credentials",
-                           re.IGNORECASE)
+# document.cookie, and the same read spelled another way: document['cookie'], Reflect.get(document, "cookie"),
+# cookieStore. A script that builds the name from pieces still gets past this; it is a check, not a sandbox.
+_SCRIPT_READS = re.compile(r"document\s*\.\s*cookie|['\"`]cookie['\"`]|cookieStore|localStorage|sessionStorage|"
+                           r"indexedDB|\.getAll\(|credentials", re.IGNORECASE)
 _SCRIPT_SENDS = re.compile(r"\bfetch\s*\(|XMLHttpRequest|sendBeacon|new\s+WebSocket|new\s+Image|\.src\s*=|"
                            r"location(?:\.href)?\s*=|window\.open\s*\(|\.submit\s*\(", re.IGNORECASE)
 _LOCAL_SUFFIXES = (".localhost", ".test")
@@ -243,7 +245,11 @@ def _navigate(url, cwd: str | None, sites: list[str]) -> Verdict:
         return hit
     if url.strip().lower() == "about:blank":
         return _v("allow", "a blank page")
-    parts = urlsplit(url.strip())
+    try:
+        parts = urlsplit(url.strip())
+        parts.hostname, parts.port                # both can raise on a malformed URL ("https://[", a bad port)
+    except ValueError:
+        return _v("review", "a URL this check can't read")
     scheme = parts.scheme.lower()
     if scheme == "file":
         path = unquote(parts.path)
@@ -319,6 +325,10 @@ def _one(fam: str, tool: str, a: dict, cwd: str | None, conf: dict, depth: int =
         return _worst(verdicts) if verdicts else _v("allow", "typing ordinary text")
     if kind == "click":
         return _click(label, conf["unlabeled_clicks"])
+    if kind == "dialog":              # accepting or dismissing a page dialog; a prompt dialog also gets typed text
+        typed = " ".join(_strs(a.get("promptText"), a.get("text")))
+        hit = _sensitive_text(typed, label) if typed.strip() else None
+        return hit or _click(label, conf["unlabeled_clicks"])
     if kind == "key":
         keys = a.get("text") if fam == "claude" else a.get("key")
         return _key(keys if isinstance(keys, str) else "", label)

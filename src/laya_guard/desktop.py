@@ -19,8 +19,9 @@ the hook never sees) and `analyze` (a screenshot sent to an AI provider) are ask
 The Laya model as a second opinion (LAYA_GUARD_DESKTOP_MODEL=1, server only, off by default): text the rules let an
 agent type, shortcuts with cmd, ctrl or option, and clicks on a labeled element are also shown to the model, which can
 raise them to a review but never to a block, so a wrong guess costs one permission prompt. Plain keys stay with the
-rules (it held Escape). The model was trained on desktop clicks (finetune/desktop_data.py): on clicks it never saw it
-let 57 of 61 ordinary ones through and held 14 of 17 that should be asked about; the button words below hold the rest.
+rules (it held Escape). The model was trained on desktop clicks (finetune/desktop_data.py): on a click set whose
+labels it never saw (eval/testset_desktop.jsonl) it let 23 of 25 ordinary clicks through and held 30 of 31 risky ones;
+it is less sure on quiet ones (Reply All, Revert to Saved), which the button words below hold.
 """
 from __future__ import annotations
 
@@ -88,9 +89,17 @@ def lookup(*args: str) -> dict | None:
 
 # --- the call --------------------------------------------------------------------------------------------------------
 
+def is_desktop_tool(tool_name: str | None) -> bool:
+    """A tool that may be computer use: an MCP server's (mcp__computer-use__computer, mcp__computer__left_click) or the
+    API's own `computer` tool. Claude Code's tools (Bash, Read, ...) never are, whatever fields their input carries: an
+    `action` field on a Bash call must not take the command past the shell rules."""
+    name = tool_name or ""
+    return name.startswith("mcp__") or name == "computer"
+
+
 def parse(tool_name: str | None, tool_input) -> tuple[str, dict] | None:
     """(action, input) for a desktop computer-use call, None for anything else. A browser tool is never one."""
-    if not isinstance(tool_input, dict) or browser.is_browser_tool(tool_name):
+    if not isinstance(tool_input, dict) or not is_desktop_tool(tool_name) or browser.is_browser_tool(tool_name):
         return None
     action = tool_input.get("action")
     if not isinstance(action, str):
@@ -122,12 +131,19 @@ def _v(action: str, reason: str, policy_id: str = "desktop") -> Verdict:
                    verdict_source="regex" if action != "allow" else "allowlist")
 
 
+MAX_PATHS = 200
+
+
 def _files(info: dict, cwd: str | None, what: str) -> Verdict | None:
-    paths = [p for p in info.get("paths") or [] if isinstance(p, str) and p][:50]
-    rule = judge_accesses([("read", p) for p in paths], cwd) if paths else None
-    if rule is None:
-        return None
-    return _v(rule.action, f"{what} a protected file ({rule.reason})", "protected-path")
+    """The protect.yaml verdict for the files under the click or the selection. When there were more than this check
+    reads (the helper says `truncated`, or over MAX_PATHS), one it skipped could be protected, so it is asked about."""
+    paths = [p for p in info.get("paths") or [] if isinstance(p, str) and p]
+    rule = judge_accesses([("read", p) for p in paths[:MAX_PATHS]], cwd) if paths else None
+    if rule is not None:
+        return _v(rule.action, f"{what} a protected file ({rule.reason})", "protected-path")
+    if info.get("truncated") or len(paths) > MAX_PATHS:
+        return _v("review", f"{what} more files than this check reads")
+    return None
 
 
 def _at(point, look) -> dict | None:
@@ -140,6 +156,8 @@ def _click(action: str, a: dict, cwd: str | None, look, model=None) -> Verdict:
     info = _at(point, look)
     if info is None:
         return _v("review", "can't see what is under the pointer (laya-guard desktop setup)")
+    if info.get("found") is False:                   # the helper could read the screen but found nothing at the point
+        return _v("review", "can't tell what is at the point clicked")
     hit = _files(info, cwd, "dragging" if "drag" in action else "clicking")
     if hit is not None:
         return hit
@@ -150,7 +168,7 @@ def _click(action: str, a: dict, cwd: str | None, look, model=None) -> Verdict:
 
 # Button words the browser list (browser._RISKY_CLICK) leaves out that matter in a desktop app: a reply or forward goes
 # out, a push publishes code, revert/discard/overwrite/replace lose work, leave and uninstall can't be taken back.
-# The model catches most of these too, but measured on clicks it never saw it let a few of each kind through.
+# The model catches most of these too, but measured on clicks it wasn't trained on it let a few of each kind through.
 _RISKY_DESKTOP = re.compile(
     r"\b(?:reply|forward|push|bin|revert|discard|overwrite|replace|leave|uninstall|share|invite|wire|don'?t save)\b"
     r"|답장|전달|푸시|지우|되돌|폐기|덮어|대치|나가|공유|저장 안 함",

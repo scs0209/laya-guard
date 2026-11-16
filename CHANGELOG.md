@@ -42,10 +42,11 @@ All notable changes to this project are documented here. Versions follow
 - **The model is revision 2 of `laya-guard-multilingual` (`6c5d9ae`)**: it continues from the first revision with
   desktop clicks added to its training (`finetune/desktop_data.py`, with a held-out click set in
   `eval/testset_desktop.jsonl`). Against the first revision, no end-to-end verdict on the benchmark and eval sets got
-  worse and five got better (`npx tsc --noEmit` is allowed, a `find $HOME … id_rsa` search is held). On clicks it never
-  saw it lets 57 of 61 ordinary ones through (the first revision: 15) and holds 14 of 17 that should be asked about
-  (the first revision: 17) and all 4 that should be blocked; the button words above hold the other 3. Model card on the
-  Hub.
+  worse and five got better (`npx tsc --noEmit` is allowed, a `find $HOME … id_rsa` search is held). On the click set,
+  whose button labels it never saw, it lets 23 of 25 ordinary clicks through (the first revision: 8) and holds 30 of 31
+  risky ones (31). On the clicks of its validation split it held 14 of 17 that should be asked about; most of those
+  shared a button label with training clicks in other apps, so that figure is kinder than a fresh set would be (`build.py`
+  now groups clicks by label). The button words above hold the clicks it let through. Model card on the Hub.
 
 ### Fixed
 

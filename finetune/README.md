@@ -92,3 +92,7 @@ Fifteen runs, kept in `train/` with their evaluations; each line is what a run s
   the click results worse and let two block clicks through, so laya-guard asks one question for everything.
 - **Learning stalled on quiet clicks.** Adding more of the kinds a run missed only moved which ones were missed (14 of 17
   in val either way); the button words in `desktop.py` hold the rest.
+- **The same button on both sides of the split.** Clicks were grouped by their whole sentence, which names the app, so
+  "Send" in Mail could train while "Send" in Messages validated: 69 of val's 82 clicks shared a label with training,
+  and the val click figures above are kinder than a fresh set would be. build.py now groups clicks by label. The click
+  set (`eval/testset_desktop.jsonl`) was always label-disjoint.

@@ -101,8 +101,8 @@ def compare():
             rs = [r for r in R[n]["rows"] if r["set"] == "val" and r["expected"] == lab]
             print(f"val {lab:6} exact ({n}): {sum(r['model'] == lab for r in rs)}/{len(rs)}", end="   ")
         print()
-    # the clicks in val: written like the click set but never seen in training, and often less obvious (Reply All,
-    # Revert to Saved), so a model can do well on the click set and still let these through
+    # the clicks in val: not trained on, with no button label in common with training (build.py groups clicks by label),
+    # and often less obvious (Reply All, Revert to Saved), so a model can do well on the click set and still miss these
     for lab, what in (("allow", "allowed"), ("review", "held"), ("block", "held")):
         for n in ("base", "ckpt"):
             rs = [r for r in R[n]["rows"] if r["set"] == "val" and r["expected"] == lab and r["text"].startswith("desktop:")]

@@ -55,6 +55,10 @@ def test_what_counts_as_a_desktop_call(env):
     assert desktop.parse("mcp__slack__send", {"text": "hi"}) is None
     assert desktop.parse("mcp__Claude_Browser__computer", {"action": "left_click", "coordinate": [1, 2]}) is None
     assert judge_desktop_call("Bash", {"command": "ls"}) is None
+    # Claude Code's own tools are never computer use, whatever their input carries: the shell rules still see the command
+    for name in ("Bash", "Read", None, ""):
+        assert judge_desktop_call(name, {"command": "rm -rf ~", "action": "screenshot"}) is None, name
+    assert desktop.parse("computer", {"action": "left_click", "coordinate": [1, 2]})[0] == "left_click"   # the API's tool
 
 
 def test_a_click_on_a_protected_file_follows_protect_yaml(env):
@@ -91,6 +95,8 @@ def test_a_click_on_a_risky_button(env):
 
 def test_when_the_screen_cant_be_read_a_click_is_asked_about(env):
     assert _a({"action": "left_click", "coordinate": [1, 2]}, lambda *a: None) == ("review", "desktop")
+    nothing = lambda *a: {"trusted": True, "found": False, "paths": [], "labels": []}   # read, but nothing at the point
+    assert _a({"action": "left_click", "coordinate": [1, 2]}, nothing) == ("review", "desktop")
     assert _a({"action": "left_click", "coordinate": [1, 2]}) == ("review", "desktop")        # no helper built
     assert _a({"action": "screenshot"}) == ("allow", "desktop")
 
@@ -104,6 +110,12 @@ def test_keys_that_open_the_selection(env):
     assert _a({"action": "key", "text": "cmd+c"}, look) == ("allow", "desktop")
     assert _a({"action": "key", "text": "Return"}, screen(paths=["/tmp/a"])) == ("allow", "desktop")
     assert _a({"action": "key", "text": "Return"}, lambda *a: None)[0] == "review"
+    # more selected than the helper read, or than this check reads: one of the rest could be protected
+    many = [f"/tmp/f{i}" for i in range(desktop.MAX_PATHS + 1)]
+    assert _a({"action": "key", "text": "cmd+o"}, screen(paths=many)) == ("review", "desktop")
+    cut = lambda *a: {"trusted": True, "paths": ["/tmp/a"], "labels": [], "truncated": True}
+    assert _a({"action": "key", "text": "cmd+o"}, cut) == ("review", "desktop")
+    assert _a({"action": "key", "text": "cmd+o"}, screen(paths=many[:-2] + [f"{home}/.ssh/config"]))[1] == "protected-path"
 
 
 def test_typing(env):
