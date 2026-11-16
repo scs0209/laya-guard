@@ -1,2 +1,4 @@
 # torch, gradio, spaces and huggingface_hub are preinstalled on ZeroGPU; do not list them.
-laya-guardrail==0.7.1
+# Pinned to main's merge of #105 until the next release: 0.7.1 still loads model revision 1 (7147e9c), and README.md
+# preloads revision 2, which only this commit's guard.py asks for. Back to `laya-guardrail==<version>` on release.
+laya-guardrail @ git+https://github.com/scs0209/laya-guard@981fadd79d0f9d0d85d9a5c1103e2f4bcf4edf86
