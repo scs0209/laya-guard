@@ -12,7 +12,7 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
-from . import activity, agentbridge, aisim, alerts, dashboard, fileaccess, footprint, install, service, simulation
+from . import activity, agentbridge, aisim, alerts, browser, dashboard, desktop, fileaccess, footprint, install, service, simulation
 from .guard import ASK_AGENTS, judge, is_mock, model_state
 from .log import load_entries, log_enabled, log_path, log_verdict
 
@@ -26,11 +26,22 @@ _WRITE_TOKEN = secrets.token_urlsafe(32)
 
 def _judge_and_log(text: str, source: str, cwd: str | None = None, tool_name: str | None = None,
                    paths: list[str] | None = None, agent: str | None = None, accesses: list | None = None,
-                   command: str | None = None):
+                   command: str | None = None, tool_input: dict | None = None, transcript_path: str | None = None):
     t0 = time.perf_counter()
-    # A file tool call is judged by the paths it names alone (the protected paths: no model, no content);
-    # everything else goes through the judge, and a shell command is also held to the protected paths it names.
-    v = fileaccess.judge_file_call(tool_name, paths, cwd, accesses)
+    # A browser tool call is judged by what its fields hold (browser.yaml: no model), a desktop computer-use call by what
+    # is on the screen where it clicks (desktop.py), a file tool call by the paths it names alone (the protected paths:
+    # no model, no content); everything else goes through the judge, and a shell command is also held to the protected
+    # paths it names.
+    v = None
+    if isinstance(tool_input, dict):
+        transcript = transcript_path if transcript_path and os.path.isabs(transcript_path) else None
+        v = browser.judge_browser_call(tool_name, tool_input, cwd) or \
+            desktop.judge_desktop_call(tool_name, tool_input, cwd, transcript=transcript,
+                                       model=desktop.second_opinion())   # LAYA_GUARD_DESKTOP_MODEL: off by default
+        if v is not None and v.action == "block":       # nobody is asked about a block: tell the person at the screen
+            alerts.notify_block(v.reason, "browser action" if browser.is_browser_tool(tool_name) else "desktop action")
+    if v is None:
+        v = fileaccess.judge_file_call(tool_name, paths, cwd, accesses)
     if v is None:
         shell = command or (text if tool_name == "Bash" else None)
         v = fileaccess.stricter(judge(text, source=source, cwd=cwd, ask=agent in ASK_AGENTS),
@@ -57,6 +68,8 @@ class GuardReq(BaseModel):
     agent: str | None = None  # which agent is calling (claude-code, ...); only used to label the opt-in file activity log
     command: str | None = None  # the bare shell command, when this call is one and tool_call wraps it; held to the protected paths and read for the activity log
     accesses: list[dict] | None = None  # what the call touches, as the adapter reads it: [{"op": read|write|delete, "path": ...}]; judged like paths
+    tool_input: dict | None = None  # the tool's input as the agent sent it, for tools judged by their fields (browser, desktop)
+    transcript_path: str | None = None  # the agent's transcript, where a computer-use element ID is turned into its label
 
 class GuardRes(BaseModel):
     action: str
@@ -77,7 +90,8 @@ def guard(req: GuardReq):
     text = req.tool_call or req.state
     cwd = req.cwd if req.cwd and os.path.isabs(req.cwd) else None
     v = _judge_and_log(text, source=req.source, cwd=cwd, tool_name=req.tool_name, paths=req.paths, agent=req.agent,
-                       accesses=req.accesses, command=req.command)
+                       accesses=req.accesses, command=req.command, tool_input=req.tool_input,
+                       transcript_path=req.transcript_path)
     return GuardRes(action=v.action, risk=v.risk, policy_id=v.policy_id, reason=v.reason,
                     mock=v.mock, verdict_source=v.verdict_source)
 

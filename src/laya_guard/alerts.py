@@ -1,4 +1,5 @@
-"""Tell a human when laya-guard is judging without its model (standard library only).
+"""Tell a human when laya-guard is judging without its model, or has blocked a computer-use call (standard library
+only; the blocks are at the end of this file).
 
 An outage is not a denial, and the log can only be read after the fact. If `LAYA_GUARD_ALERT_CMD` is set, the
 first time a kind of outage shows up the command is started, once, in the background; the next alert of the
@@ -17,6 +18,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -88,6 +90,55 @@ def maybe_alert(kind: str, message: str | None = None, now: float | None = None)
                                 env=dict(os.environ, LAYA_GUARD_ALERT_KIND=kind,
                                          LAYA_GUARD_ALERT_MESSAGE=message or KINDS[kind]))
         threading.Thread(target=proc.wait, daemon=True).start()     # reap it if this process lives on (the server)
+        return True
+    except Exception:
+        return False
+
+
+# --- blocked computer-use calls -------------------------------------------------------------------------------------
+# A block of a browser or desktop call asks nobody (a review shows the agent's permission prompt), and the agent only
+# says so in its transcript. The person at the screen is told right away: LAYA_GUARD_ALERT_CMD runs with
+# LAYA_GUARD_ALERT_KIND=blocked when it is set, otherwise macOS shows a notification. LAYA_GUARD_NOTIFY picks how:
+# unset or `banner` is the notification banner (top right), `dialog` an alert in the middle of the screen that closes
+# itself after DIALOG_SECONDS, `0` nothing. No cooldown: every block is its own event. Never raises, never waits.
+
+_NOTIFY_SCRIPT = ["-e", "on run argv", "-e",
+                  'display notification (item 1 of argv) with title "laya-guard" subtitle (item 2 of argv)',
+                  "-e", "end run"]
+DIALOG_SECONDS = 30
+_DIALOG_SCRIPT = ["-e", "on run argv", "-e",
+                  'display alert "laya-guard: " & (item 2 of argv) message (item 1 of argv) as critical '
+                  f"giving up after {DIALOG_SECONDS}",
+                  "-e", "end run"]
+
+
+def notify_style() -> str:
+    """`off`, `dialog` or `banner` (the default, also for a value it doesn't know)."""
+    value = os.environ.get("LAYA_GUARD_NOTIFY", "").strip().lower()
+    return "off" if value == "0" else "dialog" if value == "dialog" else "banner"
+
+
+def notify_block(reason: str, what: str = "computer-use call") -> bool:
+    """Tell the person at the screen that a computer-use call was blocked. Returns True if something was started."""
+    style = notify_style()
+    if style == "off":
+        return False
+    message = f"Blocked: {reason}"[:240]
+    subtitle = f"An AI {what} was stopped"[:120]
+    try:
+        command = alert_command()
+        if command:
+            proc = subprocess.Popen(command, shell=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                    stderr=subprocess.DEVNULL, start_new_session=True,
+                                    env=dict(os.environ, LAYA_GUARD_ALERT_KIND="blocked",
+                                             LAYA_GUARD_ALERT_MESSAGE=f"{subtitle}. {message}"))
+        elif sys.platform == "darwin":
+            script = _DIALOG_SCRIPT if style == "dialog" else _NOTIFY_SCRIPT
+            proc = subprocess.Popen(["osascript", *script, message, subtitle], stdin=subprocess.DEVNULL,
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        else:
+            return False
+        threading.Thread(target=proc.wait, daemon=True).start()
         return True
     except Exception:
         return False

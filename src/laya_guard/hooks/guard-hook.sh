@@ -15,11 +15,12 @@ input=$(cat)
 offline=0
 action=""
 # One python3 reads the hook input and prints, NUL-separated: whether the input could be read, the text to judge,
-# the directory, the tool name, the request for the server, then the paths a file tool names. (python3 costs ~20 ms to
+# the directory, the tool name, the request for the server, the input of a tool that is neither Bash nor a file tool (as
+# JSON, for the offline check), then the paths a file tool names. (python3 costs ~20 ms to
 # start, so the hook starts it twice in all, not once per field.)
 #   text to judge: for Bash, only the command that actually runs (description never runs); a file tool call, its name
 #     and the paths it names (never the file's content: that is all that is sent); any other tool, its name and its
-#     flattened input values.
+#     flattened input values. That input is also sent as it is (tool_input): browser tools are judged by their fields.
 #   directory: where to find the package.json scripts that npm test etc. run.
 fields=()
 while IFS= read -r -d '' f; do fields+=("$f"); done < <(python3 -c '
@@ -44,8 +45,11 @@ try:
         paths = [a[k] for k in ("file_path", "path", "notebook_path") if isinstance(a.get(k), str) and a[k].strip()]
 except Exception:
     pass
+raw_input = ""
 if paths:
     tool = name + ": " + " ".join(paths)
+elif name and name != "Bash" and isinstance(a, dict):
+    raw_input = json.dumps(a)
 tool = tool.rstrip("\n")
 p = {"tool_call": tool.strip(), "cwd": cwd, "agent": "claude-code"}
 if name:
@@ -54,16 +58,24 @@ if paths:
     p["paths"] = paths
 if name == "Bash":
     p["command"] = p["tool_call"]
-sys.stdout.write("\0".join([ok, tool, cwd, name or "", json.dumps(p)] + paths) + "\0")
+transcript = d.get("transcript_path") if raw_input and isinstance(d, dict) else None
+transcript = transcript if isinstance(transcript, str) and os.path.isabs(transcript) else ""
+if raw_input:
+    p["tool_input"] = a
+if transcript:
+    p["transcript_path"] = transcript          # where a computer-use element ID is turned into its label
+sys.stdout.write("\0".join([ok, tool, cwd, name or "", json.dumps(p), raw_input, transcript] + paths) + "\0")
 ' <<< "$input" 2>/dev/null)
-if [ "${#fields[@]}" -lt 5 ]; then
-  fields=(0 "" "$(pwd)" "" "")          # no python3: nothing to send, so the server can't answer and the CLI decides
+if [ "${#fields[@]}" -lt 7 ]; then
+  fields=(0 "" "$(pwd)" "" "" "" "")    # no python3: nothing to send, so the server can't answer and the CLI decides
 fi
 tool=${fields[1]}
 cwd=${fields[2]}
 name=${fields[3]}
 payload=${fields[4]}
-paths=("${fields[@]:5}")
+raw_input=${fields[5]}
+transcript=${fields[6]}
+paths=("${fields[@]:7}")
 if [ "${fields[0]}" != 1 ]; then
   # the input wasn't JSON we can read: judging an empty command would pass it, so the fail mode decides
   tool=""
@@ -83,7 +95,11 @@ if [ -z "$action" ]; then
     [ -n "$name" ] && name_args=(--tool-name "$name")
     [ "$name" = Bash ] && name_args+=(--shell)
     for p in "${paths[@]}"; do path_args+=(--path "$p"); done
-    res=$(printf '%s' "$tool" | LAYA_GUARD_FAIL="$fail" "${LAYA_GUARD_BIN:-laya-guard}" check --offline --json --cwd "$cwd" --agent claude-code "${name_args[@]}" "${path_args[@]}" 2>/dev/null)
+    # A tool judged by its fields (a browser tool) needs its input, not the flattened text: send that instead.
+    stdin_text=$tool
+    [ -n "$raw_input" ] && { stdin_text=$raw_input; name_args+=(--input-json); }
+    [ -n "$transcript" ] && name_args+=(--transcript "$transcript")
+    res=$(printf '%s' "$stdin_text" | LAYA_GUARD_FAIL="$fail" "${LAYA_GUARD_BIN:-laya-guard}" check --offline --json --cwd "$cwd" --agent claude-code "${name_args[@]}" "${path_args[@]}" 2>/dev/null)
   fi
   # The second python3: the action, and for a review the answer that asks a human through Claude Code's prompt.
   answer=$(RES="$res" python3 -c '

@@ -5,6 +5,49 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- **Browser tools** (`laya-guard install claude-code --browser`): the Claude app's built-in browser, Claude in Chrome,
+  chrome-devtools MCP and Playwright MCP are judged by their fields, by rules alone (no model): secrets typed, in a URL
+  or in a page script are blocked, and so are a script that reads cookies or storage and sends something out and an
+  upload of a protected path; a site not on the list (`browser.yaml`, localhost always on it), a card number or
+  password field, a click or Enter described as paying, ordering, deleting or sending, an upload and an installer or
+  archive download are asked about. `browser_batch` is judged step by step. A click without a description follows
+  `unlabeled_clicks` (allow by default). The hook now sends the input of a tool that is neither Bash nor a file tool
+  as it is (`tool_input`), and `laya-guard check --input-json` reads it.
+- **Desktop computer use** (macOS, `laya-guard install claude-code --desktop SERVER`): a computer-use call names
+  screen coordinates, so right before it runs a small Accessibility helper (`laya-guard desktop setup` builds it,
+  `laya-guard desktop check` shows what it sees; it only reads) says what is there. A click or drag on a file under a
+  protected path, Return or cmd+O on a selected one, or typing its path follows `protect.yaml`; a click on a button
+  named like paying, deleting or sending is asked about; typed secrets are blocked; a click is asked about when the
+  screen can't be read. `LAYA_GUARD_AX_SCALE` maps a server's screenshot pixels to screen points.
+  [Peekaboo](https://github.com/openclaw/Peekaboo)'s MCP tools are read too: a click by name is looked up in the
+  target app (and Finder), a click by element ID gets its label from the last `see` in the agent's transcript (the hook
+  now passes `transcript_path`), and `press`, `type`, `paste`, `menu` and `dialog` follow the same rules; its `agent`
+  and `analyze` tools are asked about.
+- **A blocked browser or desktop call shows a notification**: a block asks nobody, so macOS shows the reason (never
+  what was typed or clicked), or `LAYA_GUARD_ALERT_CMD` runs with `LAYA_GUARD_ALERT_KIND=blocked`.
+  `LAYA_GUARD_NOTIFY=dialog` shows it as an alert in the middle of the screen instead of a banner (it closes itself
+  after 30 seconds); `LAYA_GUARD_NOTIFY=0` turns it off.
+- **The model as a second opinion on the desktop** (`LAYA_GUARD_DESKTOP_MODEL=1`, off by default): text a desktop
+  agent types, its cmd/ctrl/option shortcuts and its clicks on a labeled element, when the rules allow them, are also
+  shown to the Laya model, which can raise them to a review (`desktop-model`) but never to a block. Plain keys stay with
+  the rules.
+- **Desktop button words**: besides the browser's list (pay, delete, send, ...), a desktop click on a button named like
+  replying, forwarding, pushing, reverting, discarding, overwriting, replacing, leaving or uninstalling (and the Korean
+  words for them) is asked about, with or without the model.
+
+### Changed
+
+- **The model is revision 2 of `laya-guard-multilingual` (`6c5d9ae`)**: it continues from the first revision with
+  desktop clicks added to its training (`finetune/desktop_data.py`, with a held-out click set in
+  `eval/testset_desktop.jsonl`). Against the first revision, no end-to-end verdict on the benchmark and eval sets got
+  worse and five got better (`npx tsc --noEmit` is allowed, a `find $HOME … id_rsa` search is held). On the click set,
+  whose button labels it never saw, it lets 23 of 25 ordinary clicks through (the first revision: 8) and holds 30 of 31
+  risky ones (31). On the clicks of its validation split it held 14 of 17 that should be asked about; most of those
+  shared a button label with training clicks in other apps, so that figure is kinder than a fresh set would be (`build.py`
+  now groups clicks by label). The button words above hold the clicks it let through. Model card on the Hub.
+
 ### Fixed
 
 - **Unicode look-alikes no longer bypass the rules (#95)**: `judge()` and `judge_offline()` judge the command as

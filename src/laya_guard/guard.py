@@ -385,13 +385,13 @@ GUARD_DEVICE = os.environ.get("LAYA_GUARD_DEVICE", "cpu")
 # refused rather than loaded. LAYA_GUARD_MODEL=base runs the original Laya; a Hub id or a local folder runs that,
 # unpinned.
 GUARD_MODEL = "Ayaannnnnnn/laya-guard-multilingual"
-GUARD_MODEL_REVISION = "7147e9cbc5b057140279b76f78991909f417056a"
+GUARD_MODEL_REVISION = "6c5d9ae69bb01f294c467fc460200ca3ada209ab"   # revision 2: also judges desktop clicks
 GUARD_MODEL_SHA256 = {
-    "model.safetensors": "a9f09266dbbb0b1851f99e9f6eda0da51290cc90f467564c401486521d64b72d",
-    "rl_agent_config.json": "e5ffeb226da61565d97edbaffdec344ac3e7fbfb04953231e6d5ee1656db7f9b",
+    "model.safetensors": "d0a9e2466ec2c25c30efb4f7f3700274b83113ae10c85d5d87d7fc8721ff24a9",
+    "rl_agent_config.json": "166342bd6403bfdd460c5f5a9882f9c5b68275e4b51637fe5e6088940465e644",
     "tokenizer/tokenizer.json": "dbba919c6e5e492bc22beb80abb64e6fcc7e8744dc696e8388b8c977767afa4b",
-    "tokenizer/tokenizer_config.json": "f2ff584a8f78ac9f3b6fd0afcf9ab310e41c2d445ef628f9ab4b0d594e992b7a",
-    "encoder/config.json": "10b713aa32a0adf93e1c3a328631befece0f869abd041d25eccd9c184928bfad",
+    "tokenizer/tokenizer_config.json": "b85452b1f3cf89ef52e104452e6f68b1219af8c55e33d18e4a13027d4a548e0b",
+    "encoder/config.json": "361c4272a584354ab2439579ddf91e8a88e16f5344b3dac93a84e761f036e843",
 }
 
 _router_lock = threading.Lock()

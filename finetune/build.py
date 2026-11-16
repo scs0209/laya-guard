@@ -2,8 +2,9 @@
 
 train/train.jsonl and train/val.jsonl in laya-train's {state, questions, expected} form, with the exact question
 laya-guard asks at inference (guard._laya_predict). Rows: the labeled commands only the model would judge, the
-commands the safe lane allows (unless --no-safe-lane), and examples you wrote (train/synthetic.jsonl, augment.jsonl,
-round3.jsonl). Nothing equal or similar (>= 0.85) to a case in bench/, eval/ or tests/data/ is kept, a command is kept
+commands the safe lane allows (unless --no-safe-lane), examples you wrote (train/synthetic.jsonl, augment.jsonl,
+round3.jsonl), and the desktop click examples kept in the repo (finetune/data/desktop_clicks.jsonl, unless
+--no-desktop). Nothing equal or similar (>= 0.85) to a case in bench/, eval/ or tests/data/ is kept, a command is kept
 once across all sources, and commands from one agent session stay on one side of the train/val split.
 
 Labels are `{"id": <commands.jsonl id>, "label": ..., "why": ...}` lines in train/labels*.jsonl, read in name order
@@ -83,6 +84,8 @@ def main():
     ap = argparse.ArgumentParser(description="train/train.jsonl and train/val.jsonl for laya-train")
     ap.add_argument("--no-safe-lane", action="store_true",
                     help="leave out commands the safe lane allows: the model never sees them in use")
+    ap.add_argument("--no-desktop", action="store_true",
+                    help="leave out the desktop click examples (finetune/data/desktop_clicks.jsonl)")
     ap.add_argument("--oversample", type=int, default=1,
                     help="repeat review and block rows this many times in train (not val), when allow dominates")
     args = ap.parse_args()
@@ -106,6 +109,19 @@ def main():
                 # masked like the transcript commands: a written example can hold an email or a path too
                 candidates.append({"command": common.mask(d["command"]), "label": d["label"], "source": name,
                                    "group": d["command"]})
+    if not args.no_desktop:
+        # desktop clicks: written examples kept in the repo (finetune/desktop_data.py). A click whose label the desktop
+        # eval set judges on its own is left out: those sentences differ only in the label, so the >= 0.85 likeness
+        # below can't tell them apart from the eval cases, and it would drop nearly all of them.
+        import desktop_data
+        held_out = desktop_data.held_out_labels()
+        for line in open(desktop_data.OUT, encoding="utf-8"):
+            d = json.loads(line)
+            if desktop_data.click_label(d["command"]).lower() not in held_out:
+                # grouped by the button's label, so "Send" in Mail, in Messages and with no app all fall on one side
+                # of the split: grouped by sentence, 69 of val's 82 clicks had a label also in training
+                candidates.append({"command": d["command"], "label": d["label"], "source": "desktop",
+                                   "group": "click:" + desktop_data.click_label(d["command"]).lower()})
     evals = common.eval_texts()
     seen, data, near, conflicts = {}, [], 0, 0
     for c in candidates:
@@ -118,7 +134,14 @@ def main():
         seen[key] = c; data.append(c)
     print(f"{len(data)} rows; dropped {near} like an eval case and {len(candidates) - len(data) - near} duplicates "
           f"({conflicts} with a different label: the first source wins, real before written)")
-    train, val = split(data, oversample=args.oversample)
+    # Clicks are split on their own and never repeated: mixed in, they reshuffle which shell sessions land in val (the
+    # first click round moved 113 shell rows out of training), and repeating their many reviews tilted the whole model
+    # toward review (everyday commands the model allowed fell from 44/50 to 27/50).
+    clicks = [d for d in data if d["source"] == "desktop"]
+    train, val = split([d for d in data if d["source"] != "desktop"], oversample=args.oversample)
+    if clicks:
+        click_train, click_val = split(clicks)
+        train, val = train + click_train, val + click_val
     out = lambda items: [{"state": d["command"], "questions": {"action": QUESTIONS["action"]},
                           "expected": {"action": d["label"]}, "source": d["source"]} for d in items]
     common.write_jsonl({common.TRAIN / "train.jsonl": out(train), common.TRAIN / "val.jsonl": out(val)})

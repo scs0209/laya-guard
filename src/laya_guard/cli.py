@@ -1,7 +1,7 @@
 """CLI: laya-guard check / serve / eval."""
 from __future__ import annotations
-import argparse, dataclasses, json, os, sys, time
-from . import activity, footprint, osmonitor
+import argparse, dataclasses, json, os, re, sys, time
+from . import activity, browser, desktop, footprint, osmonitor
 from .fileaccess import judge_file_call, judge_shell, stricter
 from .guard import judge, judge_offline, is_mock, warmup
 from .install import InstallError
@@ -9,7 +9,20 @@ from .install import InstallError
 def cmd_check(args):
     text = " ".join(args.text) if args.text else sys.stdin.read()
     cwd = os.path.abspath(args.cwd)
-    v = judge_file_call(args.tool_name, args.path, cwd, args.access or None)   # a file call is judged by its paths alone
+    v = None
+    if args.input_json:          # the text is the tool's input as JSON: a browser tool is judged by its fields
+        try:
+            tool_input = json.loads(text)
+        except ValueError:
+            tool_input = None
+        text = browser.call_text(args.tool_name, tool_input)
+        v = browser.judge_browser_call(args.tool_name, tool_input, cwd) or \
+            desktop.judge_desktop_call(args.tool_name, tool_input, cwd, transcript=args.transcript)
+        if v is not None and v.action == "block":
+            from .alerts import notify_block
+            notify_block(v.reason, "browser action" if browser.is_browser_tool(args.tool_name) else "desktop action")
+    if v is None:
+        v = judge_file_call(args.tool_name, args.path, cwd, args.access or None)   # a file call is judged by its paths alone
     shell = text if (args.shell or args.tool_name == "Bash") else None      # a shell command is also held to the protected paths
     if args.offline:
         # LAYA_GUARD_FAIL: ask (default) sends what it can't judge to a human, closed blocks it, open passes it
@@ -125,6 +138,30 @@ def cmd_watch(args):
     activity log, from Apple's eslogger."""
     return osmonitor.watch(matches=args.match, reads=args.reads, ignore=args.ignore, to_stdout=args.stdout,
                            seed=not args.no_seed)
+
+def cmd_desktop(args):
+    """laya-guard desktop setup | check: the screen lookup behind computer-use calls (macOS)."""
+    if args.action == "setup":
+        try:
+            exe = desktop.build_helper()
+        except RuntimeError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        print(f"Built {exe}.")
+        print("\nIt reads what is on the screen at a point (it never clicks or types), and macOS has to allow that:\n"
+              "System Settings → Privacy & Security → Accessibility, for the app that runs the laya-guard server.\n"
+              "Run the server as a service (`laya-guard service install`) and allow that, not your terminal or the\n"
+              "Claude app: whatever holds this permission can also drive the screen, and an agent's own shell\n"
+              "commands run under those apps. Then check with `laya-guard desktop check pointer`.")
+        return 0
+    where = ["at", *args.where[:2]] if args.where and args.where[0] not in ("pointer", "selection") else args.where[:1]
+    info = desktop.lookup(*(where or ["pointer"]))
+    if info is None:
+        print("The helper can't read the screen: not built (laya-guard desktop setup), or this app isn't allowed in\n"
+              "System Settings → Privacy & Security → Accessibility.", file=sys.stderr)
+        return 1
+    print(json.dumps(info, ensure_ascii=False, indent=2))
+    return 0
 
 def cmd_serve(args):
     from .server import run
@@ -251,20 +288,30 @@ def _probe_line(agent, label, expected, got) -> str:
     return f"  {ok} {label} (answered {_ANSWERS.get(got, f'exit {got}')}, expected {_ANSWERS.get(expected, expected)})"
 
 def cmd_install(args):
-    if args.files:
+    browser_tools = getattr(args, "browser", False)
+    desktop_servers = [n.strip() for n in (getattr(args, "desktop", None) or "").split(",") if n.strip()]
+    if any(not re.fullmatch(r"[A-Za-z0-9_-]+", n) for n in desktop_servers):
+        print("error: --desktop takes MCP server names (letters, digits, - and _), comma-separated", file=sys.stderr)
+        return 1
+    if args.files or browser_tools or desktop_servers:
         from . import install as ins_mod
+        flag = "--files" if args.files else "--browser" if browser_tools else "--desktop"
         try:
             agent_id = ins_mod.spec_for(args.agent).id
         except InstallError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
         if agent_id != "claude-code":
-            print("error: --files only applies to claude-code", file=sys.stderr)
+            print(f"error: {flag} only applies to claude-code", file=sys.stderr)
             return 1
         if args.matcher:
-            print("error: --files and --matcher both choose the tools the hook guards; use one", file=sys.stderr)
+            print(f"error: {flag} and --matcher both choose the tools the hook guards; use one", file=sys.stderr)
             return 1
-        args.matcher = ins_mod.FILES_MATCHER
+        args.matcher = ins_mod.FILES_MATCHER if args.files else ins_mod.DEFAULT_MATCHER
+        if browser_tools:
+            args.matcher += "|" + browser.BROWSER_MATCHER
+        for name in desktop_servers:
+            args.matcher += f"|mcp__{name}__.*"
     try:
         ins, plan = _plan(args, "install")
     except InstallError as exc:
@@ -509,6 +556,10 @@ def main(argv=None):
     c.add_argument("--tool-name", default=None,
                    help="the agent's name for the tool (Read, Edit, Write, ...): with --path, the call is judged by the paths alone")
     c.add_argument("--agent", default=None, help="which agent is calling (claude-code, ...): labels the file activity log")
+    c.add_argument("--transcript", default=None, metavar="PATH",
+                   help="the agent's transcript (with --input-json): where a computer-use element ID is turned into its label")
+    c.add_argument("--input-json", action="store_true",
+                   help="the text is the tool's input as JSON (with --tool-name): a browser or desktop tool is judged by its fields")
     c.add_argument("--shell", action="store_true",
                    help="the text is a shell command an agent is about to run: the paths it names are checked against "
                         "the protected paths, and the file activity log labels it")
@@ -541,6 +592,13 @@ def main(argv=None):
                          "folders outside the project it touched only rarely. Nothing is applied")
     fp.add_argument("--json", action="store_true", help="print JSON")
     fp.set_defaults(fn=cmd_footprint)
+    dk = sub.add_parser("desktop", help="(macOS) the screen lookup that judges computer-use clicks",
+                        description="setup builds the helper that reads what is on the screen where an agent clicks "
+                                    "(Accessibility; it never clicks or types). check shows what it sees: at X Y, "
+                                    "under the pointer, or the frontmost app's selection.")
+    dk.add_argument("action", choices=("setup", "check"))
+    dk.add_argument("where", nargs="*", help="for check: X Y, pointer (default) or selection")
+    dk.set_defaults(fn=cmd_desktop)
     w = sub.add_parser("watch", help="(macOS, optional) record the files an agent's processes really open, as the OS sees them",
                        description="Reads Apple's eslogger output and adds the files an agent's own processes open, create, "
                                    "delete or rename to the file activity log (source os-monitor). It sees what scripts and "
@@ -582,6 +640,12 @@ def main(argv=None):
     i.add_argument("--files", action="store_true",
                    help="Claude Code only: also guard the file tools (Read, Edit, MultiEdit, Write, NotebookEdit, Glob, Grep), "
                         "so the protected paths apply to them")
+    i.add_argument("--desktop", default=None, metavar="SERVER[,SERVER]",
+                   help="Claude Code only: also guard the computer-use MCP servers named here (what is clicked is "
+                        "looked up on the screen; run `laya-guard desktop setup` once)")
+    i.add_argument("--browser", action="store_true",
+                   help="Claude Code only: also guard the browser tools (the Claude app's browser, Claude in Chrome, "
+                        "chrome-devtools and Playwright MCP), judged by the rules in browser.yaml")
     i.add_argument("--bin", default=None, help="absolute path of the laya-guard executable (default: found automatically)")
     i.add_argument("--dry-run", action="store_true", help="print the diff, write nothing")
     i.add_argument("-y", "--yes", action="store_true", help="apply without asking")

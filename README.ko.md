@@ -130,6 +130,22 @@ laya-guard footprint --suggest           # 프로젝트별로 무엇을 건드�
 * **보는 범위.** 훅은 도구 호출이나 명령 텍스트가 지목한 경로를 봅니다. `python -c` 코드 안의 경로도 포함됩니다.
   스크립트가 실행 중에 만들어 내는 경로는 `watch`에만 닿고, `watch`는 기록할 뿐 막지 못합니다.
 
+브라우저 도구도 선택해서 켤 수 있습니다. `laya-guard install claude-code --browser`(`--files`와 함께 써도 됨)는 Claude
+앱의 내장 브라우저, Claude in Chrome, chrome-devtools와 Playwright MCP 서버를 지킵니다. 모델 없이 규칙만으로, 각 필드에
+무엇이 들었는지로 판정합니다. 입력하거나 URL·페이지 스크립트에 넣은 시크릿은 차단하고, 목록에 없는 사이트, 카드번호나
+비밀번호 입력칸, 결제·주문·삭제·전송으로 설명된 클릭이나 Enter, 업로드, 설치 파일 다운로드는 사람에게 확인합니다.
+사이트 목록은 `~/.config/laya-guard/browser.yaml`에 적습니다. 클릭은 요소 id나 좌표만 담고 있어서, 무엇을 누르는지는
+에이전트가 직접 붙인 설명이 있을 때만 알 수 있습니다.
+
+데스크톱 computer use도 같은 방식입니다(macOS). `laya-guard install claude-code --desktop SERVER`는 지정한 computer-use
+MCP 서버를 지킵니다. 이때 클릭은 화면 좌표만 담고 있어서, 실행 직전에 그 좌표에 무엇이 있는지 macOS에 물어봅니다(손쉬운
+사용, 읽기만 함). 보호 경로 아래 파일을 클릭하거나, 선택된 그 파일에 Return이나 cmd+O를 누르거나, 그 경로를 입력하면
+`protect.yaml`을 따릅니다. 결제·삭제·전송 같은 이름의 버튼 클릭은 확인하고, 입력한 시크릿은 차단하며, 화면을 읽을 수
+없으면 클릭을 확인합니다. 처음 한 번 `laya-guard desktop setup`으로 조회 도우미를 빌드하고, 손쉬운 사용 권한은 서버를
+실행하는 앱(`laya-guard service install`)에 주세요. 터미널이나 에이전트 앱에 주면 안 됩니다. 이 권한을 가진 쪽은 화면을
+조작할 수도 있기 때문입니다. 브라우저나 데스크톱 호출을 차단할 때는 아무에게도 묻지 않으므로, 이유를 담은 macOS 알림을
+띄웁니다(`LAYA_GUARD_NOTIFY=dialog`이면 화면 가운데에 띄우고, `0`이면 끔).
+
 자세히는 **[파일 가이드](docs/ko/guide/file-protection.md)**에 있습니다.
 
 ## 📸 스크린샷

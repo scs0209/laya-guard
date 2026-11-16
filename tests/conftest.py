@@ -4,6 +4,8 @@ The log: the server, the hooks and `laya-guard check --offline` all append to th
 one of them would otherwise write into the developer's own log. Tests that want a log of their own set
 LAYA_GUARD_LOG_PATH themselves; everything else lands in a temporary file. Subprocesses inherit it.
 
+Notifications: no test may pop one up on the developer's screen (LAYA_GUARD_NOTIFY=0 below).
+
 The service manager: no test may start, stop or query the developer's launchd / systemd (see below).
 """
 import os
@@ -14,6 +16,8 @@ from pathlib import Path
 import pytest
 
 os.environ["LAYA_GUARD_LOG_PATH"] = str(Path(tempfile.mkdtemp(prefix="laya-guard-test-log-")) / "verdicts.jsonl")
+# Blocked browser/desktop calls pop up a macOS notification; tests block plenty of them (and subprocesses inherit this).
+os.environ["LAYA_GUARD_NOTIFY"] = "0"
 
 
 @pytest.fixture(autouse=True)

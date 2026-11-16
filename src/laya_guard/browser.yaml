@@ -1,0 +1,19 @@
+# laya-guard: browser rules
+# For the browser tools an agent drives (the Claude app's built-in browser, Claude in Chrome, chrome-devtools MCP,
+# Playwright MCP). Guarded once the hook covers them: `laya-guard install claude-code --browser`.
+# Your own ~/.config/laya-guard/browser.yaml is read on top of this one: its `sites` are added to these, its
+# `unlabeled_clicks` replaces this one.
+#
+#   sites:             hosts an agent may open without asking. `*.example.com` is example.com and every subdomain.
+#                      localhost, loopback addresses, *.localhost and *.test are always on the list.
+#   unlabeled_clicks:  allow or review. A click names an element id or coordinates, which don't say what is clicked;
+#                      the agent's own description of it is read when there is one (chrome-devtools never sends one).
+#                      review asks about every click that comes without one.
+#
+# Always, whatever the site: secrets in typed text, URLs or page scripts are blocked; a card number, a resident
+# registration number or a password-like field is asked about; a click or Enter described as paying, ordering,
+# deleting or sending is asked about; uploads and installer/archive downloads are asked about, and an upload of a
+# protected path (protect.yaml) is blocked.
+version: 1
+sites: []
+unlabeled_clicks: allow

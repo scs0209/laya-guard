@@ -133,6 +133,23 @@ laya-guard footprint --suggest           # per project: what was touched, and pr
 * **What it sees.** The hooks see the paths a tool call or a command's text names, including one inside `python -c`
   code. A path a script only builds while it runs reaches only `watch`, which records it but can't block it.
 
+Browser tools are opt-in too: `laya-guard install claude-code --browser` (combine with `--files` for both) guards the
+Claude app's built-in browser, Claude in Chrome, and the chrome-devtools and Playwright MCP servers. They are judged by
+rules alone, by what each field holds: secrets typed, put in a URL or in a page script are blocked; a site not on your
+list, a card number or password field, a click or Enter described as paying, ordering, deleting or sending, an upload
+and an installer download are asked about. List your sites in `~/.config/laya-guard/browser.yaml`. A click names an
+element id or coordinates, so what is clicked is only known from the agent's own description of it, when it gives one.
+
+Desktop computer use works the same way (macOS): `laya-guard install claude-code --desktop SERVER` guards the
+computer-use MCP server you name. A click there names only screen coordinates, so right before it runs laya-guard asks
+macOS what is under them (Accessibility, read only): a click on a file under a protected path, Return or cmd+O on one
+that is selected, or typing its path follows `protect.yaml`; a click on a button named like paying, deleting or sending
+is asked about; typed secrets are blocked; and when the screen can't be read, the click is asked about. Run
+`laya-guard desktop setup` once to build the lookup helper, and give the Accessibility permission to the app that runs
+the server (`laya-guard service install`), not to your terminal or the agent's app: whatever holds it can also drive
+the screen. A blocked browser or desktop call asks nobody, so it shows a macOS notification with the reason
+(`LAYA_GUARD_NOTIFY=dialog` shows it in the middle of the screen instead, `LAYA_GUARD_NOTIFY=0` turns it off).
+
 More in the **[Files guide](docs/guide/file-protection.md)**.
 
 ## 📸 Screenshots

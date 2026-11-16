@@ -511,3 +511,34 @@ def test_cursor_adapter_wired_up_by_hand_is_reported_not_duplicated(tmp_path):
     path.parent.mkdir()
     path.write_text(json.dumps(s.data), encoding="utf-8")
     assert install.status("user", tmp_path, tmp_path, "cursor").state == "manual"       # not "broken": the path is relative
+
+
+def test_browser_flag_adds_the_browser_tools_to_the_matcher(home, capsys):
+    from laya_guard.browser import BROWSER_MATCHER
+    path = home / ".claude" / "settings.json"
+    assert _cli("install", "claude-code", "--browser", "--bin", str(GUARD_BIN), "--yes") == 0
+    assert json.loads(path.read_text())["hooks"]["PreToolUse"][0]["matcher"] == "Bash|" + BROWSER_MATCHER
+    assert _cli("install", "claude-code", "--files", "--browser", "--bin", str(GUARD_BIN), "--yes") == 0
+    matcher = json.loads(path.read_text())["hooks"]["PreToolUse"][0]["matcher"]
+    assert matcher == install.FILES_MATCHER + "|" + BROWSER_MATCHER
+    import re
+    for tool in ("Bash", "Read", "mcp__Claude_Browser__navigate", "mcp__claude-in-chrome__computer",
+                 "mcp__plugin_chrome-devtools-mcp_chrome-devtools__click", "mcp__playwright__browser_type"):
+        assert re.fullmatch(matcher, tool), tool
+    assert not re.fullmatch(matcher, "mcp__slack__send_message")
+
+
+def test_browser_flag_is_for_claude_code_and_not_with_matcher(home, capsys):
+    assert _cli("install", "cursor", "--browser", "--bin", str(GUARD_BIN), "--yes") == 1
+    assert "--browser only applies to claude-code" in capsys.readouterr().err
+    assert _cli("install", "claude-code", "--browser", "--matcher", "Bash", "--bin", str(GUARD_BIN), "--yes") == 1
+    assert "use one" in capsys.readouterr().err
+
+
+def test_desktop_flag_adds_the_named_servers_to_the_matcher(home, capsys):
+    path = home / ".claude" / "settings.json"
+    assert _cli("install", "claude-code", "--desktop", "computer-use,mac_ctl", "--bin", str(GUARD_BIN), "--yes") == 0
+    matcher = json.loads(path.read_text())["hooks"]["PreToolUse"][0]["matcher"]
+    assert matcher == "Bash|mcp__computer-use__.*|mcp__mac_ctl__.*"
+    assert _cli("install", "claude-code", "--desktop", "x|.*", "--bin", str(GUARD_BIN), "--yes") == 1
+    assert "server names" in capsys.readouterr().err
