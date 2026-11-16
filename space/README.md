@@ -26,7 +26,7 @@ thumbnail: https://huggingface.co/spaces/Ayaannnnnnn/laya-guard-trial/resolve/ma
 # the files laya-guard's judge loads (the fine-tuned model, at the revision guard.py pins), fetched at build time so a
 # woken Space doesn't download them
 preload_from_hub:
-  - Ayaannnnnnn/laya-guard-multilingual model.safetensors,rl_agent_config.json,encoder/config.json,tokenizer/tokenizer.json,tokenizer/tokenizer_config.json 7147e9cbc5b057140279b76f78991909f417056a
+  - Ayaannnnnnn/laya-guard-multilingual model.safetensors,rl_agent_config.json,encoder/config.json,tokenizer/tokenizer.json,tokenizer/tokenizer_config.json 6c5d9ae69bb01f294c467fc460200ca3ada209ab
 ---
 
 # laya-guard web trial

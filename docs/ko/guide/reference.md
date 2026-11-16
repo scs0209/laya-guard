@@ -85,7 +85,7 @@ echo '{"url": "https://unknown.example"}' | \
 | `LAYA_GUARD_BROWSER` | 환경변수 | `~/.config/laya-guard/browser.yaml` — 브라우저 규칙. 묻지 않고 열 수 있는 `sites`와, 설명 없는 클릭을 어떻게 할지 정하는 `unlabeled_clicks`(`allow` 또는 `review`) |
 | `LAYA_GUARD_AX` | 환경변수 (서버, 오프라인 검사) | `~/.config/laya-guard/bin/laya-guard-ax` — `laya-guard desktop setup`이 빌드하는 화면 조회 도우미 |
 | `LAYA_GUARD_AX_SCALE` | 환경변수 (서버, 오프라인 검사) | `1` — computer-use 호출의 좌표에 곱하는 값. 화면 좌표가 아니라 스크린샷 픽셀을 보내는 서버용 |
-| `LAYA_GUARD_DESKTOP_MODEL` | 환경변수 (서버) | 꺼짐 — `1`이면 규칙이 허용한 데스크톱 입력 텍스트와 cmd·ctrl·option 단축키를 Laya 모델에도 보여 줌. 모델은 확인(`desktop-model`)으로 올리기만 하고 차단은 하지 않음. 클릭과 일반 키는 규칙만 씀. 모델이 설치돼 있어야 함(mock 모드에서는 효과 없음). CPU에서 호출당 약 0.1초 |
+| `LAYA_GUARD_DESKTOP_MODEL` | 환경변수 (서버) | 꺼짐 — `1`이면 규칙이 허용한 데스크톱 입력 텍스트, cmd·ctrl·option 단축키, 이름이 있는 요소의 클릭을 Laya 모델에도 보여 줌. 모델은 확인(`desktop-model`)으로 올리기만 하고 차단은 하지 않음. 일반 키는 규칙만 씀. 모델이 설치돼 있어야 함(mock 모드에서는 효과 없음). CPU에서 호출당 약 0.1초 |
 | `LAYA_GUARD_ALERT_COOLDOWN` | 환경변수 | `600` — 같은 종류의 알림이 다시 실행되기까지의 초 |
 | block/review 임계값 | `policy.yaml` → `defaults` | 0.8 / 0.45 |
 | 모델 체크포인트 | `policy.yaml` → `defaults.model` | `multilingual` |

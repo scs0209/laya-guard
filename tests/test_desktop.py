@@ -32,13 +32,13 @@ def env(tmp_path, monkeypatch):
     return home, log
 
 
-def screen(paths=(), labels=()):
+def screen(paths=(), labels=(), app="", role=""):
     """A fake lookup that sees one element everywhere, and records what it was asked."""
     asked = []
 
     def look(*args):
         asked.append(args)
-        return {"trusted": True, "paths": list(paths), "labels": list(labels)}
+        return {"trusted": True, "paths": list(paths), "labels": list(labels), "app": app, "role": role}
     look.asked = asked
     return look
 
@@ -79,6 +79,14 @@ def test_a_click_on_a_risky_button(env):
     assert _a({"action": "left_click", "coordinate": [1, 2]}, screen(labels=["Move to Trash"]))[0] == "review"
     assert _a({"action": "left_click", "coordinate": [1, 2]}, screen(labels=["Delete account"]))[0] == "review"
     assert _a({"action": "left_click", "coordinate": [1, 2]}, screen(labels=["결제하기"]))[0] == "review"
+    # words a desktop app adds to the browser's list: replies go out, pushes publish, reverts and overwrites lose work
+    for label in ("Reply All", "Push", "Revert to Saved", "Overwrite", "Leave Channel", "Uninstall", "Don't Save",
+                  "답장", "되돌리기", "덮어쓰기", "나가기", "휴지통으로 이동"):
+        assert _a({"action": "left_click", "coordinate": [1, 2]}, screen(labels=[label]))[0] == "review", label
+    for label in ("Pushpin", "Binder", "Replacement Parts", "Preview"):                     # whole words only
+        assert _a({"action": "left_click", "coordinate": [1, 2]}, screen(labels=[label]))[0] == "allow", label
+    assert _a({"query": "Reply All"}, screen(labels=["Reply All"]), tool=PB + "click")[0] == "review"   # Peekaboo too
+    assert _a({"query": "Archive"}, screen(labels=["Archive"]), tool=PB + "click")[0] == "allow"
 
 
 def test_when_the_screen_cant_be_read_a_click_is_asked_about(env):
@@ -130,7 +138,27 @@ def test_the_model_may_raise_typed_text_and_shortcuts_to_a_review(env):
     assert judge_desktop_call(CU, {"action": "type", "text": "hello"}, "/tmp", screen()).action == "allow"   # off
 
 
-def test_the_model_is_not_asked_about_clicks_plain_keys_or_what_the_rules_already_hold(env):
+def test_the_model_may_raise_a_click_on_a_labeled_element(env):
+    model = opinion()
+    look = screen(labels=["Archive", "Toolbar"], app="Mail", role="AXButton")
+    v = judge_desktop_call(CU, {"action": "left_click", "coordinate": [1, 2]}, "/tmp", look, model=model)
+    assert (v.action, v.policy_id, v.verdict_source) == ("review", "desktop-model", "model")
+    assert model.seen == ['desktop: click the "Archive" button in Mail'] and "Archive" not in v.reason
+    assert judge_desktop_call(CU, {"action": "left_click", "coordinate": [1, 2]}, "/tmp", look,
+                              model=opinion("allow", 0.1)).action == "allow"
+    assert judge_desktop_call(CU, {"action": "left_click", "coordinate": [1, 2]}, "/tmp", look).action == "allow"  # off
+    # what the rules already ask about, or an element with no label, is never shown to the model
+    quiet = opinion()
+    for lk in (screen(labels=["Send"]), screen()):
+        judge_desktop_call(CU, {"action": "left_click", "coordinate": [1, 2]}, "/tmp", lk, model=quiet)
+    assert quiet.seen == []
+    # Peekaboo's click by element: the helper's find has no app or AX role, so the model reads a plain button
+    peek = opinion()
+    v = judge_desktop_call(PB + "click", {"query": "Archive"}, "/tmp", screen(labels=["Archive"], role="find"), model=peek)
+    assert v.action == "review" and peek.seen == ['desktop: click the "Archive" button']
+
+
+def test_the_model_is_not_asked_about_plain_keys_or_what_the_rules_already_hold(env):
     model = opinion()
     for inp in ({"action": "left_click", "coordinate": [1, 2]}, {"action": "key", "text": "Escape"},
                 {"action": "key", "text": "Return"}, {"action": "screenshot"}, {"action": "type", "text": "  "}):

@@ -29,11 +29,23 @@ All notable changes to this project are documented here. Versions follow
   what was typed or clicked), or `LAYA_GUARD_ALERT_CMD` runs with `LAYA_GUARD_ALERT_KIND=blocked`.
   `LAYA_GUARD_NOTIFY=dialog` shows it as an alert in the middle of the screen instead of a banner (it closes itself
   after 30 seconds); `LAYA_GUARD_NOTIFY=0` turns it off.
-- **The model as a second opinion on desktop typing** (`LAYA_GUARD_DESKTOP_MODEL=1`, off by default): text a desktop
-  agent types and its cmd/ctrl/option shortcuts, when the rules allow them, are also shown to the Laya model, which can
-  raise them to a review (`desktop-model`) but never to a block. On hand-written cases it held `rm -rf ~/Documents`,
-  `curl ... | sh` and cmd+delete and let ordinary text through, but it scored button labels too evenly to judge clicks
-  (it held "Cancel"), so clicks and plain keys stay with the rules.
+- **The model as a second opinion on the desktop** (`LAYA_GUARD_DESKTOP_MODEL=1`, off by default): text a desktop
+  agent types, its cmd/ctrl/option shortcuts and its clicks on a labeled element, when the rules allow them, are also
+  shown to the Laya model, which can raise them to a review (`desktop-model`) but never to a block. Plain keys stay with
+  the rules.
+- **Desktop button words**: besides the browser's list (pay, delete, send, ...), a desktop click on a button named like
+  replying, forwarding, pushing, reverting, discarding, overwriting, replacing, leaving or uninstalling (and the Korean
+  words for them) is asked about, with or without the model.
+
+### Changed
+
+- **The model is revision 2 of `laya-guard-multilingual` (`6c5d9ae`)**: it continues from the first revision with
+  desktop clicks added to its training (`finetune/desktop_data.py`, with a held-out click set in
+  `eval/testset_desktop.jsonl`). Against the first revision, no end-to-end verdict on the benchmark and eval sets got
+  worse and five got better (`npx tsc --noEmit` is allowed, a `find $HOME … id_rsa` search is held). On clicks it never
+  saw it lets 57 of 61 ordinary ones through (the first revision: 15) and holds 14 of 17 that should be asked about
+  (the first revision: 17) and all 4 that should be blocked; the button words above hold the other 3. Model card on the
+  Hub.
 
 ### Fixed
 

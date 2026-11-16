@@ -17,11 +17,10 @@ that `see` result in the agent's transcript, then looked up the same way. `agent
 the hook never sees) and `analyze` (a screenshot sent to an AI provider) are asked about.
 
 The Laya model as a second opinion (LAYA_GUARD_DESKTOP_MODEL=1, server only, off by default): text the rules let an
-agent type, and shortcuts with cmd, ctrl or option, are also shown to the model, which can raise them to a review but
-never to a block, so a wrong guess costs one permission prompt. Measured on hand-written cases, it told typed commands
-(`rm -rf ~/Documents`, `curl ... | sh`) and shortcuts (cmd+delete) from ordinary ones well, but scored nearly every
-button label around its review line (it held "Cancel" at 0.81), so clicks stay with the rules alone, and so do plain
-keys (it held Escape).
+agent type, shortcuts with cmd, ctrl or option, and clicks on a labeled element are also shown to the model, which can
+raise them to a review but never to a block, so a wrong guess costs one permission prompt. Plain keys stay with the
+rules (it held Escape). The model was trained on desktop clicks (finetune/desktop_data.py): on clicks it never saw it
+let 57 of 61 ordinary ones through and held 14 of 17 that should be asked about; the button words below hold the rest.
 """
 from __future__ import annotations
 
@@ -135,7 +134,7 @@ def _at(point, look) -> dict | None:
     return look("at", f"{point[0]:.0f}", f"{point[1]:.0f}") if point else look("pointer")
 
 
-def _click(action: str, a: dict, cwd: str | None, look) -> Verdict:
+def _click(action: str, a: dict, cwd: str | None, look, model=None) -> Verdict:
     point = _point(a, "start_coordinate") if action in ("left_click_drag", "drag") and a.get("start_coordinate") \
         else _point(a)
     info = _at(point, look)
@@ -144,10 +143,23 @@ def _click(action: str, a: dict, cwd: str | None, look) -> Verdict:
     hit = _files(info, cwd, "dragging" if "drag" in action else "clicking")
     if hit is not None:
         return hit
-    labels = " ".join(s for s in info.get("labels") or [] if isinstance(s, str))
-    if labels and browser._RISKY_CLICK.search(labels):
+    if _risky(info):
         return _v("review", "a click that may pay, order, delete or send something")
-    return _v("allow", "a click on nothing protected")
+    return _ask_model(_v("allow", "a click on nothing protected"), info, model)
+
+
+# Button words the browser list (browser._RISKY_CLICK) leaves out that matter in a desktop app: a reply or forward goes
+# out, a push publishes code, revert/discard/overwrite/replace lose work, leave and uninstall can't be taken back.
+# The model catches most of these too, but measured on clicks it never saw it let a few of each kind through.
+_RISKY_DESKTOP = re.compile(
+    r"\b(?:reply|forward|push|bin|revert|discard|overwrite|replace|leave|uninstall|share|invite|wire|don'?t save)\b"
+    r"|답장|전달|푸시|지우|되돌|폐기|덮어|대치|나가|공유|저장 안 함",
+    re.IGNORECASE)
+
+
+def _risky(info: dict) -> bool:
+    labels = " ".join(s for s in info.get("labels") or [] if isinstance(s, str))
+    return bool(labels) and bool(browser._RISKY_CLICK.search(labels) or _RISKY_DESKTOP.search(labels))
 
 
 # --- the model's second opinion ---------------------------------------------------------------------------------------
@@ -205,6 +217,16 @@ def _confirm(v: Verdict, text: str, what: str, model) -> Verdict:
                    reason=f"the Laya model asks about {what} (risk {float(risk):.2f})", verdict_source="model")
 
 
+def _ask_model(v: Verdict, info: dict, model) -> Verdict:
+    """A click the rules allow, shown to the model as describe_click words it (the element's own label first)."""
+    labels = [s for s in info.get("labels") or [] if isinstance(s, str) and s.strip()]
+    if model is None or not labels:
+        return v
+    role = info.get("role") if isinstance(info.get("role"), str) and info.get("role", "").startswith("AX") else ""
+    app = info.get("app") if isinstance(info.get("app"), str) else ""
+    return _confirm(v, describe_click(labels[0], role, app), "this click", model)
+
+
 def _key(a: dict, cwd: str | None, look, model=None) -> Verdict:
     keys = a.get("text") if isinstance(a.get("text"), str) else a.get("key") or a.get("keys")
     keys = "+".join(keys) if isinstance(keys, list) else keys
@@ -249,7 +271,7 @@ def judge_desktop_call(tool_name: str | None, tool_input, cwd: str | None = None
     if action in READS:
         return _v("allow", "looks at the screen")
     if action in CLICKS:
-        return _click(action, a, cwd, look)
+        return _click(action, a, cwd, look, model)
     if action in KEYS:
         return _key(a, cwd, look, model)
     if action in TYPES:
@@ -352,19 +374,19 @@ def _target(a: dict, transcript: str | None, look) -> tuple[dict | None, str]:
     return None, "a target this check can't read"
 
 
-def _on_target(tool: str, a: dict, cwd: str | None, look, transcript: str | None) -> Verdict:
+def _on_target(tool: str, a: dict, cwd: str | None, look, transcript: str | None, model=None) -> Verdict:
     info, what = _target(a, transcript, look)
     if info is None:
         return _v("review", f"can't see what this {tool} lands on: {what}")
     hit = _files(info, cwd, "dragging" if tool == "drag" else "clicking")
     if hit is not None:
         return hit
-    labels = " ".join(s for s in info.get("labels") or [] if isinstance(s, str))
-    if labels and browser._RISKY_CLICK.search(labels):
+    if _risky(info):
         return _v("review", "a click that may pay, order, delete or send something")
     if not info.get("found", True):
         return _v("review", f"can't find {what} on the screen")
-    return _v("allow", f"a {tool} on nothing protected")
+    allowed = _v("allow", f"a {tool} on nothing protected")
+    return _ask_model(allowed, info, model) if tool == "click" else allowed
 
 
 def _keys(a: dict) -> str:
@@ -384,7 +406,7 @@ def _peekaboo(tool: str, a: dict, cwd: str | None, look, transcript: str | None,
     if tool in PEEKABOO_READS or tool == "scroll" or (tool in ("menu", "dialog") and action == "list"):
         return _v("allow", "looks at or arranges the screen")
     if tool in ("click", "action", "drag"):
-        return _on_target(tool, a, cwd, look, transcript)
+        return _on_target(tool, a, cwd, look, transcript, model)
     if tool == "press":
         return _key({"text": _keys(a)}, cwd, look, model)
     if tool in ("type", "paste", "set_value"):
@@ -399,7 +421,7 @@ def _peekaboo(tool: str, a: dict, cwd: str | None, look, transcript: str | None,
                 return typed
         if named and _OPEN_WORDS.search(named):
             return _key({"text": "Return"}, cwd, look)       # opening: whatever is selected is what opens
-        if named and browser._RISKY_CLICK.search(named):
+        if named and _risky({"labels": [named]}):
             return _v("review", f"a {tool} item that may delete, send or pay ('{named[:40]}')")
         return _v("allow", f"a {tool} action on nothing protected")
     return _v("review", f"a Peekaboo tool this check doesn't know ({tool[:40]})")
