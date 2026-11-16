@@ -82,28 +82,37 @@ func selection() -> [String: Any] {
 }
 
 // The elements whose name contains `query` in the given apps' windows: what a click by name (Peekaboo's `query`, or an
-// element ID resolved to its label) lands on. Bounded, so a huge window can't stall the hook.
+// element ID resolved to its label) lands on. When some element is named exactly `query`, only those count: a click
+// on "Search" lands on the Search button, not on a line of page text that happens to contain "search" (and "post").
+// Bounded per app, so a huge window can't stall the hook, nor use up the search before Finder's window is reached.
 func find(_ query: String, pids: [pid_t]) -> [String: Any] {
-    let q = query.lowercased()
-    var paths: [String] = [], labels: [String] = [], visited = 0
-    func walk(_ e: AXUIElement, _ depth: Int) {
-        if depth > 25 || visited > 4000 || paths.count >= 20 { return }
-        visited += 1
-        var names: [String] = []
-        for k in ["AXFilename", "AXTitle", "AXDescription", "AXValue"] { if let s = str(e, k) { names.append(s) } }
-        if names.contains(where: { $0.lowercased().contains(q) }) {
-            for n in names where !labels.contains(n) && labels.count < 20 { labels.append(String(n.prefix(200))) }
-            var found: [String] = []
-            pathsBelow(e, depth: 1, into: &found)
-            if found.isEmpty, let p = parent(e) { pathsBelow(p, depth: 3, into: &found) }   // a list cell: its row has the file
-            for f in found where !paths.contains(f) { paths.append(f) }
-        }
-        for c in elements(e, "AXChildren").prefix(200) { walk(c, depth + 1) }
-    }
+    let q = query.lowercased().trimmingCharacters(in: .whitespaces)
+    var matches: [(exact: Bool, names: [String], paths: [String])] = []
     for pid in pids {
+        var visited = 0
+        func walk(_ e: AXUIElement, _ depth: Int) {
+            if depth > 25 || visited > 4000 || matches.count >= 40 { return }
+            visited += 1
+            var names: [String] = []
+            for k in ["AXFilename", "AXTitle", "AXDescription", "AXValue"] { if let s = str(e, k) { names.append(s) } }
+            let low = names.map { $0.lowercased().trimmingCharacters(in: .whitespaces) }
+            if low.contains(where: { $0.contains(q) }) {
+                var found: [String] = []
+                pathsBelow(e, depth: 1, into: &found)
+                if found.isEmpty, let p = parent(e) { pathsBelow(p, depth: 3, into: &found) }   // a list cell: its row has the file
+                matches.append((low.contains(q), names, found))
+            }
+            for c in elements(e, "AXChildren").prefix(200) { walk(c, depth + 1) }
+        }
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, 0.5)
         for w in elements(app, "AXWindows").prefix(10) { walk(w, 0) }
+    }
+    let chosen = matches.contains(where: { $0.exact }) ? matches.filter { $0.exact } : matches
+    var paths: [String] = [], labels: [String] = []
+    for m in chosen {
+        for n in m.names where !labels.contains(n) && labels.count < 20 { labels.append(String(n.prefix(200))) }
+        for f in m.paths where !paths.contains(f) && paths.count < 20 { paths.append(f) }
     }
     return ["trusted": true, "role": "find", "labels": labels, "paths": paths, "found": !labels.isEmpty]
 }
