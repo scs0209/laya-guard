@@ -1,5 +1,7 @@
 # Fine-tuning the model on your own commands
 
+[← Back to README](../README.md) · **English** · [한국어](README.ko.md)
+
 The rules (policy.yaml and the safe lane) decide what they can; the commands they can't settle go to the model. Out
 of the box that is [laya-guard-multilingual](https://huggingface.co/Ayaannnnnnn/laya-guard-multilingual), Laya fine-tuned
 with these scripts: the first revision on shell commands, the second continued from it with desktop clicks added (the
