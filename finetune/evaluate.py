@@ -1,7 +1,9 @@
-"""Base Laya vs a fine-tuned checkpoint on data never used for training: the benchmark's scored cases and the eval
-sets (model-only and final verdicts), plus per-label recall on train/val.jsonl. One backend per process.
+"""The model laya-guard runs (or base Laya) vs a fine-tuned checkpoint on data never used for training: the
+benchmark's scored cases, the eval sets (model-only and final verdicts) and the desktop click set, plus per-label
+recall on train/val.jsonl and its clicks. One backend per process.
 
-    python finetune/evaluate.py base            # writes train/eval-base.json
+    python finetune/evaluate.py current         # the pinned model laya-guard runs; writes train/eval-base.json
+    python finetune/evaluate.py base            # or the original Laya; writes train/eval-base.json too
     python finetune/evaluate.py train/ckpt      # writes train/eval-ckpt.json
     python finetune/evaluate.py --compare       # prints the table
 """
@@ -31,10 +33,21 @@ def rows():
         out.append(("val", i, r["state"], r["expected"]["action"]))
     return out
 
+def model_dir(which):
+    """None for base Laya, the pinned revision's download for `current`, else a checkpoint folder."""
+    if which == "base":
+        return None
+    if which == "current":
+        from huggingface_hub import snapshot_download
+        from laya_guard import guard
+        return snapshot_download(guard.GUARD_MODEL, revision=guard.GUARD_MODEL_REVISION)
+    return str((ROOT / which).resolve())
+
 def run(which):
     from laya_guard import guard
     from laya import Router
-    models = None if which == "base" else {"multilingual": str((ROOT / which).resolve())}
+    path = model_dir(which)
+    models = None if path is None else {"multilingual": path}
     guard._ensure(); guard._router = Router(device="cpu", models=models)
     guard._laya_predict("warm up")
     res, ms = [], []
@@ -43,7 +56,7 @@ def run(which):
         t0 = time.perf_counter(); a, risk = guard._laya_judge(t); ms.append((time.perf_counter() - t0) * 1000)
         final = guard.judge(t, source=SOURCE, ask=ASK).action if s != "val" and not s.startswith("desktop-") else None
         res.append({"set": s, "id": i, "text": t, "expected": e, "model": a, "risk": risk, "final": final})
-    name = "base" if which == "base" else "ckpt"
+    name = "base" if which in ("base", "current") else "ckpt"
     json.dump({"which": which, "mode": {"source": SOURCE, "ask": ASK}, "rows": res, "ms_median": st.median(ms),
                "rss_mb": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / (2**20 if sys.platform == "darwin" else 2**10)},
               open(ROOT / f"train/eval-{name}.json", "w"), ensure_ascii=False)
@@ -88,6 +101,14 @@ def compare():
             rs = [r for r in R[n]["rows"] if r["set"] == "val" and r["expected"] == lab]
             print(f"val {lab:6} exact ({n}): {sum(r['model'] == lab for r in rs)}/{len(rs)}", end="   ")
         print()
+    # the clicks in val: written like the click set but never seen in training, and often less obvious (Reply All,
+    # Revert to Saved), so a model can do well on the click set and still let these through
+    for lab, what in (("allow", "allowed"), ("review", "held"), ("block", "held")):
+        for n in ("base", "ckpt"):
+            rs = [r for r in R[n]["rows"] if r["set"] == "val" and r["expected"] == lab and r["text"].startswith("desktop:")]
+            good = sum((r["model"] == "allow") == (lab == "allow") for r in rs)
+            print(f"val clicks {lab:6} {what} ({n}): {good}/{len(rs)}", end="   ")
+        print()
     for n in ("base", "ckpt"):
         risks = sorted(r["risk"] for r in R[n]["rows"])
         q = lambda p: risks[int(p * (len(risks) - 1))]
@@ -108,7 +129,7 @@ SOURCE, ASK = "user", True
 if __name__ == "__main__":
     import argparse
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("which", nargs="?", help="base, or a checkpoint folder")
+    ap.add_argument("which", nargs="?", help="current (the pinned model), base (the original Laya), or a checkpoint folder")
     ap.add_argument("--compare", action="store_true", help="print the table from the two saved runs")
     ap.add_argument("--source", default="user", choices=["user", "tool"])
     ap.add_argument("--no-ask", action="store_true")
@@ -119,4 +140,4 @@ if __name__ == "__main__":
     elif a.which:
         run(a.which)
     else:
-        ap.error("name base, a checkpoint folder, or --compare")
+        ap.error("name current, base, a checkpoint folder, or --compare")

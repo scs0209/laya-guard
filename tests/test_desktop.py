@@ -186,6 +186,13 @@ def test_a_click_as_the_model_reads_it_and_the_examples_it_learns_from():
     assert held_out and not [l for l in written if desktop_data.click_label(json.loads(l)["command"]).lower() in held_out]
 
 
+def test_the_notebook_trains_from_the_model_laya_guard_runs():
+    nb = json.loads((ROOT / "finetune" / "colab.ipynb").read_text(encoding="utf-8"))
+    code = "".join("".join(c["source"]) for c in nb["cells"] if c["cell_type"] == "code")
+    assert f'BASE_REPO = "{guard.GUARD_MODEL}"' in code
+    assert f'BASE_REVISION = "{guard.GUARD_MODEL_REVISION}"' in code
+
+
 def test_the_model_is_only_used_when_switched_on_and_installed(env, monkeypatch):
     monkeypatch.delenv(desktop.MODEL_ENV, raising=False)
     assert desktop.second_opinion() is None
