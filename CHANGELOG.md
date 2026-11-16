@@ -5,6 +5,10 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-16
+
+Browser tools and desktop computer use are judged too, and the model (revision 2) also judges desktop clicks.
+
 ### Added
 
 - **Browser tools** (`laya-guard install claude-code --browser`): the Claude app's built-in browser, Claude in Chrome,
@@ -796,7 +800,8 @@ a verdict.
   Claude Code PreToolUse hook, local redacted telemetry, Korean 30-case eval,
   AgentDojo judge-level eval, E2E rollout harness.
 
-[Unreleased]: https://github.com/scs0209/laya-guard/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/scs0209/laya-guard/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/scs0209/laya-guard/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/scs0209/laya-guard/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/scs0209/laya-guard/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/scs0209/laya-guard/compare/v0.6.1...v0.6.2
