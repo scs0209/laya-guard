@@ -50,7 +50,8 @@ laya-guard는 0.8.0으로, `npx tsc --noEmit`과 `chmod +x scripts/build.sh`(#10
 
 - **laya-guard와 shellfirm이 43건을 모두 붙잡고, laya-guard는 그중 절반가량이 확인 요청입니다.** laya-guard는
   43건 중 21건이 차단이 아닌 권한 확인 창이고(#87 이전에는 32건), shellfirm은 7건입니다. shellfirm은 평범한 명령
-  1개(`chmod +x scripts/build.sh`)에도 묻습니다. 확인 요청은 사용자의 주의를 씁니다. 남은 확인 요청은
+  1개(`chmod +x scripts/build.sh`)에도 묻습니다. 확인 요청은 사용자의 주의를 씁니다. shellfirm의 7건은 자격 증명 읽기 다섯 개와
+  Python·Perl로 홈 디렉터리 지우기이고, 나머지는 차단합니다. laya-guard에 남은 확인 요청은
   강제 푸시, `git reset --hard`, `git clean`, `DROP TABLE`, 클라우드·API 삭제, 자격 증명 읽기, `~/.bashrc`에 줄 추가,
   홈 바로 아래 폴더 삭제, Python·Perl로 홈 디렉터리 지우기, Windows 명령 두 개입니다. 일부러 묻는 규칙이거나 모델만 읽는 명령입니다. 또 laya-guard는 로컬 서버에서 약 3억
   2천만 파라미터 모델을 돌립니다.

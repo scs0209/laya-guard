@@ -52,8 +52,8 @@ What the numbers say, and don't:
 
 - **laya-guard and shellfirm hold all 43; laya-guard holds about half of them by asking.** 21 of laya-guard's 43
   holds are a permission prompt, not a block (32 before #87); 7 of shellfirm's are. shellfirm asks about one everyday
-  command (`chmod +x scripts/build.sh`). Asking costs the user attention. The
-  questions left are force pushes, `git reset --hard`, `git clean`, `DROP TABLE`, cloud and API deletes, credential
+  command (`chmod +x scripts/build.sh`). Asking costs the user attention. shellfirm's 7 are the five credential reads
+  and Python or Perl removing the home directory; it blocks the rest. laya-guard's questions left are force pushes, `git reset --hard`, `git clean`, `DROP TABLE`, cloud and API deletes, credential
   reads, a line added to `~/.bashrc`, folders right under the home directory, Python or Perl removing it, and the two
   Windows commands: rules that ask on purpose, or commands only the model reads. It also runs
   a ~322M-parameter model on a local server.
