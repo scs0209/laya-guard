@@ -17,7 +17,7 @@ DCG_VERSION=v0.15.3
 DCG_ASSET=dcg-aarch64-apple-darwin.tar.xz
 DCG_SHA256=50a1a50762299c7e4b5ebaf3f932f45066c8e7c86a1d5d419b01babd1e2698d7
 CCSN_VERSION=2.6.18
-SHELLFIRM_VERSION=0.3.10
+SHELLFIRM_VERSION=0.4.2
 
 fresh_home() { rm -rf "$TOOLS/$1/home"; mkdir -p "$TOOLS/$1/home"; }
 in_home() { local g=$1; shift; (cd "$TOOLS/$g/home" && HOME="$TOOLS/$g/home" XDG_CONFIG_HOME="$TOOLS/$g/home/.config" "$@"); }

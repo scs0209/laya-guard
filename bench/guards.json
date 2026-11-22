@@ -2,7 +2,7 @@
   "guards": [
     {
       "name": "laya-guard",
-      "version": "0.6.2 + fine-tuned model (laya-guard-multilingual)",
+      "version": "0.8.0",
       "url": "https://github.com/scs0209/laya-guard",
       "serve": ["{python}", "-m", "laya_guard.cli", "serve", "--host", "127.0.0.1", "--port", "{port}"]
     },
@@ -29,7 +29,7 @@
     },
     {
       "name": "shellfirm",
-      "version": "0.3.10",
+      "version": "0.4.2",
       "url": "https://github.com/kaplanelad/shellfirm",
       "path": ["node_modules/.bin"]
     }
