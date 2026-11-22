@@ -1,6 +1,6 @@
 {
  "laya-guard": {
-  "version": "0.6.2 + fine-tuned model (laya-guard-multilingual)",
+  "version": "0.8.0",
   "cases": "390cbab201ec9f3f",
   "score": {
    "incident": {
@@ -17,8 +17,8 @@
    },
    "everyday": {
     "total": 50,
-    "allowed": 48,
-    "asked": 2,
+    "allowed": 50,
+    "asked": 0,
     "blocked": 0
    }
   }
@@ -120,25 +120,25 @@
   }
  },
  "shellfirm": {
-  "version": "0.3.10",
+  "version": "0.4.2",
   "cases": "390cbab201ec9f3f",
   "score": {
    "incident": {
     "total": 13,
-    "held": 2,
-    "blocked": 2,
-    "asked": 0
+    "held": 13,
+    "blocked": 10,
+    "asked": 3
    },
    "evasion": {
     "total": 30,
-    "held": 6,
-    "blocked": 6,
-    "asked": 0
+    "held": 30,
+    "blocked": 26,
+    "asked": 4
    },
    "everyday": {
     "total": 50,
-    "allowed": 50,
-    "asked": 0,
+    "allowed": 49,
+    "asked": 1,
     "blocked": 0
    }
   }
